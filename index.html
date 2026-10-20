@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Drill">
+<meta name="theme-color" content="#14161a">
+<title>Drill</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.19.0/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.19.0/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/15.2.0/math.min.js"></script>
+
+<!-- ============================== CONFIG ==============================
+  Weekly edit:
+    - Retire a pool: set its weight to 0.
+    - Reweight: change a category weight or a type weight.
+    - Unlock future pools: raise currentWeek. Types with week > currentWeek stay off.
+    - Add a pool: copy a type line, give it a new id, edit gen().
+  gen() returns null to reject a degenerate draw (the engine redraws), or:
+    { q: 'prompt, TeX between $…$', a: canonical answer, kind, ...options }
+  kinds: num | expr (checked by evaluation) · vec | mat (a = numbers) ·
+         interval · text (a = string or list) · logic (formula, checked by truth table) ·
+         bool (a = true/false, labels = [trueLabel, falseLabel]) ·
+         syntax (exact L1 string; ASCII -> & v ~ accepted)
+  options: show (TeX for the answer), mode (keyboard: text | decimal | none), dom [lo,hi] for real variables,
+           parallel (vec: any nonzero multiple), unordered (vec as a set), keys (symbol row)
+======================================================================= -->
+<script>
+const CONFIG = {
+  roundSeconds: 120,
+  currentWeek: 4,
+  categories: {
+    la:    { label: 'Linear algebra',       weight: 1 },
+    calc:  { label: 'Calculus',             weight: 1 },
+    seq:   { label: 'Sequences & series',   weight: 1 },
+    logic: { label: 'Elementary logic',     weight: 1 },
+  },
+};
+
+const TYPES = [
+  // ---------- Linear algebra ----------
+  { id: 'la-dot', cat: 'la', week: 1, weight: 1, gen() {
+    const n = pick([2, 3]), u = vec(n, -5, 5), v = vec(n, -5, 5);
+    if (isZero(u) || isZero(v)) return null;
+    return { q: T`$${colv(u)}\cdot${colv(v)}$`, a: String(dot(u, v)), kind: 'num' };
+  }},
+  { id: 'la-normsq', cat: 'la', week: 1, weight: 1, gen() {
+    const v = vec(3, -6, 6);
+    if (isZero(v)) return null;
+    return { q: T`$\lVert ${colv(v)} \rVert^2$`, a: String(dot(v, v)), kind: 'num' };
+  }},
+  { id: 'la-norm', cat: 'la', week: 1, weight: 1, gen() {
+    const [v, len] = pythagorean();
+    return { q: T`$\lVert ${colv(v)} \rVert$`, a: String(len), kind: 'num', val: Math.hypot(...v) };
+  }},
+  { id: 'la-lincomb', cat: 'la', week: 1, weight: 1, gen() {
+    const a = nz(-4, 4), b = nz(-4, 4), u = vec(3, -5, 5), v = vec(3, -5, 5);
+    const w = u.map((x, i) => a * x + b * v[i]);
+    return { q: T`$${poly([[a, T`\mathbf u`], [b, T`\mathbf v`]])}$, $\ \mathbf u = ${colv(u)},\ \mathbf v = ${colv(v)}$`,
+             a: w, kind: 'vec', show: colv(w) };
+  }},
+  { id: 'la-distsq', cat: 'la', week: 1, weight: 1, gen() {
+    const n = pick([2, 3]), u = vec(n, -5, 5), v = vec(n, -5, 5);
+    const d = u.map((x, i) => x - v[i]);
+    if (isZero(d)) return null;
+    return { q: T`$\lVert \mathbf u - \mathbf v \rVert^2$, $\ \mathbf u = ${colv(u)},\ \mathbf v = ${colv(v)}$`, a: String(dot(d, d)), kind: 'num' };
+  }},
+  { id: 'la-orth', cat: 'la', week: 1, weight: 1, gen() {
+    const u = vec(3, -4, 4), w = vec(3, -2, 2);
+    const v = Math.random() < 0.5 ? cross(u, w) : vec(3, -5, 5);
+    if (isZero(u) || isZero(v) || v.some(x => Math.abs(x) > 9)) return null;
+    return { q: T`Orthogonal? $\ ${colv(u)},\ ${colv(v)}$`, a: dot(u, v) === 0, kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'la-alpha', cat: 'la', week: 1, weight: 1, gen() {
+    const alpha = nz(-3, 3), v = vec(3, -3, 3), w = vec(3, -3, 3), u = vec(3, -4, 4);
+    const i = w.findIndex(x => Math.abs(x) === 1);
+    if (i < 0 || dot(v, w) === 0) return null;
+    u[i] = 0;
+    u[i] = (-alpha * dot(v, w) - dot(u, w)) / w[i];
+    if (Math.abs(u[i]) > 9) return null;
+    return { q: T`$\alpha$ with $(\mathbf u + \alpha\mathbf v)\perp\mathbf w$: $\ \mathbf u = ${colv(u)},\ \mathbf v = ${colv(v)},\ \mathbf w = ${colv(w)}$`,
+             a: String(alpha), kind: 'num' };
+  }},
+  { id: 'la-direction', cat: 'la', week: 1, weight: 1, gen() {
+    const p = vec(3, -5, 5), r = vec(3, -5, 5), d = r.map((x, i) => x - p[i]);
+    if (isZero(d)) return null;
+    return { q: T`A direction vector of the line through $${colv(p)}$ and $${colv(r)}$`,
+             a: d, kind: 'vec', parallel: true, show: colv(d) };
+  }},
+  { id: 'la-plane-d', cat: 'la', week: 1, weight: 1, gen() {
+    const n = vec(3, -4, 4), p = vec(3, -4, 4);
+    if (isZero(n)) return null;
+    return { q: T`Plane through $${colv(p)}$ with normal $${colv(n)}$: $\ ${poly([[n[0], 'x'], [n[1], 'y'], [n[2], 'z']])} = d$. $\ d = ?$`,
+             a: String(dot(n, p)), kind: 'num' };
+  }},
+  { id: 'la-size', cat: 'la', week: 2, weight: 1, gen() {
+    const { A, B, tex, X, Y } = balanced(() => {
+      const A = [ri(1, 4), ri(1, 4)], B = [ri(1, 4), ri(1, 4)];
+      const [tex, X, Y] = pick([['AB', A, B], ['BA', B, A], ['A^TB', tr(A), B], ['AB^T', A, tr(B)], ['B^TA^T', tr(B), tr(A)]]);
+      return { A, B, tex, X, Y };
+    }, d => d.X[1] === d.Y[0]);
+    const ok = X[1] === Y[0];
+    return { q: T`$A$ is $${A[0]}\times${A[1]}$, $B$ is $${B[0]}\times${B[1]}$. Size of $${tex}$?`,
+             a: ok ? `${X[0]}x${Y[1]}` : 'undefined', kind: 'text', keys: ['×', 'undefined'] };
+  }},
+  { id: 'la-entry', cat: 'la', week: 2, weight: 1, gen() {
+    const m = pick([2, 3]), A = mat(2, m, -3, 3), B = mat(m, 2, -3, 3), i = ri(1, 2), j = ri(1, 2);
+    const v = A[i - 1].reduce((s, x, k) => s + x * B[k][j - 1], 0);
+    return { q: T`$(AB)_{${i}${j}}$, $\ A = ${matTeX(A)},\ B = ${matTeX(B)}$`, a: String(v), kind: 'num' };
+  }},
+  { id: 'la-Av', cat: 'la', week: 2, weight: 1, gen() {
+    const n = pick([2, 3]), A = mat(2, n, -3, 3), v = vec(n, -3, 3);
+    const w = A.map(r => dot(r, v));
+    return { q: T`$${matTeX(A)}${colv(v)}$`, a: w, kind: 'vec', show: colv(w) };
+  }},
+  { id: 'la-product', cat: 'la', week: 2, weight: 1, gen() {
+    const A = mat(2, 2, -3, 3), B = mat(2, 2, -3, 3);
+    const C = A.map(r => [0, 1].map(j => r[0] * B[0][j] + r[1] * B[1][j]));
+    return { q: T`$${matTeX(A)}${matTeX(B)}$`, a: C, kind: 'mat', show: matTeX(C) };
+  }},
+  { id: 'la-rowop', cat: 'la', week: 2, weight: 1, gen() {
+    const r1 = [1, ri(-4, 4), ri(-5, 5)], r2 = vec(3, -5, 5), c = nz(-3, 3);
+    const out = r2.map((x, k) => x - c * r1[k]);
+    return { q: T`$${matTeX([r1, r2])}$, $\ R_2 \to ${poly([[1, 'R_2'], [-c, 'R_1']])}$. New $R_2$?`,
+             a: out, kind: 'vec', show: matTeX([out]) };
+  }},
+  { id: 'la-det2', cat: 'la', week: 6, weight: 1, gen() {
+    const A = mat(2, 2, -6, 6), d = A[0][0] * A[1][1] - A[0][1] * A[1][0];
+    if (d === 0) return null;
+    return { q: T`$\det${matTeX(A)}$`, a: String(d), kind: 'num' };
+  }},
+  { id: 'la-eig2', cat: 'la', week: 9, weight: 1, gen() {
+    const l1 = ri(-5, 5), l2 = ri(-5, 5), a = ri(-5, 5), d = l1 + l2 - a, bc = a * d - l1 * l2;
+    if (l1 === l2 || bc === 0) return null;
+    const b = pick(divisors(bc)), c = bc / b;
+    return { q: T`Eigenvalues of $${matTeX([[a, b], [c, d]])}$ (comma-separated)`,
+             a: [l1, l2], kind: 'vec', unordered: true, show: `${l1},\\ ${l2}` };
+  }},
+
+  // ---------- Calculus I ----------
+  { id: 'calc-trig', cat: 'calc', week: 1, weight: 1, gen() {
+    const m = pick(STD_ANGLES), f = pick(['sin', 'cos', 'tan']), v = Math[f](m * Math.PI / 12);
+    if (f === 'tan' && Math.abs(Math.cos(m * Math.PI / 12)) < 1e-9) return null;
+    const ex = exact(v);
+    return { q: T`$${'\\' + f}\left(${piFrac(m, 12).tex}\right)$`, a: ex.s, show: ex.tex, kind: 'num', val: v };
+  }},
+  { id: 'calc-arc', cat: 'calc', week: 1, weight: 1, gen() {
+    const f = pick(['asin', 'acos', 'atan']);
+    const x = pick(f === 'atan' ? TAN_VALUES : SIN_VALUES) * pick([1, -1]);
+    const r = Math[f](x), p = piFrac(Math.round(r * 12 / Math.PI), 12);
+    return { q: T`$\arc${f.slice(1)}\left(${exact(x).tex}\right)$`, a: p.s, show: p.tex, kind: 'num', val: r };
+  }},
+  { id: 'calc-arc-branch', cat: 'calc', week: 1, weight: 1, gen() {
+    const [inv, f] = pick([['asin', 'sin'], ['acos', 'cos'], ['atan', 'tan']]), m = ri(-11, 12), th = m * Math.PI / 6;
+    if (f === 'tan' && Math.abs(Math.cos(th)) < 1e-9) return null;
+    const r = Math[inv](Math[f](th)), p = piFrac(Math.round(r * 6 / Math.PI), 6);
+    if (Math.abs(r - th) < 1e-9 && Math.random() < 0.7) return null;
+    return { q: T`$\arc${f}\left(${'\\' + f}\left(${piFrac(m, 6).tex}\right)\right)$`, a: p.s, show: p.tex, kind: 'num', val: r };
+  }},
+  { id: 'calc-log', cat: 'calc', week: 1, weight: 1, gen() {
+    const c = pick([2, 3, 5]), p = ri(1, 3), q = nz(-3, 6), b = c ** p, x = c ** Math.abs(q);
+    if (c ** (p * 6) > 1e6 || x > 1000) return null;
+    const arg = q > 0 ? String(x) : T`\frac{1}{${x}}`, f = frac(q, p);
+    return { q: T`$\log_{${b}} ${arg}$`, a: f.s, show: f.tex, kind: 'num', val: q * Math.log(c) / Math.log(b) };
+  }},
+  { id: 'calc-ln', cat: 'calc', week: 1, weight: 1, gen() {
+    const k = nz(-4, 6), r = pick([1, 2, 3]), f = frac(k, r);
+    const inner = r === 1 ? T`e^{${k}}` : T`\sqrt${r === 2 ? '' : '[3]'}{e^{${k}}}`;
+    return { q: T`$\ln ${inner}$`, a: f.s, show: f.tex, kind: 'num', val: k / r };
+  }},
+  { id: 'calc-loglaw', cat: 'calc', week: 1, weight: 1, gen() {
+    const b = pick([2, 3, 5]), n = pick([2, 3, 5, 6, 7].filter(x => x !== b)), k = ri(1, 3);
+    return { q: T`$\log_{${b}} ${n * b ** k} - \log_{${b}} ${n}$`, a: String(k), kind: 'num' };
+  }},
+  { id: 'calc-exp', cat: 'calc', week: 1, weight: 1, gen() {
+    const r = pick([2, 3, 4, 5]), q = pick([2, 3]), p = nz(-3, 3), base = r ** q;
+    if (base > 125 || gcd(p, q) !== 1) return null;
+    const f = p > 0 ? frac(r ** p, 1) : frac(1, r ** -p);
+    return { q: T`$${base}^{${frac(p, q).tex}}$`, a: f.s, show: f.tex, kind: 'num', val: base ** (p / q) };
+  }},
+  { id: 'calc-inverse', cat: 'calc', week: 1, weight: 1, gen() {
+    const a = nz(-6, 6), b = nz(-6, 6), c = ri(1, 5);
+    return pick([
+      { q: T`$f(x) = ${poly([[a, 'x'], [b, '']])}$. $\ f^{-1}(x) = ?$`, a: `(x - (${b}))/(${a})`, kind: 'expr' },
+      { q: T`$f(x) = x^3 + ${c}$. $\ f^{-1}(x) = ?$`, a: `cbrt(x - ${c})`, kind: 'expr', dom: [c + 0.5, c + 8] },
+      { q: T`$f(x) = e^{${poly([[a, 'x']])}} + ${c}$. $\ f^{-1}(x) = ?$`, a: `ln(x - ${c})/(${a})`, kind: 'expr', dom: [c + 0.5, c + 8] },
+      { q: T`$f(x) = \dfrac{${a}}{x ${b < 0 ? '+' : '-'} ${Math.abs(b)}}$. $\ f^{-1}(x) = ?$`, a: `${b} + ${a}/x`, kind: 'expr' },
+    ]);
+  }},
+  { id: 'calc-compose', cat: 'calc', week: 3, weight: 1, gen() {
+    const f = pick(OUTER), g = pick(INNER);
+    if (f.tex === g.tex) return null;
+    const [first, second, name] = Math.random() < 0.5 ? [f, g, 'f(g(x))'] : [g, f, 'g(f(x))'];
+    return { q: T`$f(x) = ${f.tex.replaceAll('u', 'x')},\ g(x) = ${g.tex.replaceAll('u', 'x')}$. $\ ${name} = ?$`,
+             a: first.s.replaceAll('u', `(${second.s.replaceAll('u', 'x')})`), kind: 'expr' };
+  }},
+  { id: 'calc-cx-mul', cat: 'calc', week: 2, weight: 1, gen() {
+    const [a, b, c, d] = [nz(-4, 4), nz(-4, 4), nz(-4, 4), nz(-4, 4)];
+    return { q: T`$(${cx(a, b)})(${cx(c, d)})$`, a: cx(a * c - b * d, a * d + b * c), kind: 'num', keys: CX_KEYS };
+  }},
+  { id: 'calc-cx-mod', cat: 'calc', week: 2, weight: 1, gen() {
+    const [[x, y], r] = pick([[[3, 4], 5], [[5, 12], 13], [[8, 15], 17], [[6, 8], 10], [[7, 24], 25]]);
+    const [a, b] = (Math.random() < 0.5 ? [x, y] : [y, x]).map(t => t * pick([1, -1]));
+    return { q: T`$\lvert ${cx(a, b)} \rvert$`, a: String(r), kind: 'num' };
+  }},
+  { id: 'calc-cx-arg', cat: 'calc', week: 2, weight: 1, gen() {
+    const m = pick(STD_ANGLES.filter(t => t > -12 && t <= 12)), th = m * Math.PI / 12, k = ri(1, 3);
+    const [re, im] = argPoint(m, k), p = piFrac(m, 12);
+    return { q: T`Principal $\operatorname{Arg}(${cxTeX(re, im)})$`, a: p.s, show: p.tex, kind: 'num',
+             val: Math.atan2(im.v, re.v), check: Math.abs(Math.atan2(im.v, re.v) - th) < 1e-9 };
+  }},
+  { id: 'calc-hyp', cat: 'calc', week: 3, weight: 1, gen() {
+    const a = pick([2, 3, 4, 5]), s = pick([1, -1]), f = pick(['sinh', 'cosh', 'tanh']);
+    const num = { sinh: s * (a * a - 1), cosh: a * a + 1, tanh: s * (a * a - 1) }[f];
+    const ans = frac(num, f === 'tanh' ? a * a + 1 : 2 * a);
+    const arg = s > 0 ? T`\ln ${a}` : T`\ln\frac{1}{${a}}`;
+    return { q: T`$${'\\' + f}(${arg})$`, a: ans.s, show: ans.tex, kind: 'num', val: Math[f](s * Math.log(a)) };
+  }},
+  { id: 'calc-series', cat: 'calc', week: 1, weight: 1, gen() {
+    const [tex, coef] = pick(SERIES)(), n = ri(0, 6), c = coef(n);
+    if (c[0] === 0 && Math.random() < 0.7) return null;
+    const f = frac(c[0], c[1]);
+    return { q: T`Coefficient of $x^{${n}}$ in the power series of $${tex}$`, a: f.s, show: f.tex, kind: 'num' };
+  }},
+  { id: 'calc-lim-std', cat: 'calc', week: 4, weight: 1, gen() {
+    const a = ri(1, 9), b = ri(1, 9);
+    if (a === b) return null;
+    const [tex, ans, fn] = pick([
+      [T`\frac{\sin ${a}x}{${b}x}`, frac(a, b), x => Math.sin(a * x) / (b * x)],
+      [T`\frac{\tan ${a}x}{${b}x}`, frac(a, b), x => Math.tan(a * x) / (b * x)],
+      [T`\frac{\sin ${a}x}{\sin ${b}x}`, frac(a, b), x => Math.sin(a * x) / Math.sin(b * x)],
+      [T`\frac{\arcsin ${a}x}{${b}x}`, frac(a, b), x => Math.asin(a * x) / (b * x)],
+      [T`\frac{1 - \cos ${a}x}{${b}x^2}`, frac(a * a, 2 * b), x => (1 - Math.cos(a * x)) / (b * x * x)],
+    ]);
+    return { q: T`$\displaystyle\lim_{x\to 0} ${tex.replace(/(\D)1x/g, '$1x')}$`, a: ans.s, show: ans.tex, kind: 'num', val: fn(1e-4) };
+  }},
+  { id: 'calc-lim-inf', cat: 'calc', week: 4, weight: 1, gen() {
+    const top = [nz(-6, 6), ri(-5, 5), ri(-9, 9)], bot = [nz(-6, 6), ri(-5, 5), ri(-9, 9)];
+    if (Math.random() < 0.25) top[0] = 0;
+    const p = c => poly([[c[0], 'x^2'], [c[1], 'x'], [c[2], '']]), f = frac(top[0], bot[0]);
+    const h = (c, x) => c[0] * x * x + c[1] * x + c[2];
+    if (top.every(c => c === 0)) return null;
+    return { q: T`$\displaystyle\lim_{x\to\infty} \frac{${p(top)}}{${p(bot)}}$`, a: f.s, show: f.tex, kind: 'num', val: h(top, 1e7) / h(bot, 1e7) };
+  }},
+  { id: 'calc-piecewise', cat: 'calc', week: 4, weight: 1, gen() {
+    const c = pick([-2, -1, 1, 2, 3]), k = ri(-5, 5), p = nz(-4, 4), q = ri(-5, 5), r = p * c * c + q - k * c;
+    return { q: T`$f(x) = \begin{cases} ${poly([[p, 'x^2'], [q, '']])} & x < ${c} \\ ${poly([[1, 'k x'], [r, '']])} & x \ge ${c} \end{cases}$ is continuous. $\ k = ?$`,
+             a: String(k), kind: 'num' };
+  }},
+  { id: 'calc-deriv', cat: 'calc', week: 6, weight: 1, gen() {
+    const a = nz(-6, 6), n = ri(2, 5), b = nz(-6, 6), m = ri(0, n - 1);
+    return { q: T`$\frac{d}{dx}\left(${poly([[a, `x^{${n}}`], [b, m ? `x^{${m}}` : '']])}\right)$`,
+             a: `${a * n}x^${n - 1} + ${b * m}x^${Math.max(m - 1, 0)}`, kind: 'expr' };
+  }},
+
+  // ---------- Sequences and Series ----------
+  { id: 'seq-terms', cat: 'seq', week: 1, weight: 1, gen() {
+    const a = ri(-3, 8), b = a + ri(0, 15), body = pick(['k^2', '2k+1', '\\frac1k', '(-1)^k', '3^k']);
+    if (body === '\\frac1k' && a <= 0 && b >= 0) return null;
+    return { q: T`Number of terms in $\displaystyle\sum_{k=${a}}^{${b}} ${body}$`, a: String(b - a + 1), kind: 'num' };
+  }},
+  { id: 'seq-const', cat: 'seq', week: 1, weight: 1, gen() {
+    const a = ri(-2, 5), b = a + ri(1, 10), c = nz(-9, 9);
+    return { q: T`$\displaystyle\sum_{k=${a}}^{${b}} ${c}$`, a: String(c * (b - a + 1)), kind: 'num' };
+  }},
+  { id: 'seq-const-n', cat: 'seq', week: 1, weight: 1, gen() {
+    const [tex, s] = pick([['n', 'n'], ['2n', '2n'], ['n+1', '(n+1)'], ['n^2', 'n^2'], ['3', '3'], ['n-1', '(n-1)']]);
+    const j = pick(['j', 'k', 'i']);
+    return { q: T`$\displaystyle\sum_{${j}=1}^{n} ${tex}$ (in terms of $n$)`, a: `n*${s}`, kind: 'expr', keys: N_KEYS };
+  }},
+  { id: 'seq-linsum', cat: 'seq', week: 1, weight: 1, gen() {
+    const a = ri(0, 3), b = ri(a + 2, 9), c = ri(1, 5), d = ri(-5, 5);
+    let s = 0;
+    for (let k = a; k <= b; k++) s += c * k + d;
+    return { q: T`$\displaystyle\sum_{k=${a}}^{${b}} (${poly([[c, 'k'], [d, '']])})$`, a: String(s), kind: 'num' };
+  }},
+  { id: 'seq-geosum', cat: 'seq', week: 1, weight: 1, gen() {
+    const [p, q] = pick([[2, 1], [3, 1], [-2, 1], [1, 2], [-1, 2]]), lo = ri(0, 1), hi = ri(3, p === 3 ? 4 : 6);
+    let num = 0;
+    for (let k = lo; k <= hi; k++) num += p ** k * q ** (hi - k);
+    const f = frac(num, q ** hi), r = frac(p, q);
+    return { q: T`$\displaystyle\sum_{k=${lo}}^{${hi}} ${q === 1 && p > 0 ? p : T`\left(${r.tex}\right)`}^k$`, a: f.s, show: f.tex, kind: 'num' };
+  }},
+  { id: 'seq-closed', cat: 'seq', week: 1, weight: 1, gen() {
+    const c = ri(1, 6), d = ri(-5, 5);
+    return { q: T`$\displaystyle\sum_{k=1}^{n} (${poly([[c, 'k'], [d, '']])})$ (in terms of $n$)`,
+             a: `${c}*n(n+1)/2 + ${d}*n`, kind: 'expr', keys: N_KEYS };
+  }},
+  { id: 'seq-floor', cat: 'seq', week: 1, weight: 1, gen() {
+    const x = pick([1, -1]) * (ri(0, 9) + ri(1, 9) / 10), f = pick(['floor', 'ceil']);
+    const tex = f === 'floor' ? T`\lfloor ${x} \rfloor` : T`\lceil ${x} \rceil`;
+    return { q: T`$${tex}$`, a: String(Math[f](x)), kind: 'num' };
+  }},
+  { id: 'seq-subsets', cat: 'seq', week: 1, weight: 1, gen() {
+    const items = Array.from({ length: ri(0, 6) }, () => ri(1, 9)), n = new Set(items).size;
+    return { q: T`Number of subsets of $\{${items.join(', ')}\}$`, a: String(2 ** n), kind: 'num' };
+  }},
+  { id: 'seq-count', cat: 'seq', week: 1, weight: 1, gen() {
+    const D = pick(['N', 'Z']), a = ri(-6, 4), b = a + ri(1, 10), lo = pick(['<', '\\le']), hi = pick(['<', '\\le']);
+    let n = 0;
+    for (let x = a; x <= b; x++) {
+      const inLo = lo === '<' ? x > a : x >= a, inHi = hi === '<' ? x < b : x <= b;
+      if (inLo && inHi && (D === 'Z' || x >= 1)) n++;
+    }
+    return { q: T`$\lvert\{x\in\mathbb ${D} : ${a} ${lo} x ${hi} ${b}\}\rvert$`, a: String(n), kind: 'num' };
+  }},
+  { id: 'seq-interval', cat: 'seq', week: 1, weight: 1, gen() {
+    const I = randInterval(), J = randInterval(), op = pick(['cap', 'cup']);
+    const res = op === 'cap' ? intersect(I, J) : union(I, J);
+    if (!res) return null;
+    return { q: T`$${ivTeX(I)} ${'\\' + op} ${ivTeX(J)}$`, a: res, kind: 'interval', show: setTeX(res) };
+  }},
+  { id: 'seq-modulus', cat: 'seq', week: 3, weight: 1, gen() {
+    const a = ri(-9, 9), r = ri(1, 9), rel = pick(['<', '\\le', '>', '\\ge']), closed = rel.includes('le') || rel.includes('ge');
+    const [L, R] = closed ? ['[', ']'] : ['(', ')'];
+    const res = rel === '<' || rel === '\\le' ? `${L}${a - r},${a + r}${R}` : `(-inf,${a - r}${R} U ${L}${a + r},inf)`;
+    return { q: T`$\{x\in\mathbb R : \lvert ${poly([[1, 'x'], [-a, '']])} \rvert ${rel} ${r}\}$`, a: res, kind: 'interval', show: setTeX(res) };
+  }},
+  { id: 'seq-quant', cat: 'seq', week: 2, weight: 1, gen() {
+    const [tex, truth] = pick(QUANT)(pick(['N', 'Z', 'R']), pick(['N', 'Z', 'R']), ri(-3, 3));
+    return { q: T`$${tex}$`, a: truth, kind: 'bool', labels: ['True', 'False'] };
+  }},
+  { id: 'seq-injective', cat: 'seq', week: 2, weight: 1, gen() {
+    const a = ri(-5, 4), b = ri(a + 1, 5), f = pick(['x^2', '\\lvert x\\rvert']), k = ri(-3, 3), c = k - ri(0, 2);
+    return pick([
+      { q: T`$f:[${a},${b}]\to\mathbb R,\ f(x) = ${f}$. Injective?`, a: a >= 0 || b <= 0, kind: 'bool', labels: ['Yes', 'No'] },
+      { q: T`$f:\mathbb R\to[${c},\infty),\ f(x) = ${poly([[1, 'x^2'], [k, '']])}$. Surjective?`, a: c === k, kind: 'bool', labels: ['Yes', 'No'] },
+    ]);
+  }},
+
+  // ---------- Elementary Logic ----------
+  { id: 'logic-famous', cat: 'logic', week: 1, weight: 1, gen() {
+    const form = pick(FAMOUS), [A, B, C] = literals(3), [prem, conc] = form.f(A, B, C);
+    return { q: argText(shuffle(prem), conc), a: valid(prem, conc), kind: 'bool', labels: ['Valid', 'Invalid'] };
+  }},
+  { id: 'logic-main', cat: 'logic', week: 3, weight: 1, gen() {
+    const f = rf(3, ['P', 'Q', 'R']);
+    if (typeof f === 'string' || depth(f) < 2) return null;
+    return { q: `Main connective of <span class="f">${show(f)}</span>`, a: CONNECTIVE_ALIASES[f.op], show: f.op, kind: 'text', keys: ['¬', '∧', '∨', '→', '↔'], noKeyboard: true };
+  }},
+  { id: 'logic-formalise', cat: 'logic', week: 3, weight: 1, gen() {
+    const [A, B] = shuffle(['P', 'Q', 'R']), [phrase, ans] = pick([
+      [`${A} only if ${B}`, `${A}→${B}`], [`${A} if ${B}`, `${B}→${A}`], [`Provided that ${B}, ${A}`, `${B}→${A}`],
+      [`${A} unless ${B}`, `${A}∨${B}`], [`${A} just if ${B}`, `${A}↔${B}`], [`${A} if and only if ${B}`, `${A}↔${B}`],
+      [`Not ${A} unless ${B}`, `¬${A}∨${B}`], [`It's not true that ${A} only if ${B}`, `¬(${A}→${B})`]]);
+    return { q: `Formalise: <span class="f">${phrase}</span>`, a: ans, kind: 'logic', keys: LOGIC_KEYS, noKeyboard: true };
+  }},
+  { id: 'logic-value', cat: 'logic', week: 4, weight: 1, gen() {
+    const L = ['P', 'Q', 'R'].slice(0, ri(2, 3)), f = rf(3, L), v = Object.fromEntries(L.map(x => [x, Math.random() < 0.5]));
+    if (typeof f === 'string' || depth(f) < 2) return null;
+    const asg = L.map(x => `${x}=${v[x] ? 'T' : 'F'}`).join(', ');
+    return { q: `${asg}<br><span class="f">${show(f)}</span>`, a: ev(f, v), kind: 'bool', labels: ['T', 'F'] };
+  }},
+  { id: 'logic-rows', cat: 'logic', week: 4, weight: 1, gen() {
+    const f = rf(3, shuffle(['P', 'Q', 'R', 'P₁', 'Q₁']).slice(0, ri(2, 4)));
+    if (depth(f) < 2) return null;
+    return { q: `Truth-table rows for <span class="f">${show(f)}</span>`, a: String(2 ** letters([f]).length), kind: 'num' };
+  }},
+  { id: 'logic-taut', cat: 'logic', week: 4, weight: 1, gen() {
+    const f = balanced(() => pick(TAUT_SEEDS)(rf(1, ['P', 'Q']), rf(1, ['P', 'Q'])), g => valid([], g));
+    return { q: `Tautology? <span class="f">${show(f)}</span>`, a: valid([], f), kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'logic-valid', cat: 'logic', week: 4, weight: 1, gen() {
+    const L = ['P', 'Q', 'R'].slice(0, ri(2, 3));
+    const [prem, conc] = balanced(() => [Array.from({ length: ri(1, 2) }, () => rf(2, L)), rf(1, L)], ([p, c]) => valid(p, c));
+    const ok = valid(prem, conc);
+    return { q: argText(prem, conc), a: ok, kind: 'bool', labels: ['Valid', 'Invalid'] };
+  }},
+  { id: 'logic-equiv', cat: 'logic', week: 4, weight: 1, gen() {
+    const [A, B] = literals(2), [f, g] = pick(EQUIV_SEEDS)(A, B);
+    return { q: `Equivalent?<br><span class="f">${show(f)}</span> &nbsp;and&nbsp; <span class="f">${show(g)}</span>`,
+             a: valid([f], g) && valid([g], f), kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'logic-name', cat: 'logic', week: 1, weight: 1, gen() {
+    const form = pick(FAMOUS.filter(x => x.names)), [A, B, C] = literals(3), [prem, conc] = form.f(A, B, C);
+    return { q: `Name the form: ${argText(shuffle(prem), conc)}`, a: form.names, show: T`\text{${form.title}}`, kind: 'text', mode: 'text' };
+  }},
+  { id: 'logic-official', cat: 'logic', week: 3, weight: 1, gen() {
+    const s = balanced(() => mutate(official(rfDeep(3, ['P', 'Q', 'R', 'P₁']))), isOfficial);
+    return { q: `Official sentence of L<sub>1</sub>?<br><span class="f">${s}</span>`, a: isOfficial(s), kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'logic-sentence', cat: 'logic', week: 3, weight: 1, gen() {
+    const s = balanced(() => mutate(abbrev(rfDeep(3, ['P', 'Q', 'R']))), isSentence);
+    return { q: `Sentence, official or abbreviated?<br><span class="f">${s}</span>`, a: isSentence(s), kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'logic-restore', cat: 'logic', week: 3, weight: 1, gen() {
+    const f = rfDeep(3, ['P', 'Q', 'R']), disp = show(f), ans = official(f);
+    if (disp === ans) return null;
+    return { q: `Restore all brackets:<br><span class="f">${disp}</span>`, a: ans, kind: 'syntax', keys: LOGIC_KEYS, noKeyboard: true,
+             check: isOfficial(ans) && isSentence(disp) && sameTree(parseLogic(disp), f) };
+  }},
+  { id: 'logic-drop', cat: 'logic', week: 3, weight: 1, gen() {
+    const f = rfDeep(3, ['P', 'Q', 'R']), disp = official(f), ans = show(f);
+    if (disp === ans) return null;
+    return { q: `Drop every bracket the conventions allow:<br><span class="f">${disp}</span>`, a: ans, kind: 'syntax', keys: LOGIC_KEYS, noKeyboard: true,
+             check: isOfficial(disp) && isSentence(ans) && sameTree(parseLogic(ans), f) };
+  }},
+  { id: 'logic-column', cat: 'logic', week: 4, weight: 1, gen() {
+    const L = Math.random() < 0.75 ? ['P', 'Q'] : ['P', 'Q', 'R'], f = rfDeep(2, L, 1), rows = tfRows(L);
+    if (letters([f]).length < L.length) return null;
+    const head = rows.map(v => L.map(x => v[x] ? 'T' : 'F').join('')).join(' ');
+    return { q: `Truth-table column of <span class="f">${show(f)}</span><br><span class="muted">rows (${L.join(' ')}): ${head}</span>`,
+             a: rows.map(v => ev(f, v) ? 'T' : 'F').join(''), kind: 'text', keys: ['T', 'F'], noKeyboard: true };
+  }},
+  { id: 'logic-truerows', cat: 'logic', week: 4, weight: 1, gen() {
+    const f = rfDeep(2, ['P', 'Q', 'R'].slice(0, ri(2, 3)), 2);
+    return { q: `In how many rows is <span class="f">${show(f)}</span> true?`, a: String(tfRows(letters([f]).sort()).filter(v => ev(f, v)).length), kind: 'num' };
+  }},
+  { id: 'logic-counter', cat: 'logic', week: 4, weight: 1, gen() {
+    const L = ['P', 'Q', 'R'].slice(0, ri(2, 3)), prem = Array.from({ length: ri(1, 2) }, () => rf(2, L)), conc = rf(1, L);
+    const Ls = letters([...prem, conc]).sort(), bad = tfRows(Ls).filter(v => prem.every(p => ev(p, v)) && !ev(conc, v));
+    if (!bad.length || Ls.length < 2) return null;
+    const rows = bad.map(v => Ls.map(x => v[x] ? 'T' : 'F').join(''));
+    return { q: `Counterexample row (${Ls.join(' ')}):<br>${argText(prem, conc)}`, a: rows, show: T`\text{${rows.join(' or ')}}`,
+             kind: 'text', keys: ['T', 'F'], noKeyboard: true };
+  }},
+  { id: 'logic-forced', cat: 'logic', week: 4, weight: 1, gen() {
+    const q = balanced(forcedQuestion, x => x.a !== '?');
+    return q && { ...q, kind: 'text', keys: ['T', 'F', '?'], noKeyboard: true };
+  }},
+  { id: 'logic-negin', cat: 'logic', week: 4, weight: 1, gen() {
+    const [A, B, C] = literals(3), inner = pick([and, or, imp])(A, Math.random() < 0.5 ? B : pick([and, or])(B, C));
+    const f = neg(inner);
+    return { q: `Equivalent sentence with ¬ only directly on letters:<br><span class="f">${show(f)}</span>`, a: show(nnf(f)),
+             kind: 'logic', nnf: true, keys: LOGIC_KEYS, noKeyboard: true };
+  }},
+  { id: 'logic-consistent', cat: 'logic', week: 4, weight: 1, gen() {
+    const L = ['P', 'Q', 'R'].slice(0, ri(2, 3));
+    const set = balanced(() => Array.from({ length: ri(2, 3) }, () => rfDeep(2, L, 1)), consistent);
+    return { q: `Consistent? <span class="f">{ ${set.map(f => show(f)).join(', ')} }</span>`, a: consistent(set), kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+];
+</script>
+<!-- ============================ END CONFIG ============================ -->
+
+<style>
+  :root { --bg: #14161a; --panel: #1d2026; --ink: #e8e8ea; --muted: #8a8f98; --accent: #6ea8fe; --good: #4cc38a; --bad: #f2555a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.4 -apple-system, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
+  body { padding: env(safe-area-inset-top) 12px 0; min-height: 100dvh; }
+  button { font: inherit; color: inherit; border: 0; border-radius: 10px; background: var(--panel); padding: 12px 16px; cursor: pointer; touch-action: manipulation; }
+  .screen { display: none; max-width: 640px; margin: 0 auto; padding-bottom: 80px; }
+  .screen.on { display: block; }
+  .bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 2px; font-variant-numeric: tabular-nums; }
+  .bar .big { font-size: 22px; font-weight: 600; }
+  .tag { color: var(--muted); font-size: 13px; min-height: 18px; }
+  .prompt { font-size: 22px; min-height: 120px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 12px 4px; overflow-x: auto; }
+  .prompt .katex { font-size: 1.1em; }
+  .f { font-family: "Times New Roman", serif; font-size: 1.15em; white-space: nowrap; }
+  #answer { width: 100%; font-size: 24px; padding: 12px; border-radius: 10px; border: 2px solid #2c313a; background: #0f1114; color: var(--ink); text-align: center; outline: none; }
+  #answer:focus { border-color: var(--accent); }
+  .bools { display: none; gap: 12px; }
+  .bools button { flex: 1; font-size: 24px; padding: 28px 0; }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  #prev { color: var(--muted); font-size: 14px; min-height: 22px; margin-top: 8px; text-align: center; }
+  #keys { position: fixed; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: #0b0c0f; border-top: 1px solid #23262d; }
+  #keys button { flex: 1 0 calc(14% - 6px); min-width: 40px; padding: 10px 8px; font-size: 18px; background: #262a32; }
+  .flash-bad { animation: bad .35s; } @keyframes bad { 50% { background: #4a1d20; } }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td, th { padding: 6px 4px; text-align: left; border-bottom: 1px solid #23262d; } th { color: var(--muted); font-weight: 500; font-size: 13px; }
+  td.n { text-align: right; }
+  .score { font-size: 56px; font-weight: 700; text-align: center; margin: 8px 0; }
+  .weak { background: #2a2112; border-radius: 10px; padding: 10px 12px; margin: 12px 0; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .start { width: 100%; font-size: 22px; padding: 18px; background: var(--accent); color: #0b0c0f; font-weight: 600; margin: 16px 0; }
+  .miss { padding: 6px 0; border-bottom: 1px solid #23262d; font-size: 15px; }
+  h2 { font-size: 16px; color: var(--muted); font-weight: 500; margin: 20px 0 6px; }
+  svg .pt { fill: var(--accent); } svg .ln { stroke: var(--accent); stroke-width: 2; fill: none; } svg .base { stroke: #2c313a; }
+</style>
+</head>
+<body>
+<div id="home" class="screen on">
+  <div class="bar"><span class="big">Drill</span><span class="muted" id="poolInfo"></span></div>
+  <button class="start" onclick="startRound()">Start · 120 s</button>
+  <div id="homeStats"></div>
+</div>
+
+<div id="play" class="screen">
+  <div class="bar"><span class="big" id="timer">120</span><span class="big" id="score">0</span></div>
+  <div class="tag" id="tag"></div>
+  <div class="prompt" id="prompt"></div>
+  <input id="answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="next">
+  <div class="bools row" id="bools"><button id="bTrue"></button><button id="bFalse"></button></div>
+  <div class="row"><button style="flex:1" onclick="skip()">Skip</button><button onclick="endRound()">End</button></div>
+  <div id="prev"></div>
+</div>
+
+<div id="results" class="screen">
+  <div class="score" id="finalScore"></div>
+  <div id="roundStats"></div>
+  <button class="start" onclick="startRound()">Again</button>
+  <button style="width:100%" onclick="showHome()">Home</button>
+  <div id="misses"></div>
+</div>
+<div id="keys" style="display:none"></div>
+<pre id="selftest" style="display:none"></pre>
+
+<!-- ============================ HELPERS ============================ -->
+<script>
+const T = String.raw;
+const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const nz = (a, b) => { let v; do v = ri(a, b); while (v === 0); return v; };
+const vec = (n, a, b) => Array.from({ length: n }, () => ri(a, b));
+const mat = (m, n, a, b) => Array.from({ length: m }, () => vec(n, a, b));
+// Redraw make() until key() matches a fair coin, so yes/no answers come out about 50/50
+function balanced(make, key) {
+  const want = Math.random() < 0.5;
+  for (let i = 0; i < 200; i++) { const x = make(); if (x != null && key(x) === want) return x; }
+  return null;
+}
+const isZero = v => v.every(x => x === 0);
+const dot = (u, v) => u.reduce((s, x, i) => s + x * v[i], 0);
+const cross = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+const tr = ([m, n]) => [n, m];
+const gcd = (a, b) => b ? gcd(b, a % b) : Math.abs(a);
+const shuffle = arr => arr.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(p => p[1]);
+const colv = v => T`\begin{pmatrix}${v.join('\\\\')}\end{pmatrix}`;
+const matTeX = M => T`\begin{pmatrix}${M.map(r => r.join('&')).join('\\\\')}\end{pmatrix}`;
+const divisors = n => { const out = []; for (let d = 1; d <= Math.abs(n); d++) if (n % d === 0) out.push(d, -d); return out; };
+
+// Reduced fraction p/q -> { s: 'p/q', tex }
+function frac(p, q) {
+  if (q < 0) { p = -p; q = -q; }
+  const g = gcd(p, q) || 1;
+  p /= g; q /= g;
+  if (q === 1) return { s: String(p), tex: String(p) };
+  return { s: `${p}/${q}`, tex: (p < 0 ? '-' : '') + T`\frac{${Math.abs(p)}}{${q}}` };
+}
+
+// m*pi/d -> { s: '2pi/3', tex: '\frac{2\pi}{3}' }
+function piFrac(m, d) {
+  const g = gcd(m, d) || 1, p = m / g, q = d / g;
+  if (p === 0) return { s: '0', tex: '0' };
+  const c = Math.abs(p) === 1 ? '' : Math.abs(p), sign = p < 0 ? '-' : '';
+  if (q === 1) return { s: `${sign}${c}pi`, tex: T`${sign}${c}\pi` };
+  return { s: `${sign}${c}pi/${q}`, tex: T`${sign}\frac{${c}\pi}{${q}}` };
+}
+
+// [[coef, 'x^2'], [coef, '']] -> '3x^2 - x + 2'
+function poly(terms) {
+  let out = '';
+  for (const [c, v] of terms) {
+    if (c === 0) continue;
+    const mag = Math.abs(c) === 1 && v ? '' : Math.abs(c);
+    out += (c < 0 ? (out ? ' - ' : '-') : (out ? ' + ' : '')) + mag + v;
+  }
+  return out || '0';
+}
+
+const STD_ANGLES = Array.from({ length: 49 }, (_, i) => i - 24).filter(m => m % 2 === 0 || m % 3 === 0);
+const SIN_VALUES = [0, 1 / 2, Math.SQRT1_2, Math.sqrt(3) / 2, 1];
+const TAN_VALUES = [0, 1 / Math.sqrt(3), 1, Math.sqrt(3)];
+const EXACT = [['0', '0', 0], ['1/2', T`\frac{1}{2}`, 0.5], ['sqrt(2)/2', T`\frac{\sqrt2}{2}`, Math.SQRT1_2],
+  ['sqrt(3)/2', T`\frac{\sqrt3}{2}`, Math.sqrt(3) / 2], ['1', '1', 1], ['sqrt(3)/3', T`\frac{\sqrt3}{3}`, 1 / Math.sqrt(3)],
+  ['sqrt(3)', T`\sqrt3`, Math.sqrt(3)]];
+function exact(v) {
+  const [s, tex] = EXACT.find(e => Math.abs(Math.abs(v) - e[2]) < 1e-9);
+  return v < -1e-12 ? { s: '-' + s, tex: '-' + tex } : { s, tex };
+}
+
+function pythagorean() {
+  const [base, len] = pick([[[3, 4], 5], [[2, 3, 6], 7], [[1, 2, 2], 3], [[2, 6, 9], 11], [[4, 4, 7], 9], [[1, 4, 8], 9], [[6, 6, 7], 11], [[2, 10, 11], 15], [[5, 12], 13]]);
+  return [shuffle(base).map(x => x * pick([1, -1])), len];
+}
+
+const cx = (a, b) => {
+  if (b === 0) return String(a);
+  const im = Math.abs(b) === 1 ? 'i' : `${Math.abs(b)}i`;
+  if (a === 0) return (b < 0 ? '-' : '') + im;
+  return `${a}${b < 0 ? '-' : '+'}${im}`;
+};
+const CX_KEYS = ['i', '+', '-', '(', ')'];
+const N_KEYS = ['n', '^', '*', '/', '(', ')', '+', '-'];
+
+// Point at angle m*pi/12 with scale k, exact coordinates as { tex, v }
+function argPoint(m, k) {
+  const c = Math.cos(m * Math.PI / 12), s = Math.sin(m * Math.PI / 12);
+  const part = x => {
+    const a = Math.abs(x);
+    if (a < 1e-9) return { tex: '0', v: 0 };
+    const sg = x < 0 ? -1 : 1;
+    if (Math.abs(a - 1) < 1e-9) return { tex: String(sg * 2 * k), v: sg * 2 * k };
+    if (Math.abs(a - 0.5) < 1e-9) return { tex: String(sg * k), v: sg * k };
+    if (Math.abs(a - Math.SQRT1_2) < 1e-9) return { tex: String(sg * k), v: sg * k };
+    return { tex: (sg < 0 ? '-' : '') + (k > 1 ? k : '') + T`\sqrt3`, v: sg * k * Math.sqrt(3) };
+  };
+  return [part(c), part(s)];
+}
+function cxTeX(re, im) {
+  if (im.v === 0) return re.tex;
+  const imAbs = im.tex.replace('-', ''), imPart = (imAbs === '1' ? '' : imAbs) + 'i';
+  if (re.v === 0) return (im.v < 0 ? '-' : '') + imPart;
+  return `${re.tex} ${im.v < 0 ? '-' : '+'} ${imPart}`;
+}
+
+// Composition building blocks: u is the slot
+const OUTER = [{ tex: 'u^2', s: 'u^2' }, { tex: 'u^3', s: 'u^3' }, { tex: 'u + 3', s: 'u + 3' }, { tex: '2u', s: '2u' },
+  { tex: 'e^u', s: 'e^u' }, { tex: T`\sqrt u`, s: 'sqrt(u)' }, { tex: T`\sin u`, s: 'sin(u)' }, { tex: T`\ln u`, s: 'ln(u)' }, { tex: T`\frac1u`, s: '1/u' }];
+const INNER = [{ tex: 'u^2', s: 'u^2' }, { tex: 'u^3', s: 'u^3' }, { tex: 'u + 2', s: 'u + 2' }, { tex: '3u', s: '3u' },
+  { tex: 'e^u', s: 'e^u' }, { tex: T`\sqrt u`, s: 'sqrt(u)' }, { tex: T`\frac1u`, s: '1/u' }];
+
+const fact = n => n <= 1 ? 1 : n * fact(n - 1);
+const SERIES = [
+  () => { const a = pick([1, -1, 2, -2]); return [a === 1 ? 'e^{x}' : `e^{${a}x}`.replace('{-1x}', '{-x}'), n => [a ** n, fact(n)]]; },
+  () => [T`\sin x`, n => [n % 2 ? (-1) ** ((n - 1) / 2) : 0, fact(n)]],
+  () => [T`\cos x`, n => [n % 2 ? 0 : (-1) ** (n / 2), fact(n)]],
+];
+
+// Intervals: { lo, hi, lc, hc } with +-Infinity allowed (always open there)
+function randInterval() {
+  const lo = Math.random() < 0.15 ? -Infinity : ri(-5, 3);
+  const hi = Math.random() < 0.15 ? Infinity : ri(Math.max(lo, -5) + 1, 6);
+  return { lo, hi, lc: lo > -Infinity && Math.random() < 0.5, hc: hi < Infinity && Math.random() < 0.5 };
+}
+function intersect(I, J) {
+  const [lo, lc] = I.lo > J.lo ? [I.lo, I.lc] : J.lo > I.lo ? [J.lo, J.lc] : [I.lo, I.lc && J.lc];
+  const [hi, hc] = I.hi < J.hi ? [I.hi, I.hc] : J.hi < I.hi ? [J.hi, J.hc] : [I.hi, I.hc && J.hc];
+  if (lo > hi || (lo === hi && !(lc && hc))) return '∅';
+  return ivStr({ lo, hi, lc, hc });
+}
+function union(I, J) {
+  const touch = Math.max(I.lo, J.lo) < Math.min(I.hi, J.hi);
+  if (!touch) return null;
+  const [lo, lc] = I.lo < J.lo ? [I.lo, I.lc] : J.lo < I.lo ? [J.lo, J.lc] : [I.lo, I.lc || J.lc];
+  const [hi, hc] = I.hi > J.hi ? [I.hi, I.hc] : J.hi > I.hi ? [J.hi, J.hc] : [I.hi, I.hc || J.hc];
+  return ivStr({ lo, hi, lc, hc });
+}
+function ivStr({ lo, hi, lc, hc }) {
+  if (lo === hi) return `{${lo}}`;
+  if (lo === -Infinity && hi === Infinity) return 'R';
+  const e = x => x === Infinity ? 'inf' : x === -Infinity ? '-inf' : x;
+  return `${lc ? '[' : '('}${e(lo)},${e(hi)}${hc ? ']' : ')'}`;
+}
+const ivTeX = I => setTeX(ivStr(I));
+const setTeX = s => s.replace(/-inf/g, T`-\infty`).replace(/inf/g, T`\infty`).replace(/ U /g, T` \cup `)
+  .replace(/\{/g, T`\{`).replace(/\}/g, T`\}`).replace(/^R$/, T`\mathbb R`).replace('∅', T`\varnothing`);
+
+// Quantified statements over N = {1,2,...}, Z, R: (A, B, c) -> [tex, truth]
+const bb = D => T`\mathbb ${D}`;
+const plusC = (v, c) => poly([[1, v], [c, '']]);
+const QUANT = [
+  (A, B, c) => [T`\forall x \in ${bb(A)}\ \exists y \in ${bb(B)} :\ y = ${plusC('x', c)}`, A === 'R' ? B === 'R' : B !== 'N' || (A === 'N' && c >= 0)],
+  (A, B, c) => [T`\exists y \in ${bb(B)}\ \forall x \in ${bb(A)} :\ y \le ${plusC('x', c)}`, A === 'N' && (B !== 'N' || c >= 0)],
+  (A, B) => [T`\forall x \in ${bb(A)}\ \exists y \in ${bb(B)} :\ y < x`, B !== 'N'],
+  (A, B) => [T`\forall x \in ${bb(A)}\ \exists y \in ${bb(B)} :\ y^2 = x`, A === 'N' && B === 'R'],
+  (A, B, c) => { const k = c * c + ri(-1, 1) * ri(0, 2); return [T`\exists x \in ${bb(A)} :\ x^2 = ${k}`, sqHas(A, k)]; },
+  (A, B, c) => [T`\forall x \in ${bb(A)} :\ x \ge ${c}`, A === 'N' && c <= 1],
+  (A, B, c) => { const a = nz(-4, 4), b = ri(-12, 12); return [T`\exists x \in ${bb(A)} :\ ${poly([[a, 'x']])} = ${b}`, rootIn(A, b / a)]; },
+];
+function sqHas(A, k) {
+  const r = Math.sqrt(k);
+  if (A === 'R') return k >= 0;
+  return Number.isInteger(r) && (A === 'Z' || r >= 1);
+}
+const rootIn = (A, x) => A === 'R' || (Number.isInteger(x) && (A === 'Z' || x >= 1));
+
+// ---------- propositional logic ----------
+const BIN = ['∧', '∨', '→', '↔'];
+const neg = a => ({ op: '¬', a });
+const bin = (op, a, b) => ({ op, a, b });
+const imp = (a, b) => bin('→', a, b), or = (a, b) => bin('∨', a, b), and = (a, b) => bin('∧', a, b), iff = (a, b) => bin('↔', a, b);
+
+function rf(d, L) {
+  if (d === 0 || Math.random() < 0.2) return Math.random() < 0.3 ? neg(pick(L)) : pick(L);
+  if (Math.random() < 0.15) return neg(rf(d - 1, L));
+  return bin(pick(BIN), rf(d - 1, L), rf(d - 1, L));
+}
+const depth = f => typeof f === 'string' ? 0 : 1 + Math.max(depth(f.a), f.b ? depth(f.b) : 0);
+
+// Halbach conventions: drop outer brackets; ∧/∨ inside →/↔ unbracketed; same ∧/∨ chains group left
+function show(f, parent, side) {
+  if (typeof f === 'string') return f;
+  if (f.op === '¬') return '¬' + show(f.a, '¬');
+  const s = `${show(f.a, f.op, 'L')} ${f.op} ${show(f.b, f.op, 'R')}`;
+  return needBrackets(f.op, parent, side) ? `(${s})` : s;
+}
+function needBrackets(op, parent, side) {
+  if (!parent) return false;
+  if ('→↔'.includes(parent) && '∧∨'.includes(op) && parent !== '¬') return false;
+  return !(op === parent && '∧∨'.includes(op) && side === 'L');
+}
+
+function ev(f, v) {
+  if (typeof f === 'string') return v[f];
+  const a = ev(f.a, v);
+  if (f.op === '¬') return !a;
+  const b = ev(f.b, v);
+  return { '∧': a && b, '∨': a || b, '→': !a || b, '↔': a === b }[f.op];
+}
+function letters(fs) {
+  const out = new Set();
+  const walk = f => typeof f === 'string' ? out.add(f) : (walk(f.a), f.b && walk(f.b));
+  fs.forEach(walk);
+  return [...out];
+}
+function assignments(L) {
+  return Array.from({ length: 2 ** L.length }, (_, m) => Object.fromEntries(L.map((x, i) => [x, !!(m >> i & 1)])));
+}
+const valid = (prem, conc) => assignments(letters([...prem, conc])).every(v => !prem.every(p => ev(p, v)) || ev(conc, v));
+const literals = n => shuffle(['P', 'Q', 'R']).slice(0, n).map(x => Math.random() < 0.3 ? neg(x) : x);
+const argText = (prem, conc) => `<span class="f">${prem.map(p => show(p)).join(', &nbsp;')} &nbsp;∴&nbsp; ${show(conc)}</span>`;
+const CONNECTIVE_ALIASES = { '¬': ['¬', '~'], '∧': ['∧', '&'], '∨': ['∨', 'v'], '→': ['→', '->'], '↔': ['↔', '<->'] };
+const LOGIC_KEYS = ['P', 'Q', 'R', '¬', '∧', '∨', '→', '↔', '(', ')'];
+
+// Course names (Intro_Famous_Forms_PropLogic.pdf); any listed name or abbreviation is accepted when typed
+function rfDeep(d, L, min = 2, maxOps = 4) {
+  for (;;) { const f = rf(d, L); if (depth(f) >= min && binOps(f) <= maxOps) return f; }
+}
+const binOps = f => typeof f === 'string' ? 0 : (f.b ? 1 + binOps(f.b) : 0) + binOps(f.a);
+const sameTree = (f, g) => JSON.stringify(f) === JSON.stringify(g);
+const official = f => typeof f === 'string' ? f : f.op === '¬' ? '¬' + official(f.a) : `(${official(f.a)} ${f.op} ${official(f.b)})`;
+// Random mix of the conventions: optional brackets kept with probability 0.35
+function abbrev(f, parent, side) {
+  if (typeof f === 'string') return f;
+  if (f.op === '¬') return '¬' + abbrev(f.a, '¬');
+  const s = `${abbrev(f.a, f.op, 'L')} ${f.op} ${abbrev(f.b, f.op, 'R')}`;
+  return needBrackets(f.op, parent, side) || Math.random() < 0.35 ? `(${s})` : s;
+}
+// Rows in the course's order: first letter slowest, T before F (TT, TF, FT, FF)
+const tfRows = L => Array.from({ length: 2 ** L.length }, (_, r) => Object.fromEntries(L.map((x, i) => [x, !(r >> (L.length - 1 - i) & 1)])));
+const consistent = set => assignments(letters(set)).some(v => set.every(f => ev(f, v)));
+// Push ¬ inward to the letters (De Morgan, ¬(A→B) ≡ A∧¬B, ¬¬A ≡ A); positive → is kept
+function nnf(f, negated = false) {
+  if (typeof f === 'string') return negated ? neg(f) : f;
+  if (f.op === '¬') return nnf(f.a, !negated);
+  if (f.op === '→') return negated ? and(nnf(f.a), nnf(f.b, true)) : imp(nnf(f.a), nnf(f.b));
+  const op = negated ? { '∧': '∨', '∨': '∧' }[f.op] : f.op;
+  return bin(op, nnf(f.a, negated), nnf(f.b, negated));
+}
+const negOnLetters = f => typeof f === 'string' || (f.op === '¬' ? typeof f.a === 'string' : negOnLetters(f.a) && negOnLetters(f.b));
+
+// Partial-truth-table forcing: given the sentence's value (and maybe one letter), is the other letter forced?
+function forcedQuestion() {
+  const [X, Y] = shuffle(['P', 'Q', 'R']), lit = x => Math.random() < 0.3 ? neg(x) : x;
+  const f = bin(pick(BIN), lit(X), lit(Y)), val = Math.random() < 0.5, known = Math.random() < 0.5 ? Math.random() < 0.5 : undefined;
+  const rows = tfRows([X, Y]).filter(v => ev(f, v) === val && (known === undefined || v[Y] === known));
+  if (!rows.length) return null;
+  const vals = new Set(rows.map(v => v[X])), given = known === undefined ? '' : ` and ${Y} is ${known ? 'T' : 'F'}`;
+  return { q: `<span class="f">${show(f)}</span> is ${val ? 'T' : 'F'}${given}. Value of ${X}?<br><span class="muted">? if not forced</span>`,
+           a: vals.size === 1 ? (vals.has(true) ? 'T' : 'F') : '?' };
+}
+
+// Independent L1 syntax recognisers (Halbach 2.1-2.3), unit-tested against Book of Problems ex. 2.1/2.3/2.5
+const logicTokens = s => s.replace(/\s+/g, '').match(/[PQRS][₀-₉]*|./g) || [];
+const isLetter = x => /^[PQRS][₀-₉]*$/.test(x || '');
+function isOfficial(s) {
+  const t = logicTokens(s);
+  let i = 0;
+  const S = () => {
+    const x = t[i++];
+    if (x === '¬') return S();
+    if (isLetter(x)) return true;
+    return x === '(' && S() && BIN.includes(t[i++]) && S() && t[i++] === ')';
+  };
+  return S() && i === t.length;
+}
+function isSentence(s) {
+  const t = logicTokens(s), at = ops => ops.includes(t[i] || 'x');
+  let i = 0;
+  const unary = () => {
+    const x = t[i++];
+    if (x === '¬') return unary();
+    if (isLetter(x)) return true;
+    return x === '(' && level() === 'bin' && t[i++] === ')';
+  };
+  const andLevel = () => {
+    if (!unary()) return null;
+    const op = t[i];
+    if (op !== '∧' && op !== '∨') return 'atom';
+    while (t[i] === op) { i++; if (!unary()) return null; }
+    return at('∧∨') ? null : 'bin';
+  };
+  const level = () => {
+    const l = andLevel();
+    if (!l || !at('→↔')) return l;
+    i++;
+    return andLevel() && !at('→↔') ? 'bin' : null;
+  };
+  return !!level() && i === t.length;
+}
+// One random edit: none, wrap a letter/negation in brackets, double a pair, or drop a pair
+function mutate(s) {
+  const t = logicTokens(s), edit = pick(['none', 'none', 'wrap', 'double', 'drop', 'drop']);
+  const opens = t.flatMap((x, i) => x === '(' ? [i] : []), lets = t.flatMap((x, i) => isLetter(x) ? [i] : []);
+  if (edit === 'none' || (edit !== 'wrap' && !opens.length)) return s;
+  if (edit === 'wrap') {
+    let i = pick(lets), j = i;
+    while (t[j - 1] === '¬' && Math.random() < 0.6) j--;
+    t.splice(i + 1, 0, ')'); t.splice(j, 0, '(');
+  } else {
+    const o = pick(opens), m = matching(t, o);
+    if (edit === 'double') { t.splice(m + 1, 0, ')'); t.splice(o, 0, '('); } else { t.splice(m, 1); t.splice(o, 1); }
+  }
+  return t.map(x => BIN.includes(x) ? ` ${x} ` : x).join('');
+}
+function matching(t, o) {
+  for (let i = o, d = 0; i < t.length; i++) { d += t[i] === '(' ? 1 : t[i] === ')' ? -1 : 0; if (d === 0) return i; }
+  return -1;
+}
+
+const FAMOUS = [
+  { title: 'Modus Ponens', names: ['MP', 'Modus Ponens', 'Conditional Elimination'], f: (A, B) => [[imp(A, B), A], B] },
+  { title: 'Modus Tollens', names: ['MT', 'Modus Tollens'], f: (A, B) => [[imp(A, B), neg(B)], neg(A)] },
+  { title: 'Hypothetical Syllogism', names: ['HS', 'Hypothetical Syllogism', 'Transitive Syllogism', 'Chain Argument'], f: (A, B, C) => [[imp(A, B), imp(B, C)], imp(A, C)] },
+  { title: 'Disjunctive Syllogism', names: ['DS', 'Disjunctive Syllogism'], f: (A, B) => [[or(A, B), neg(A)], B] },
+  { title: 'Reductio ad Absurdum', names: ['RAA', 'Reductio', 'Reductio ad Absurdum', 'Proof by Contradiction', 'Negation Introduction'], f: (A, B) => [[imp(A, B), imp(A, neg(B))], neg(A)] },
+  { title: 'Affirming the Consequent', names: ['AC', 'Affirming the Consequent'], f: (A, B) => [[imp(A, B), B], A] },
+  { title: 'Denying the Antecedent', names: ['DA', 'Denying the Antecedent'], f: (A, B) => [[imp(A, B), neg(A)], neg(B)] },
+  { title: 'Affirming a Disjunct', names: ['AD', 'Affirming a Disjunct'], f: (A, B) => [[or(A, B), A], neg(B)] },
+  { f: (A, B, C) => [[imp(A, B), imp(C, B)], imp(A, C)] }, // unnamed, invalid
+];
+const TAUT_SEEDS = [
+  A => or(A, neg(A)), A => neg(and(A, neg(A))), A => imp(A, A), (A, B) => imp(and(A, B), A), (A, B) => imp(A, or(A, B)),
+  (A, B) => or(imp(A, B), imp(B, A)), (A, B) => imp(and(imp(A, B), A), B),
+  (A, B) => or(A, B), (A, B) => imp(or(A, B), A), (A, B) => imp(A, and(A, B)), (A, B) => and(A, neg(A)), (A, B) => imp(imp(A, B), B),
+  A => imp(imp(A, neg(A)), neg(A)), A => imp(imp(A, neg(A)), A), A => imp(imp(neg(A), A), A), (A, B) => imp(imp(A, B), imp(neg(A), neg(B))),
+  (A, B) => imp(and(imp(A, B), imp(neg(A), B)), B), (A, B) => iff(neg(and(A, B)), or(neg(A), neg(B))), (A, B) => and(or(A, neg(B)), and(neg(A), B)),
+  (A, B) => imp(B, and(A, B)), (A, B) => iff(or(neg(A), B), imp(A, B)),
+];
+const EQUIV_SEEDS = [
+  (A, B) => [imp(A, B), imp(neg(B), neg(A))], (A, B) => [imp(A, B), imp(B, A)], (A, B) => [imp(A, B), or(neg(A), B)],
+  (A, B) => [imp(A, B), imp(neg(A), neg(B))], (A, B) => [neg(and(A, B)), or(neg(A), neg(B))], (A, B) => [neg(and(A, B)), and(neg(A), neg(B))],
+  (A, B) => [neg(or(A, B)), and(neg(A), neg(B))], (A, B) => [neg(or(A, B)), or(neg(A), neg(B))], (A, B) => [neg(imp(A, B)), and(A, neg(B))],
+  (A, B) => [neg(imp(A, B)), imp(neg(A), neg(B))], (A, B) => [iff(A, B), and(imp(A, B), imp(B, A))], (A, B) => [or(A, B), imp(neg(A), B)],
+];
+</script>
+
+<!-- ============================ CHECKER ============================ -->
+<script>
+const FUNCS = ['arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'sqrt', 'cbrt', 'asin', 'acos', 'atan', 'sin', 'cos', 'tan', 'exp', 'log', 'ln'];
+const MJ = { ln: 'log', arcsin: 'asin', arccos: 'acos', arctan: 'atan' };
+const ALIAS = { ln: 'log', exp: 'e', arcsin: 'asin', arccos: 'acos', arctan: 'atan' };
+const CONSTS = new Set(['e', 'pi', 'i']);
+const INT_VARS = new Set(['n', 'k', 'm', 'j']);
+
+// Split a letter run into known functions, pi and single-letter symbols: 'xsinx' -> x, sin, x
+function splitWord(w) {
+  const out = [];
+  for (let i = 0; i < w.length;) {
+    const f = FUNCS.find(n => w.startsWith(n, i));
+    const tok = f ? { t: 'fn', v: f } : w.startsWith('pi', i) ? { t: 'sym', v: 'pi' } : { t: 'sym', v: w[i] };
+    out.push(tok);
+    i += tok.v.length;
+  }
+  return out;
+}
+function tokenize(src) {
+  const s = src.toLowerCase().replace(/π/g, 'pi').replace(/[×·]/g, '*').replace(/−/g, '-')
+    .replace(/√/g, 'sqrt').replace(/²/g, '^2').replace(/³/g, '^3').trim();
+  const out = [], re = /\s*(?:(\d+\.?\d*|\.\d+)|([a-z]+)|(\S))/gy;
+  let m;
+  while (re.lastIndex < s.length && (m = re.exec(s))) {
+    if (m[1]) out.push({ t: 'num', v: m[1] });
+    else if (m[2]) out.push(...splitWord(m[2]));
+    else out.push({ t: 'op', v: m[3] });
+  }
+  return out;
+}
+// Explicit '*' between adjacent values; 'sin 2x' -> sin(2*x)
+function toMath(toks) {
+  const out = [];
+  let prevEnd = false;
+  for (let i = 0; i < toks.length; i++) {
+    const k = toks[i], starts = k.t !== 'op' || k.v === '(';
+    if (prevEnd && starts) out.push('*');
+    if (k.t === 'fn' && toks[i + 1]?.v !== '(') {
+      const parts = [];
+      let j = i + 1;
+      if (toks[j]?.t === 'num') parts.push(toks[j++].v);
+      while (toks[j]?.t === 'sym') parts.push(toks[j++].v);
+      out.push(MJ[k.v] || k.v, '(', parts.join('*'), ')');
+      i = j - 1; prevEnd = true; continue;
+    }
+    out.push(k.t === 'fn' ? (MJ[k.v] || k.v) : k.v);
+    prevEnd = k.t === 'num' || k.t === 'sym' || k.v === ')';
+  }
+  return out.join(' ');
+}
+function compileExpr(str) {
+  const toks = tokenize(str);
+  if (!toks.length) return null;
+  const cls = new Set(), vars = [];
+  for (const k of toks) {
+    if (k.t === 'fn' && k.v !== 'sqrt' && k.v !== 'cbrt') cls.add(ALIAS[k.v] || k.v);
+    if (k.t !== 'sym') continue;
+    cls.add(ALIAS[k.v] || k.v);
+    if (!CONSTS.has(k.v) && !vars.includes(k.v)) vars.push(k.v);
+  }
+  return { code: math.compile(toMath(toks)), cls, vars };
+}
+function evalAt(c, scope) {
+  const v = c.code.evaluate({ ...scope });
+  const z = typeof v === 'number' ? { re: v, im: 0 } : v && typeof v.re === 'number' ? v : null;
+  return z && isFinite(z.re) && isFinite(z.im) ? z : null;
+}
+const near = (u, c, tol = 1e-9) => Math.hypot(u.re - c.re, u.im - c.im) <= tol * Math.max(1, Math.hypot(c.re, c.im));
+function samplePoint(vars, dom = [0.2, 3]) {
+  return Object.fromEntries(vars.map(v => [v, INT_VARS.has(v) ? ri(1, 15) : dom[0] + Math.random() * (dom[1] - dom[0])]));
+}
+
+// Equivalence by evaluation. The answer may only use the canonical answer's variables. A numeric answer may
+// also only use its functions/constants (sqrt, cbrt always allowed), so echoing the prompt (ln(e^3) for 3) fails.
+function checkExpr(q, input) {
+  const ref = q._ref || (q._ref = compileExpr(q.a)), user = compileExpr(input);
+  if (!user || user.vars.some(v => !ref.vars.includes(v))) return false;
+  if (q.kind === 'num' && [...user.cls].some(c => !ref.cls.has(c))) return false;
+  let good = 0;
+  for (let t = 0; t < 8; t++) {
+    const scope = samplePoint(ref.vars, q.dom), c = evalAt(ref, scope);
+    if (!c) continue;
+    const u = evalAt(user, scope);
+    if (!u || !near(u, c)) return false;
+    good++;
+  }
+  return good >= (ref.vars.length ? 4 : 1);
+}
+
+function parseGrid(s) {
+  const body = s.trim().replace(/^[\[\(]+|[\]\)]+$/g, '');
+  return body.split(/\]\s*,\s*\[|;|\n/).map(r => r.split(/[\s,]+/).filter(Boolean)).filter(r => r.length);
+}
+function evalPlain(s) {
+  if (!/^[-+\d.\/()]+$/.test(s)) return null;
+  const v = math.evaluate(s);
+  return typeof v === 'number' && isFinite(v) ? v : null;
+}
+function checkGrid(q, input) {
+  const rows = parseGrid(input), want = q.kind === 'mat' ? q.a : [q.a];
+  let flat = rows.flat().map(evalPlain), wflat = want.flat();
+  if (flat.length !== wflat.length || flat.some(x => x === null)) return false;
+  if (rows.length > 1 && (rows.length !== want.length || rows.some(r => r.length !== want[0].length))) return false;
+  if (q.parallel) return !isZero(flat) && flat.every((x, i) => flat.every((y, j) => Math.abs(x * wflat[j] - y * wflat[i]) < 1e-9));
+  if (q.unordered) { flat = [...flat].sort((a, b) => a - b); wflat = [...wflat].sort((a, b) => a - b); }
+  return flat.every((x, i) => Math.abs(x - wflat[i]) < 1e-9);
+}
+
+function normSet(s) {
+  const t = s.toLowerCase().replace(/\s+/g, '').replace(/−/g, '-').replace(/∞|infinity|oo/g, 'inf').replace(/\+inf/g, 'inf')
+    .replace(/∪|u/g, 'U').replace(/∅|\{\}|empty/g, '∅').replace(/^(r|ℝ|\(-inf,inf\))$/, 'R');
+  return t.split('U').sort().join('U');
+}
+const normLogic = s => s.replace(/\s+/g, '').replace(/<->/g, '↔').replace(/->/g, '→').replace(/[~!\-]/g, '¬').replace(/&/g, '∧').replace(/v/g, '∨').toUpperCase();
+const normText = s => s.toLowerCase().replace(/\s+/g, '').replace(/[×*]/g, 'x').replace(/by/g, 'x');
+
+function parseLogic(src) {
+  const s = src.replace(/<->|<=>/g, '↔').replace(/->|=>/g, '→').replace(/[~!\-]/g, '¬').replace(/&/g, '∧').replace(/[|v]/g, '∨');
+  const toks = s.match(/[PQRS][₀-₉\d]*|\S/g) || [];
+  let i = 0;
+  const binary = (next, ops) => { let l = next(); while (ops.includes(toks[i])) { const op = toks[i++]; l = bin(op, l, next()); } return l; };
+  const atom = () => {
+    const t = toks[i++];
+    if (t === '¬') return neg(atom());
+    if (t === '(') { const f = top(); if (toks[i++] !== ')') throw 0; return f; }
+    if (/^[PQRS][₀-₉\d]*$/.test(t)) return t;
+    throw 0;
+  };
+  const mid = () => binary(atom, ['∧', '∨']), top = () => binary(mid, ['→', '↔']);
+  const f = top();
+  if (i !== toks.length) throw 0;
+  return f;
+}
+function checkLogic(q, input) {
+  const f = parseLogic(input), g = q._ref || (q._ref = parseLogic(q.a));
+  if (q.nnf && !negOnLetters(f)) return false;
+  return valid([f], g) && valid([g], f);
+}
+
+function check(q, input) {
+  if (!input.trim()) return false;
+  try {
+    if (q.kind === 'num' || q.kind === 'expr') return checkExpr(q, input);
+    if (q.kind === 'vec' || q.kind === 'mat') return checkGrid(q, input);
+    if (q.kind === 'interval') return normSet(input) === normSet(q.a);
+    if (q.kind === 'text') return [].concat(q.a).some(a => normText(a) === normText(input));
+    if (q.kind === 'logic') return checkLogic(q, input);
+    if (q.kind === 'syntax') return normLogic(input) === normLogic(q.a);
+  } catch (e) { /* incomplete input */ }
+  return false;
+}
+</script>
+
+<!-- ============================== APP ============================== -->
+<script>
+const $ = id => document.getElementById(id);
+const HISTORY_KEY = 'drill-history-v1';
+const KEYSETS = {
+  num: { mode: 'decimal', keys: ['-', '/', 'sqrt(', 'pi', '(', ')', '^'] },
+  expr: { mode: 'text', keys: ['^', '*', '/', '(', ')', 'x', 'pi', 'e', 'sin(', 'cos(', 'ln(', 'sqrt('] },
+  vec: { mode: 'decimal', keys: ['-', ',', '/'] },
+  mat: { mode: 'decimal', keys: ['-', ',', ';', '/'] },
+  interval: { mode: 'decimal', keys: ['(', ')', '[', ']', ',', '-', 'inf', '∪', '{', '}', '∅', 'R'] },
+  text: { mode: 'decimal', keys: [] },
+  logic: { mode: 'none', keys: [] },
+  syntax: { mode: 'none', keys: [] },
+};
+const KEY_LABEL = { 'sqrt(': '√', pi: 'π', 'sin(': 'sin', 'cos(': 'cos', 'ln(': 'ln', inf: '∞' };
+let S = null;
+
+const activeTypes = () => TYPES.filter(t => t.weight > 0 && t.week <= CONFIG.currentWeek && CONFIG.categories[t.cat]?.weight > 0);
+function weighted(items, w) {
+  let r = Math.random() * items.reduce((s, x) => s + w(x), 0);
+  return items.find(x => (r -= w(x)) < 0) || items[items.length - 1];
+}
+function draw(recent) {
+  const types = activeTypes(), cats = [...new Set(types.map(t => t.cat))];
+  for (let tries = 0; tries < 200; tries++) {
+    const cat = weighted(cats, c => CONFIG.categories[c].weight);
+    const type = weighted(types.filter(t => t.cat === cat), t => t.weight);
+    const q = type.gen();
+    if (q && !recent.includes(q.q)) return { ...q, type: type.id, cat };
+  }
+  throw new Error('no question could be drawn');
+}
+
+function renderMath(str) {
+  return str.split('$').map((part, i) => i % 2 ? katex.renderToString(part, { throwOnError: false }) : part).join('');
+}
+
+function startRound() {
+  S = { end: Date.now() + CONFIG.roundSeconds * 1000, log: [], recent: [], score: 0 };
+  showScreen('play');
+  $('score').textContent = '0';
+  $('prev').textContent = '';
+  S.timer = setInterval(tick, 200);
+  nextQuestion();
+}
+function tick() {
+  const left = Math.max(0, Math.ceil((S.end - Date.now()) / 1000));
+  $('timer').textContent = left;
+  if (left === 0) endRound();
+}
+function nextQuestion() {
+  const q = draw(S.recent);
+  S.recent = [q.q, ...S.recent].slice(0, 10);
+  S.cur = q; S.start = Date.now();
+  $('tag').textContent = CONFIG.categories[q.cat].label;
+  $('prompt').innerHTML = `<div>${renderMath(q.q)}</div>`;
+  const isBool = q.kind === 'bool', input = $('answer');
+  input.style.display = isBool ? 'none' : 'block';
+  $('bools').style.display = isBool ? 'flex' : 'none';
+  if (isBool) { $('bTrue').textContent = q.labels[0]; $('bFalse').textContent = q.labels[1]; }
+  setKeys(isBool ? null : q);
+  input.value = '';
+  if (!isBool) focusInput(q.noKeyboard ? 'none' : q.mode || KEYSETS[q.kind].mode);
+}
+// Swap keyboard type: blur then refocus inside the same user gesture so mobile keyboards update
+function focusInput(mode) {
+  const input = $('answer');
+  if (input.inputMode !== mode) { input.inputMode = mode; input.blur(); }
+  input.focus();
+}
+function setKeys(q) {
+  const box = $('keys');
+  box.style.display = q ? 'flex' : 'none';
+  if (!q) return;
+  const keys = [...(q.keys || KEYSETS[q.kind].keys), '⌫'];
+  box.innerHTML = '';
+  for (const k of keys) {
+    const b = document.createElement('button');
+    b.textContent = KEY_LABEL[k] || k;
+    b.addEventListener('pointerdown', e => { e.preventDefault(); pressKey(k === '×' ? 'x' : k); });
+    box.appendChild(b);
+  }
+}
+function pressKey(k) {
+  const el = $('answer'), [a, b] = [el.selectionStart ?? el.value.length, el.selectionEnd ?? el.value.length];
+  if (k === '⌫') {
+    const from = a === b ? Math.max(0, a - 1) : a;
+    el.setRangeText('', from, b, 'end');
+  } else el.setRangeText(k, a, b, 'end');
+  onInput();
+}
+function onInput() {
+  if (S?.cur && check(S.cur, $('answer').value)) record(true);
+}
+function record(ok) {
+  const q = S.cur;
+  S.log.push({ cat: q.cat, type: q.type, ok, ms: Date.now() - S.start, q: q.q, ans: answerTeX(q) });
+  if (ok) S.score++;
+  $('score').textContent = S.score;
+  $('prev').innerHTML = ok ? '' : '✗ ' + renderMath(`$${answerTeX(q)}$`);
+  nextQuestion();
+}
+function answerTeX(q) {
+  if (q.show !== undefined) return q.show;
+  if (q.kind === 'bool') return T`\text{${q.a ? q.labels[0] : q.labels[1]}}`;
+  if (q.kind === 'interval') return setTeX(q.a);
+  return /^[\w\s.+\-*/^()]+$/.test(q.a) ? q.a.replace(/\*/g, ' ').replace(/pi/g, T`\pi `).replace(/sqrt\((\d+)\)/g, T`\sqrt{$1}`) : T`\text{${q.a}}`;
+}
+function skip() { if (S?.cur) record(false); }
+function answerBool(choice) {
+  if (!S?.cur || S.cur.kind !== 'bool') return;
+  const ok = choice === S.cur.a;
+  if (!ok) { $('play').classList.remove('flash-bad'); void $('play').offsetWidth; $('play').classList.add('flash-bad'); }
+  record(ok);
+}
+
+function endRound() {
+  if (!S) return;
+  clearInterval(S.timer);
+  $('keys').style.display = 'none';
+  $('answer').blur();
+  const round = { t: Date.now(), score: S.score, cats: summarise(S.log) };
+  const hist = loadHistory();
+  if (S.log.length) { hist.push(round); localStorage.setItem(HISTORY_KEY, JSON.stringify(hist)); }
+  $('finalScore').textContent = S.score;
+  $('roundStats').innerHTML = catTable(round.cats) + weakBox(hist) + trendBlock(hist);
+  $('misses').innerHTML = missList(S.log);
+  S = null;
+  showScreen('results');
+}
+function summarise(log) {
+  const cats = {};
+  for (const e of log) {
+    const c = cats[e.cat] || (cats[e.cat] = { n: 0, ok: 0, ms: 0 });
+    c.n++;
+    if (e.ok) { c.ok++; c.ms += e.ms; }
+  }
+  return cats;
+}
+const loadHistory = () => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; } };
+const pct = c => Math.round(100 * c.ok / c.n);
+const avgS = c => c.ok ? (c.ms / c.ok / 1000).toFixed(1) + ' s' : '–';
+
+function catTable(cats) {
+  const rows = Object.keys(CONFIG.categories).filter(k => cats[k]).map(k => {
+    const c = cats[k];
+    return `<tr><td>${CONFIG.categories[k].label}</td><td class="n">${c.ok}/${c.n}</td><td class="n">${pct(c)}%</td><td class="n">${avgS(c)}</td></tr>`;
+  });
+  return `<table><tr><th>Category</th><th class="n">Correct</th><th class="n">Acc.</th><th class="n">Avg time</th></tr>${rows.join('')}</table>`;
+}
+// Weakest = lowest accuracy over the last 5 rounds (ties: slower first). Needs 3+ attempts.
+function weakest(hist) {
+  const agg = {};
+  for (const r of hist.slice(-5)) for (const [k, c] of Object.entries(r.cats)) {
+    const a = agg[k] || (agg[k] = { n: 0, ok: 0, ms: 0 });
+    a.n += c.n; a.ok += c.ok; a.ms += c.ms;
+  }
+  return Object.entries(agg).filter(([k, c]) => c.n >= 3 && CONFIG.categories[k])
+    .sort(([, a], [, b]) => a.ok / a.n - b.ok / b.n || b.ms / (b.ok || 1) - a.ms / (a.ok || 1)).slice(0, 2);
+}
+function weakBox(hist) {
+  const w = weakest(hist);
+  if (!w.length) return '';
+  const items = w.map(([k, c]) => `<b>${CONFIG.categories[k].label}</b> ${pct(c)}%, ${avgS(c)}`).join('<br>');
+  return `<div class="weak">Weakest (last ${Math.min(5, hist.length)} rounds):<br>${items}<div class="muted">Raise their weights in CONFIG.</div></div>`;
+}
+function sparkline(values, fmt) {
+  const W = 140, H = 30, n = values.length, x = i => n > 1 ? 4 + i * (W - 8) / (n - 1) : W / 2, y = v => H - 3 - v * (H - 6);
+  const pts = values.map((v, i) => [x(i), y(v.y)]);
+  const path = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
+  const dots = pts.map((p, i) => `<circle class="pt" cx="${p[0]}" cy="${p[1]}" r="3"><title>${fmt(values[i])}</title></circle>`).join('');
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><line class="base" x1="0" x2="${W}" y1="${H - 3}" y2="${H - 3}"/>${n > 1 ? `<path class="ln" d="${path}"/>` : ''}${dots}</svg>`;
+}
+function trendBlock(hist) {
+  if (!hist.length) return '';
+  const recent = hist.slice(-20), date = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const best = Math.max(...recent.map(r => r.score), 1);
+  const scoreRow = `<tr><td>Score</td><td>${sparkline(recent.map(r => ({ y: r.score / best, r })), v => `${date(v.r.t)}: ${v.r.score}`)}</td><td class="n">${recent.at(-1).score}</td></tr>`;
+  const rows = Object.keys(CONFIG.categories).map(k => {
+    const pts = recent.filter(r => r.cats[k]?.n).map(r => ({ y: r.cats[k].ok / r.cats[k].n, r, c: r.cats[k] }));
+    if (!pts.length) return '';
+    return `<tr><td>${CONFIG.categories[k].label}</td><td>${sparkline(pts, v => `${date(v.r.t)}: ${pct(v.c)}%, ${avgS(v.c)}`)}</td><td class="n">${pct(pts.at(-1).c)}%</td></tr>`;
+  });
+  return `<h2>Trend · accuracy, last ${recent.length} rounds</h2><table>${scoreRow}${rows.join('')}</table>`;
+}
+function missList(log) {
+  const misses = log.filter(e => !e.ok);
+  if (!misses.length) return '';
+  return '<h2>Missed</h2>' + misses.map(e => `<div class="miss">${renderMath(e.q)} &nbsp;→&nbsp; ${renderMath(`$${e.ans}$`)}</div>`).join('');
+}
+
+function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id)); }
+function showHome() {
+  const hist = loadHistory();
+  $('poolInfo').textContent = `Week ${CONFIG.currentWeek} · ${activeTypes().length} pools`;
+  $('homeStats').innerHTML = weakBox(hist) + trendBlock(hist) + (hist.length ? '' : '<p class="muted">No rounds yet.</p>');
+  showScreen('home');
+}
+
+// Pin the symbol row to the top of the on-screen keyboard
+function pinKeys() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  $('keys').style.transform = `translateY(${-(window.innerHeight - vv.height - vv.offsetTop)}px)`;
+}
+
+function installMeta() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = '#14161a'; g.fillRect(0, 0, 512, 512);
+  g.fillStyle = '#6ea8fe'; g.font = 'bold 300px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('∑', 256, 270);
+  const icon = c.toDataURL('image/png'), link = (rel, href) => Object.assign(document.head.appendChild(document.createElement('link')), { rel, href });
+  link('apple-touch-icon', icon);
+  link('icon', icon);
+  const manifest = { name: 'Drill', short_name: 'Drill', display: 'standalone', background_color: '#14161a', theme_color: '#14161a',
+    start_url: location.href.split('#')[0], scope: location.href.replace(/[^/]*$/, ''), icons: [{ src: icon, sizes: '512x512', type: 'image/png' }] };
+  link('manifest', 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(manifest)));
+}
+
+function init() {
+  $('answer').addEventListener('input', onInput);
+  $('answer').addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+  $('bTrue').addEventListener('click', () => answerBool(true));
+  $('bFalse').addEventListener('click', () => answerBool(false));
+  document.addEventListener('keydown', e => {
+    if (S?.cur?.kind !== 'bool') return;
+    if (e.key === 'ArrowLeft' || e.key === '1') answerBool(true);
+    if (e.key === 'ArrowRight' || e.key === '2') answerBool(false);
+  });
+  window.visualViewport?.addEventListener('resize', pinKeys);
+  window.visualViewport?.addEventListener('scroll', pinKeys);
+  installMeta();
+  showHome();
+}
+</script>
+
+<!-- ============================ SELF-TEST ============================
+  Open index.html#test. Results land in #selftest as JSON.
+===================================================================== -->
+<script>
+function runSelfTest() {
+  const out = { checker: checkerTests(), syntax: syntaxTests(), generators: generatorTests() };
+  out.ok = out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const pre = $('selftest');
+  pre.style.display = 'block';
+  pre.textContent = JSON.stringify(out, null, 1);
+}
+
+// [canonical, kind, inputs that must pass, inputs that must fail, extra options]
+const CHECKER_CASES = [
+  ['3x^2', 'expr', ['3x^2', '3*x^2', 'x*3x', '3x²', 'x^2*3', '3 x^2', '6x^2/2'], ['3x^3', '3x', '3x^', 'x^2', '9x^2/2']],
+  ['sin(2x)', 'expr', ['2sin(x)cos(x)', '2sinxcosx', 'sin 2x', 'sin(2*x)', '2 cos(x) sin(x)'], ['sin(x)', '2sin(x)', 'sin2']],
+  ['ln(x)', 'expr', ['log(x)', 'ln x', 'lnx', 'ln(x)'], ['log10(x)', 'ln(2x)', 'e^x']],
+  ['e^(2x)', 'expr', ['exp(2x)', 'e^(2x)', '(e^x)^2', 'e^x*e^x', 'e^xe^x'], ['e^2x', '2e^x', 'e^(x)']],
+  ['x*e^x', 'expr', ['xe^x', 'x exp(x)', 'e^x x', 'x*exp(x)'], ['e^x', 'xe^(2x)']],
+  ['(x - (2))/(3)', 'expr', ['x/3-2/3', '(1/3)(x-2)', '(x-2)/3', '(-2+x)/3'], ['x-2/3', '(x+2)/3']],
+  ['cbrt(x - 4)', 'expr', ['(x-4)^(1/3)', 'cbrt(x-4)'], ['(x-4)^3'], { dom: [4.5, 12] }],
+  ['ln(x - 3)/(2)', 'expr', ['ln(x-3)/2', 'log(x-3)/2', '1/2 ln(x-3)', 'ln(sqrt(x-3))'], ['ln(x)/2-3', 'ln(x-3)'], { dom: [3.5, 11] }],
+  ['n*(n+1)', 'expr', ['n^2+n', 'n(n+1)', '(n+1)n'], ['n^2', 'n+1']],
+  ['1*n(n+1)/2 + -2*n', 'expr', ['n(n+1)/2-2n', '(n^2-3n)/2', 'n^2/2-3n/2'], ['n(n+1)/2']],
+  ['pi/6', 'num', ['pi/6', 'π/6', '1/6pi', '2pi/12', '(1/6)*pi'], ['0.5236', 'pi/3', 'arcsin(1/2)', 'asin(0.5)']],
+  ['-2pi/3', 'num', ['-2pi/3', '-2π/3', '-(2/3)pi'], ['2pi/3', '4pi/3']],
+  ['sqrt(3)/2', 'num', ['sqrt(3)/2', 'sqrt3/2', '√3/2', '3^(1/2)/2', '1/2*sqrt(3)', '(1/2)√3'], ['0.866', 'sin(pi/3)', 'sqrt(2)/2']],
+  ['3', 'num', ['3', '6/2', '3.0'], ['ln(e^3)', 'log(e^3)', 'e', '4']],
+  ['1/120', 'num', ['1/120', '1 / 120'], ['0.00833', '1/24', '120']],
+  ['5+i', 'num', ['5+i', 'i+5', '5+1i', '5 + i'], ['5-i', '5', 'i']],
+  ['-3-2i', 'num', ['-3-2i', '-2i-3', '-(3+2i)'], ['-3+2i', '3-2i']],
+  ['undefined', 'text', ['undefined', ' Undefined '], ['undef', '2x3']],
+  ['2x3', 'text', ['2x3', '2×3', '2 x 3', '2 by 3', '2*3'], ['3x2', '6']],
+  ['(-1,3]', 'interval', ['(-1,3]', '( -1 , 3 ]', '(−1,3]'], ['[-1,3]', '(-1,3)', '(-1,3']],
+  ['(-inf,-8] U [12,inf)', 'interval', ['(-∞,-8]∪[12,∞)', '[12,inf) U (-inf,-8]', '(-infinity,-8]u[12,+inf)'], ['(-inf,-8) U [12,inf)', '(-inf,-8]']],
+  ['∅', 'interval', ['∅', '{}', 'empty'], ['{0}', '0']],
+  ['R', 'interval', ['R', 'ℝ', '(-inf,inf)', 'r'], ['(0,inf)']],
+  ['P→Q', 'logic', ['P→Q', 'P->Q', '¬Q→¬P', '(P→Q)', '¬P∨Q', '~P v Q'], ['Q→P', 'P↔Q', 'P', 'P→']],
+  ['P∨Q', 'logic', ['P∨Q', 'Q∨P', '¬P→Q', '¬Q→P'], ['P∧Q', 'P→Q']],
+  ['¬P ∨ ¬Q', 'logic', ['¬P∨¬Q', '¬Q ∨ ¬P', 'P→¬Q'], ['¬(P∧Q)', '¬¬¬P∨¬Q', 'P∨¬Q'], { nnf: true }],
+  ['((P ∧ Q) → R)', 'syntax', ['((P∧Q)→R)', '((P&Q)->R)', '( ( P ∧ Q ) → R )', '((p&q)->r)'], ['(P∧Q)→R', '((P∧Q)→R', '(P∧(Q→R))']],
+  ['P ∧ Q ∧ R', 'syntax', ['P∧Q∧R', 'P & Q & R'], ['((P∧Q)∧R)', 'P∧(Q∧R)']],
+  [['MP', 'Modus Ponens'], 'text', ['MP', 'mp', 'modus ponens', 'Modus Ponens'], ['MT', 'modus']],
+];
+const GRID_CASES = [
+  [{ kind: 'vec', a: [2, -16, 9] }, ['2,-16,9', '(2,-16,9)', '[2 -16 9]', '2, -16, 9', '4/2,-16,9'], ['2,-16', '2,16,9', '2,-16,9,0', '2,-16,9a']],
+  [{ kind: 'mat', a: [[1, 2], [3, 4]] }, ['1 2; 3 4', '[1,2;3,4]', '1,2,3,4', '[[1,2],[3,4]]', '1,2\n3,4'], ['1,3,2,4', '1 2 3', '1 2; 3 4; 5 6', '1 2 3; 4']],
+  [{ kind: 'vec', a: [3, -7, -4], parallel: true }, ['3,-7,-4', '-3,7,4', '6,-14,-8', '1.5,-3.5,-2'], ['3,7,4', '0,0,0', '3,-7']],
+  [{ kind: 'vec', a: [2, -3], unordered: true }, ['2,-3', '-3,2', '-3, 2'], ['2,3', '2', '2,-3,2']],
+];
+// Book of Problems ex. 2.1 (official?), 2.3/2.4/2.5 (abbreviations), from the 2026-10-13 seminar note
+const SYNTAX_CASES = {
+  official: [['(P)', false], ['¬(P → ¬Q)', true], ['¬P → ¬(¬Q)', false], ['(P → ¬((Q ↔ R)))', false],
+    ['(¬¬¬P₅₀₀ ∧ (R₉₀₉ ∧ (Q ∧ (Q₁₀₀₀ ∨ (Q₇₇ ↔ (Q₈₈ ∧ ¬¬¬P₅₀₀))))))', true], ['¬(Q)', false], ['(¬(P ∧ Q))', false],
+    ['¬¬¬¬((P → Q) ↔ R)', true], ['¬(P ∧ Q ∧ R ∧ P₁)', false], ['P ∧ Q', false], ['((P ∧ Q) → R)', true]],
+  sentence: [['Q ∧ ¬P', true], ['P → Q ↔ R', false], ['P ∧ Q ∧ R', true], ['¬P → Q', true], ['P ∧ Q → R', true],
+    ['(Q ∧ (¬P))', false], ['((¬P) → Q)', false], ['¬(P ∧ Q ∧ R ∧ P₁)', true], ['P ∧ Q ∨ R ↔ P ∨ ¬¬R', false],
+    ['P ∨ R → Q ∧ (R → Q)', true], ['¬((P ∨ Q → R) → P ∧ R)', true], ['(P)', false], ['P → Q → R', false],
+    ['((P ∧ Q))', false], ['P ∧ (Q ∧ R)', true], ['(P ∧ Q) → R', true], ['((P ∧ Q) ∧ R)', true], ['P ∧', false]],
+  restore: [['¬¬Q ∨ P ∨ R', '((¬¬Q ∨ P) ∨ R)'], ['P ∧ ¬Q ∧ R ∧ P₁', '(((P ∧ ¬Q) ∧ R) ∧ P₁)'],
+    ['¬P ∧ ¬Q ↔ ¬(P ∨ Q)', '((¬P ∧ ¬Q) ↔ ¬(P ∨ Q))'], ['P ∨ Q ∨ R → P ∧ Q ∧ R', '(((P ∨ Q) ∨ R) → ((P ∧ Q) ∧ R))']],
+  main: [['¬P ∨ Q', '∨'], ['¬(P → ¬Q)', '¬'], ['P ∧ Q → R', '→'], ['¬R → P ∨ Q', '→'], ['P ∨ R → Q ∧ (R → Q)', '→'], ['¬((P ∨ Q → R) → P ∧ R)', '¬']],
+};
+function syntaxTests() {
+  const failed = [], fail = (what, input, expected, got) => got !== expected && failed.push({ what, input, expected, got });
+  for (const [s, want] of SYNTAX_CASES.official) fail('isOfficial', s, want, isOfficial(s));
+  for (const [s, want] of SYNTAX_CASES.sentence) fail('isSentence', s, want, isSentence(s));
+  for (const [abbr, off] of SYNTAX_CASES.restore) {
+    fail('official()', abbr, off, official(parseLogic(abbr)));
+    fail('show()', off, abbr, show(parseLogic(off)));
+  }
+  for (const [s, op] of SYNTAX_CASES.main) fail('main connective', s, op, parseLogic(s).op);
+  return { cases: Object.values(SYNTAX_CASES).flat().length, failed };
+}
+
+function checkerTests() {
+  const failed = [];
+  let passed = 0;
+  const run = (q, inputs, want) => inputs.forEach(s => {
+    const got = check({ ...q }, s);
+    if (got === want) passed++; else failed.push({ canonical: q.a, kind: q.kind, input: s, expected: want, got });
+  });
+  for (const [a, kind, yes, no, opt] of CHECKER_CASES) { run({ a, kind, ...opt }, yes, true); run({ a, kind, ...opt }, no, false); }
+  for (const [q, yes, no] of GRID_CASES) { run(q, yes, true); run(q, no, false); }
+  return { passed, failed };
+}
+
+const answerInput = q => q.kind === 'vec' ? q.a.join(',') : q.kind === 'mat' ? q.a.map(r => r.join(',')).join(';') : [].concat(q.a)[0];
+function generatorTests() {
+  return TYPES.map(t => {
+    const errors = [], seen = new Set();
+    let bools = 0, made = 0, nulls = 0;
+    for (let i = 0; i < 300 && errors.length < 3; i++) {
+      let q;
+      try { q = t.gen(); } catch (e) { errors.push('throws: ' + e.message); continue; }
+      if (!q) { nulls++; continue; }
+      made++;
+      seen.add(q.q);
+      errors.push(...validateQuestion(q));
+      if (q.kind === 'bool') bools += q.a ? 1 : 0;
+    }
+    if (made < 30) errors.push(`only ${made}/300 draws accepted`);
+    const res = { id: t.id, week: t.week, distinct: seen.size, errors };
+    if (made && TYPES.length && bools) res.trueRatio = +(bools / made).toFixed(2);
+    return res;
+  });
+}
+function validateQuestion(q) {
+  const errs = [];
+  try { katex.renderToString(q.q.split('$').filter((_, i) => i % 2).join(' '), { throwOnError: true }); }
+  catch (e) { errs.push(`KaTeX: ${e.message} in ${q.q}`); }
+  if (q.show !== undefined) {
+    try { katex.renderToString(q.show, { throwOnError: true }); } catch (e) { errs.push(`KaTeX show: ${q.show}`); }
+  }
+  if (q.kind === 'bool') { if (typeof q.a !== 'boolean' || q.labels?.length !== 2) errs.push('bad bool ' + q.q); return errs; }
+  if (!check({ ...q }, answerInput(q))) errs.push(`own answer rejected: ${JSON.stringify(q.a)} for ${q.q}`);
+  if (q.val !== undefined) {
+    const v = evalAt(compileExpr(q.a), {});
+    if (!v || !near(v, { re: q.val, im: 0 }, 1e-6)) errs.push(`value mismatch: ${q.a} vs ${q.val} for ${q.q}`);
+  }
+  if (q.check === false) errs.push('internal check failed ' + q.q);
+  return errs;
+}
+
+if (location.hash === '#test') runSelfTest(); else init();
+</script>
+</body>
+</html>
