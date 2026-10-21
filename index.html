@@ -506,6 +506,8 @@ const TYPES = [
   details.cat summary { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; list-style: none; }
   details.cat summary::-webkit-details-marker { display: none; }
   details.cat summary b { font-size: 20px; font-variant-numeric: tabular-nums; }
+  .stk code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; white-space: nowrap; }
+  .stk th { padding-top: 12px; } .stk .katex { white-space: nowrap; }
   .prog { display: inline-block; width: 60px; height: 6px; background: #2c313a; border-radius: 3px; overflow: hidden; vertical-align: middle; }
   .prog i { display: block; height: 100%; background: var(--accent); }
   svg .pt { fill: var(--accent); } svg .ln { stroke: var(--accent); stroke-width: 2; fill: none; } svg .base { stroke: #2c313a; }
@@ -1416,7 +1418,7 @@ function showHome() {
   $('poolInfo').textContent = `Week ${CONFIG.currentWeek} · ${types.length} types`;
   $('homeHead').innerHTML = `<div class="score">${Math.round(headline())}</div>
     <div class="muted center">rating · ${mastered}/${types.length} mastered · streak ${streak} day${streak === 1 ? '' : 's'} · today: ${todaysModifier().name}</div>`;
-  $('homeStats').innerHTML = dashboard(types, hist) + weakBox(hist) + trendBlock(hist);
+  $('homeStats').innerHTML = dashboard(types, hist) + stackGuide() + weakBox(hist) + trendBlock(hist);
   showScreen('home');
 }
 function dashboard(types, hist) {
@@ -1434,6 +1436,64 @@ function typeRow(t, hist) {
   const trend = hist.filter(r => r.ratings?.[t.id] !== undefined).slice(-20).map(r => ({ y: ratingY(r.ratings[t.id]), r }));
   const prog = st?.mastered ? '<span class="up">✓</span>' : `<span class="prog" title="${tip}"><i style="width:${Math.round(100 * m.progress)}%"></i></span>`;
   return `<tr title="${tip}"><td>${t.name}</td><td>${prog}</td><td>${trend.length > 1 ? sparkline(trend, v => `${shortDate(v.r.t)}: ${v.r.ratings[t.id]}`, 60) : ''}</td><td class="n">${Math.round(ratingOf(t.id))}</td></tr>`;
+}
+
+// ---------- STACK syntax reference (course guide "STACK answer input for students") ----------
+// [STACK input, written normally (TeX), meaning, canonical for the self-test (null = not checkable here)]
+const STACK_GUIDE = [
+  ['Rules', [
+    ['3*x^2+7', '3x^2+7', 'Every product needs *. 3x is an error.', '3x^2+7'],
+    ['(x-1)*(2*x+3)', '(x-1)(2x+3)', 'Brackets next to each other still need *.', '(x-1)(2x+3)'],
+    ['sin(x)', T`\sin x`, 'A function name, then its argument in brackets. sin x is an error.', 'sin(x)'],
+    ['x^(1/2)', 'x^{1/2}', 'Fractional power: put the power in brackets.', 'sqrt(x)'],
+    ['x^1/2', T`\dfrac{x^1}{2}`, 'Pitfall: without brackets this is x¹ divided by 2.', 'x/2'],
+    ['(sin(x))^2', T`\sin^2 x`, 'Power of a function: bracket the whole function first.', '(sin(x))^2'],
+  ]],
+  ['Constants', [
+    ['%pi', T`\pi`, 'pi', 'pi'],
+    ['%e', 'e', "Euler's number, e ≈ 2.718", 'e'],
+    ['%i', T`i = \sqrt{-1}`, 'Imaginary unit', 'i'],
+    ['1.746E+5', T`1.746\times10^{5}`, 'Scientific notation: 174600', '174600'],
+  ]],
+  ['Powers, roots, modulus', [
+    ['a*x^n', 'ax^n', 'Monomial', null],
+    ['sqrt(x)', T`\sqrt{x}`, 'Square root', 'sqrt(x)'],
+    ['root(x,3)', T`\sqrt[3]{x}`, 'n-th root: root(f(x), n)', 'cbrt(x)'],
+    ['abs(x)', T`\lvert x\rvert`, 'Absolute value (modulus)', 'abs(x)'],
+  ]],
+  ['Trigonometric', [
+    ['cos(x)', T`\cos x`, 'Also tan(x)', 'cos(x)'],
+    ['csc(x)', T`\csc x = \tfrac{1}{\sin x}`, 'Reciprocal functions: csc, sec, cot', '1/sin(x)'],
+    ['asin(x)', T`\arcsin x = \sin^{-1} x`, 'Inverse functions: a in front (asin, acos, atan)', 'asin(x)'],
+    ['(sin(x))^2-(cos(x))^2', T`\sin^2 x-\cos^2 x`, 'Powers of trig functions, as in the rules', '-cos(2x)'],
+  ]],
+  ['Hyperbolic', [
+    ['sinh(x)', T`\sinh x`, 'Also cosh(x), tanh(x)', 'sinh(x)'],
+    ['csch(x)', T`\operatorname{csch} x = \tfrac{1}{\sinh x}`, 'Reciprocal: csch, sech, coth', '1/sinh(x)'],
+    ['asinh(x)', T`\operatorname{arsinh} x = \sinh^{-1} x`, 'Inverse: asinh, acosh, atanh', 'ln(x+sqrt(x^2+1))'],
+  ]],
+  ['Exponential and logarithms', [
+    ['%e^x', 'e^x', 'Exponential. exp(x) also works.', 'e^x'],
+    ['ln(x)', T`\ln x`, 'Natural log. log(x) means the same.', 'ln(x)'],
+    ['lg(x)', T`\log_{10} x`, 'Log base 10', 'log(x)/log(10)'],
+    ['lg(b,a)', T`\log_a b`, 'Log base a of b. Note the order: value first, base second.', null],
+  ]],
+  ['Not used in this drill', [
+    ['delta', T`\delta`, 'Greek letters by name; Delta gives Δ', null],
+    ['x_12', 'x_{12}', 'Subscript, typed with no spaces', null],
+    ['y=x^2-2*x+1', 'y=x^2-2x+1', 'Equation', null],
+    ['1<x and x<=5', T`1<x\le 5`, 'Inequalities: < <= > >=, # for ≠. Chains need and.', null],
+    ['matrix([1,2],[3,4])', T`\begin{pmatrix}1&2\\3&4\end{pmatrix}`, 'Standard STACK, not in the course guide (accepted here)', null],
+    ['oc(-1,3)', '(-1,3]', 'Standard STACK interval, not in the guide: oo, oc, co, cc (accepted here)', null],
+  ]],
+];
+const esc = str => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function stackGuide() {
+  const groups = STACK_GUIDE.map(([title, rows]) => `<tr><th colspan="3">${title}</th></tr>` + rows.map(([stack, tex, meaning]) =>
+    `<tr><td><code>${esc(stack)}</code></td><td>${katex.renderToString(tex, { throwOnError: false })}</td><td class="muted">${esc(meaning)}</td></tr>`).join('')).join('');
+  return `<details class="cat stk"><summary><span>STACK syntax<br><span class="muted">input · written as · meaning</span></span><b>?</b></summary>
+    <p class="muted">${STRICT_STACK ? 'This device counts as a laptop: typed math must follow these rules.' : 'On the phone the drill is lenient; on a laptop it enforces these rules.'} Source: course guide "STACK answer input for students".</p>
+    <table>${groups}</table></details>`;
 }
 
 // Pin the symbol row to the top of the on-screen keyboard
@@ -1612,6 +1672,10 @@ function masteryTests() {
     [['2026-10-21', '2026-10-19', '2026-10-18'], '2026-10-21', 3], [['2026-10-23', '2026-10-20', '2026-10-19'], '2026-10-23', 1],
     [['2026-10-26', '2026-10-24', '2026-10-23'], '2026-10-26', 3], [[], '2026-10-20', 0]];
   for (const [days, today, want] of streaks) { const got = dayStreak(days, today); if (got !== want) failed.push({ what: 'streak', days, today, want, got }); }
+  for (const [, rows] of STACK_GUIDE) for (const [stack, tex, , canon] of rows) {
+    try { katex.renderToString(tex, { throwOnError: true }); } catch (e) { failed.push({ what: 'STACK guide TeX', tex }); }
+    if (canon && !check({ a: canon, kind: 'expr', dom: [0.2, 0.9] }, stack, true)) failed.push({ what: 'STACK guide example rejected', stack, canon });
+  }
   TYPES.filter(t => !t.name || !(t.par > 0)).forEach(t => failed.push({ what: 'type lacks name/par', id: t.id }));
   return { failed };
 }
