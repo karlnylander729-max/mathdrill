@@ -120,7 +120,7 @@ const TYPES = [
   }},
   { id: 'la-plane-d', name: 'Plane constant d', par: 8, cat: 'la', week: 1, weight: 1, gen() {
     const n = vec(3, -4, 4), p = vec(3, -4, 4);
-    if (isZero(n)) return null;
+    if (n.filter(x => x === 0).length > 1) return null;
     return { q: T`Plane through $${colv(p)}$ with normal $${colv(n)}$: $\ ${poly([[n[0], 'x'], [n[1], 'y'], [n[2], 'z']])} = d$. $\ d = ?$`,
              a: String(dot(n, p)), kind: 'num' };
   }},
@@ -165,13 +165,14 @@ const TYPES = [
     const l1 = ri(-5, 5), l2 = ri(-5, 5), a = ri(-5, 5), d = l1 + l2 - a, bc = a * d - l1 * l2;
     if (l1 === l2 || bc === 0) return null;
     const b = pick(divisors(bc)), c = bc / b;
+    if (Math.abs(b) > 9 || Math.abs(c) > 9) return null;
     return { q: T`Eigenvalues of $${matTeX([[a, b], [c, d]])}$ (comma-separated)`,
              a: [l1, l2], kind: 'vec', unordered: true, show: `${l1},\\ ${l2}` };
   }},
 
   // ---------- Calculus I ----------
   { id: 'calc-trig', name: 'Exact trig value', par: 5, cat: 'calc', week: 1, weight: 1, gen() {
-    const m = pick(STD_ANGLES), f = pick(['sin', 'cos', 'tan']), v = Math[f](m * Math.PI / 12);
+    const m = pick(STD_ANGLES.filter(t => t !== 0)), f = pick(['sin', 'cos', 'tan']), v = Math[f](m * Math.PI / 12);
     if (f === 'tan' && Math.abs(Math.cos(m * Math.PI / 12)) < 1e-9) return null;
     const ex = exact(v);
     return { q: T`$${'\\' + f}\left(${piFrac(m, 12).tex}\right)$`, a: ex.s, show: ex.tex, kind: 'num', val: v };
@@ -191,13 +192,13 @@ const TYPES = [
   }},
   { id: 'calc-log', name: 'Log of a power', par: 6, cat: 'calc', week: 1, weight: 1, gen() {
     const c = pick([2, 3, 5]), p = ri(1, 3), q = nz(-3, 6), b = c ** p, x = c ** Math.abs(q);
-    if (c ** (p * 6) > 1e6 || x > 1000) return null;
+    if (c ** (p * 6) > 1e6 || x > 1000 || q === p) return null;   // q = p is log_b b = 1
     const arg = q > 0 ? String(x) : T`\frac{1}{${x}}`, f = frac(q, p);
     return { q: T`$\log_{${b}} ${arg}$`, a: f.s, show: f.tex, kind: 'num', val: q * Math.log(c) / Math.log(b) };
   }},
   { id: 'calc-ln', name: 'ln of an e-power', par: 4, cat: 'calc', week: 1, weight: 1, gen() {
     const k = nz(-4, 6), r = pick([1, 2, 3]), f = frac(k, r);
-    const inner = r === 1 ? T`e^{${k}}` : T`\sqrt${r === 2 ? '' : '[3]'}{e^{${k}}}`;
+    const ek = k === 1 ? 'e' : T`e^{${k}}`, inner = r === 1 ? ek : T`\sqrt${r === 2 ? '' : '[3]'}{${ek}}`;
     return { q: T`$\ln ${inner}$`, a: f.s, show: f.tex, kind: 'num', val: k / r };
   }},
   { id: 'calc-loglaw', name: 'Log law', par: 5, cat: 'calc', week: 1, weight: 1, gen() {
@@ -213,10 +214,10 @@ const TYPES = [
   { id: 'calc-inverse', name: 'Inverse function', par: 12, cat: 'calc', week: 1, weight: 1, gen() {
     const a = nz(-6, 6), b = nz(-6, 6), c = ri(1, 5);
     return pick([
-      { q: T`$f(x) = ${poly([[a, 'x'], [b, '']])}$. $\ f^{-1}(x) = ?$`, a: `(x - (${b}))/(${a})`, kind: 'expr' },
-      { q: T`$f(x) = x^3 + ${c}$. $\ f^{-1}(x) = ?$`, a: `cbrt(x - ${c})`, kind: 'expr', dom: [c + 0.5, c + 8] },
-      { q: T`$f(x) = e^{${poly([[a, 'x']])}} + ${c}$. $\ f^{-1}(x) = ?$`, a: `ln(x - ${c})/(${a})`, kind: 'expr', dom: [c + 0.5, c + 8] },
-      { q: T`$f(x) = \dfrac{${a}}{x ${b < 0 ? '+' : '-'} ${Math.abs(b)}}$. $\ f^{-1}(x) = ?$`, a: `${b} + ${a}/x`, kind: 'expr' },
+      { q: T`$f(x) = ${poly([[a, 'x'], [b, '']])}$. $\ f^{-1}(x) = ?$`, a: `(x - (${b}))/(${a})`, kind: 'expr', show: overA(poly([[1, 'x'], [-b, '']]), a) },
+      { q: T`$f(x) = x^3 + ${c}$. $\ f^{-1}(x) = ?$`, a: `cbrt(x - ${c})`, kind: 'expr', dom: [c + 0.5, c + 8], show: T`\sqrt[3]{x - ${c}}` },
+      { q: T`$f(x) = e^{${poly([[a, 'x']])}} + ${c}$. $\ f^{-1}(x) = ?$`, a: `ln(x - ${c})/(${a})`, kind: 'expr', dom: [c + 0.5, c + 8], show: overA(T`\ln(x - ${c})`, a) },
+      { q: T`$f(x) = \dfrac{${a}}{x ${b < 0 ? '+' : '-'} ${Math.abs(b)}}$. $\ f^{-1}(x) = ?$`, a: `${b} + ${a}/x`, kind: 'expr', show: T`${b} ${a < 0 ? '-' : '+'} \frac{${Math.abs(a)}}{x}` },
     ]);
   }},
   { id: 'calc-compose', name: 'Composition', par: 10, cat: 'calc', week: 3, weight: 1, gen() {
@@ -224,7 +225,7 @@ const TYPES = [
     if (f.tex === g.tex) return null;
     const [first, second, name] = Math.random() < 0.5 ? [f, g, 'f(g(x))'] : [g, f, 'g(f(x))'];
     return { q: T`$f(x) = ${f.tex.replaceAll('u', 'x')},\ g(x) = ${g.tex.replaceAll('u', 'x')}$. $\ ${name} = ?$`,
-             a: first.s.replaceAll('u', `(${second.s.replaceAll('u', 'x')})`), kind: 'expr' };
+             a: first.s.replaceAll('u', `(${second.s.replaceAll('u', 'x')})`), kind: 'expr', show: first.sh.replace('U', second.tex.replaceAll('u', 'x')) };
   }},
   { id: 'calc-cx-mul', name: 'Complex product', par: 10, cat: 'calc', week: 2, weight: 1, gen() {
     const [a, b, c, d] = [nz(-4, 4), nz(-4, 4), nz(-4, 4), nz(-4, 4)];
@@ -249,10 +250,10 @@ const TYPES = [
     return { q: T`$${'\\' + f}(${arg})$`, a: ans.s, show: ans.tex, kind: 'num', val: Math[f](s * Math.log(a)) };
   }},
   { id: 'calc-series', name: 'Series coefficient', par: 8, cat: 'calc', week: 1, weight: 1, gen() {
-    const [tex, coef] = pick(SERIES)(), n = ri(0, 6), c = coef(n);
+    const [tex, coef] = pick(SERIES)(), n = ri(1, 6), c = coef(n);
     if (c[0] === 0 && Math.random() < 0.7) return null;
     const f = frac(c[0], c[1]);
-    return { q: T`Coefficient of $x^{${n}}$ in the power series of $${tex}$`, a: f.s, show: f.tex, kind: 'num' };
+    return { q: T`Coefficient of $${xPow(n)}$ in the power series of $${tex}$`, a: f.s, show: f.tex, kind: 'num' };
   }},
   { id: 'calc-lim-std', name: 'Standard limit', par: 6, cat: 'calc', week: 4, weight: 1, gen() {
     const a = ri(1, 9), b = ri(1, 9);
@@ -281,8 +282,8 @@ const TYPES = [
   }},
   { id: 'calc-deriv', name: 'Derivative', par: 10, cat: 'calc', week: 6, weight: 1, gen() {
     const a = nz(-6, 6), n = ri(2, 5), b = nz(-6, 6), m = ri(0, n - 1);
-    return { q: T`$\frac{d}{dx}\left(${poly([[a, `x^{${n}}`], [b, m ? `x^{${m}}` : '']])}\right)$`,
-             a: `${a * n}x^${n - 1} + ${b * m}x^${Math.max(m - 1, 0)}`, kind: 'expr' };
+    return { q: T`$\frac{d}{dx}\left(${poly([[a, xPow(n)], [b, xPow(m)]])}\right)$`,
+             a: `${a * n}x^${n - 1} + ${b * m}x^${Math.max(m - 1, 0)}`, kind: 'expr', show: poly([[a * n, xPow(n - 1)], [b * m, xPow(m - 1)]]) };
   }},
 
   // ---------- Sequences and Series ----------
@@ -296,9 +297,9 @@ const TYPES = [
     return { q: T`$\displaystyle\sum_{k=${a}}^{${b}} ${c}$`, a: String(c * (b - a + 1)), kind: 'num' };
   }},
   { id: 'seq-const-n', name: 'Index-free sum', par: 6, cat: 'seq', week: 1, weight: 1, gen() {
-    const [tex, s] = pick([['n', 'n'], ['2n', '2n'], ['(n+1)', '(n+1)'], ['n^2', 'n^2'], ['3', '3'], ['(n-1)', '(n-1)']]);
+    const [tex, s, sh] = pick([['n', 'n', 'n^2'], ['2n', '2n', '2n^2'], ['(n+1)', '(n+1)', 'n(n+1)'], ['n^2', 'n^2', 'n^3'], ['3', '3', '3n'], ['(n-1)', '(n-1)', 'n(n-1)']]);
     const j = pick(['j', 'k', 'i']);
-    return { q: T`$\displaystyle\sum_{${j}=1}^{n} ${tex}$ (in terms of $n$)`, a: `n*${s}`, kind: 'expr', keys: N_KEYS };
+    return { q: T`$\displaystyle\sum_{${j}=1}^{n} ${tex}$ (in terms of $n$)`, a: `n*${s}`, kind: 'expr', keys: N_KEYS, show: sh };
   }},
   { id: 'seq-linsum', name: 'Linear sum', par: 14, cat: 'seq', week: 1, weight: 1, gen() {
     const a = ri(0, 3), b = ri(a + 2, 9), c = ri(1, 5), d = ri(-5, 5);
@@ -317,7 +318,7 @@ const TYPES = [
     const c = ri(1, 6), d = ri(-5, 5);
     return { q: T`$\displaystyle\sum_{k=1}^{n} (${poly([[c, 'k'], [d, '']])})$ (in terms of $n$)`,
              a: `${c}*n(n+1)/2 + ${d}*n`, kind: 'expr', keys: N_KEYS,
-             show: T`\frac{${c === 1 ? '' : c}n(n+1)}{2}` + (d ? ` ${d < 0 ? '-' : '+'} ${Math.abs(d) === 1 ? '' : Math.abs(d)}n` : '') };
+             show: (c % 2 ? T`\frac{${c === 1 ? '' : c}n(n+1)}{2}` : `${c === 2 ? '' : c / 2}n(n+1)`) + (d ? ` ${d < 0 ? '-' : '+'} ${Math.abs(d) === 1 ? '' : Math.abs(d)}n` : '') };
   }},
   { id: 'seq-floor', name: 'Floor / ceiling', par: 3, cat: 'seq', week: 1, weight: 1, gen() {
     const x = pick([1, -1]) * (ri(0, 9) + ri(1, 9) / 10), f = pick(['floor', 'ceil']);
@@ -325,7 +326,9 @@ const TYPES = [
     return { q: T`$${tex}$`, a: String(Math[f](x)), kind: 'num' };
   }},
   { id: 'seq-subsets', name: 'Subset count', par: 4, cat: 'seq', week: 1, weight: 1, gen() {
-    const items = Array.from({ length: ri(0, 6) }, () => ri(1, 9)), n = new Set(items).size;
+    const items = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9]).slice(0, ri(1, 6));
+    if (Math.random() < 0.25) items.splice(ri(0, items.length), 0, pick(items));   // a repeated element is still one element
+    const n = new Set(items).size;
     return { q: T`Number of subsets of $\{${items.join(', ')}\}$`, a: String(2 ** n), kind: 'num' };
   }},
   { id: 'seq-count', name: 'Set size ℕ vs ℤ', par: 7, cat: 'seq', week: 1, weight: 1, gen() {
@@ -335,7 +338,7 @@ const TYPES = [
       const inLo = lo === '<' ? x > a : x >= a, inHi = hi === '<' ? x < b : x <= b;
       if (inLo && inHi && (D === 'Z' || x >= 1)) n++;
     }
-    return { q: T`$\lvert\{x\in\mathbb ${D} : ${a} ${lo} x ${hi} ${b}\}\rvert$`, a: String(n), kind: 'num' };
+    return { q: T`$\lvert\{x\in\mathbb ${D} : ${a} ${lo} x ${hi} ${b}\}\rvert$`, a: String(n), kind: 'num', hint: 'a number: how many elements' };
   }},
   { id: 'seq-interval', name: 'Interval ∩ / ∪', par: 9, cat: 'seq', week: 1, weight: 1, gen() {
     const I = randInterval(), J = randInterval(), op = pick(['cap', 'cup']);
@@ -648,12 +651,16 @@ function cxTeX(re, im) {
   return `${re.tex} ${im.v < 0 ? '-' : '+'} ${imPart}`;
 }
 
+// numerator / a, with the sign pulled out front: (x+6)/(-5) -> -\frac{x+6}{5}
+const overA = (num, a) => Math.abs(a) === 1 ? (a < 0 ? T`-(${num})` : num) : T`${a < 0 ? '-' : ''}\frac{${num}}{${Math.abs(a)}}`;
 // Composition building blocks: u is the slot
-const OUTER = [{ tex: 'u^2', s: 'u^2' }, { tex: 'u^3', s: 'u^3' }, { tex: 'u + 3', s: 'u + 3' }, { tex: '2u', s: '2u' },
-  { tex: 'e^u', s: 'e^u' }, { tex: T`\sqrt u`, s: 'sqrt(u)' }, { tex: T`\sin u`, s: 'sin(u)' }, { tex: T`\ln u`, s: 'ln(u)' }, { tex: T`\frac1u`, s: '1/u' }];
-const INNER = [{ tex: 'u^2', s: 'u^2' }, { tex: 'u^3', s: 'u^3' }, { tex: 'u + 2', s: 'u + 2' }, { tex: '3u', s: '3u' },
-  { tex: 'e^u', s: 'e^u' }, { tex: T`\sqrt u`, s: 'sqrt(u)' }, { tex: T`\frac1u`, s: '1/u' }];
+const OUTER = [{ tex: 'u^2', s: 'u^2', sh: '(U)^2' }, { tex: 'u^3', s: 'u^3', sh: '(U)^3' }, { tex: 'u + 3', s: 'u + 3', sh: 'U + 3' }, { tex: '2u', s: '2u', sh: '2(U)' },
+  { tex: 'e^u', s: 'e^u', sh: 'e^{U}' }, { tex: T`\sqrt u`, s: 'sqrt(u)', sh: T`\sqrt{U}` }, { tex: T`\sin u`, s: 'sin(u)', sh: T`\sin(U)` },
+  { tex: T`\ln u`, s: 'ln(u)', sh: T`\ln(U)` }, { tex: T`\frac1u`, s: '1/u', sh: T`\frac{1}{U}` }];
+const INNER = [{ tex: 'u^2', s: 'u^2', sh: '(U)^2' }, { tex: 'u^3', s: 'u^3', sh: '(U)^3' }, { tex: 'u + 2', s: 'u + 2', sh: 'U + 2' }, { tex: '3u', s: '3u', sh: '3(U)' },
+  { tex: 'e^u', s: 'e^u', sh: 'e^{U}' }, { tex: T`\sqrt u`, s: 'sqrt(u)', sh: T`\sqrt{U}` }, { tex: T`\frac1u`, s: '1/u', sh: T`\frac{1}{U}` }];
 
+const xPow = p => p <= 0 ? '' : p === 1 ? 'x' : `x^{${p}}`;
 const fact = n => n <= 1 ? 1 : n * fact(n - 1);
 const SERIES = [
   () => { const a = pick([1, -1, 2, -2]); return [a === 1 ? 'e^{x}' : `e^{${a}x}`.replace('{-1x}', '{-x}'), n => [a ** n, fact(n)]]; },
@@ -687,7 +694,7 @@ function ivStr({ lo, hi, lc, hc }) {
   return `${lc ? '[' : '('}${e(lo)},${e(hi)}${hc ? ']' : ')'}`;
 }
 const ivTeX = I => setTeX(ivStr(I));
-const setTeX = s => s.replace(/-inf/g, T`-\infty`).replace(/inf/g, T`\infty`).replace(/ U /g, T` \cup `)
+const setTeX = s => s.replace(/inf/g, T`\infty`).replace(/ U /g, T` \cup `)
   .replace(/\{/g, T`\{`).replace(/\}/g, T`\}`).replace(/^R$/, T`\mathbb R`).replace('∅', T`\varnothing`);
 
 // Quantified statements over N = {1,2,...}, Z, R: (A, B, c) -> [tex, truth]
@@ -1822,6 +1829,9 @@ function validateQuestion(q) {
   if (q.show !== undefined) {
     try { katex.renderToString(q.show, { throwOnError: true }); } catch (e) { errs.push(`KaTeX show: ${q.show}`); }
   }
+  const tex = q.q.split('$').filter((_, i) => i % 2).join(' ') + ' ' + answerTeX(q);
+  const ugly = tex.match(/inftyty|\+\s*-\s*\d|x\^\{?1\}?(?![\d}])|x\^\{?0\}?(?![\d}])|\(\(sqrt|\*/);
+  if (ugly) errs.push(`ugly TeX "${ugly[0]}" in ${q.q} / ${answerTeX(q)}`);
   if (q.kind === 'bool') { if (typeof q.a !== 'boolean' || q.labels?.length !== 2) errs.push('bad bool ' + q.q); return errs; }
   if (!check({ ...q }, answerInput(q), false)) errs.push(`own answer rejected: ${JSON.stringify(q.a)} for ${q.q}`);
   if (q.val !== undefined) {
