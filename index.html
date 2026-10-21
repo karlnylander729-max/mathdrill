@@ -874,12 +874,14 @@ const EQUIV_SEEDS = [
 
 <!-- ============================ CHECKER ============================ -->
 <script>
-const FUNCS = ['arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'sqrt', 'cbrt', 'asin', 'acos', 'atan', 'root',
-  'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'exp', 'log', 'abs', 'ln', 'lg'];
+// Longest names first, so the greedy split prefers 'asinh' over 'asin', 'sech' over 'sec'
+const FUNCS = ['arcsin', 'arccos', 'arctan', 'asinh', 'acosh', 'atanh', 'sinh', 'cosh', 'tanh', 'sech', 'csch', 'coth',
+  'sqrt', 'cbrt', 'asin', 'acos', 'atan', 'root', 'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'exp', 'log', 'abs', 'ln', 'lg'];
 const ROOTS = new Set(['sqrt', 'cbrt', 'root']);
 // STACK extras: lg(x) = log10, lg(x, a) = log base a, root(x) = sqrt, root(x, n) = nth root
 math.import({ lg: (x, b) => b === undefined ? Math.log10(x) : Math.log(x) / Math.log(b), root: (x, n) => math.nthRoot(x, n ?? 2) });
-// STACK input on a laptop: explicit * and bracketed function arguments. The phone keypad stays lenient.
+// STACK input on a laptop (course guide "STACK answer input for students"): explicit *, bracketed function
+// arguments, constants as %pi %e %i. The phone keypad stays lenient.
 const STRICT_STACK = CONFIG.stackOnLaptop && matchMedia('(hover: hover) and (pointer: fine)').matches;
 const MJ = { ln: 'log', arcsin: 'asin', arccos: 'acos', arctan: 'atan' };
 const ALIAS = { ln: 'log', exp: 'e', arcsin: 'asin', arccos: 'acos', arctan: 'atan' };
@@ -898,14 +900,15 @@ function splitWord(w) {
   return out;
 }
 function tokenize(src) {
-  const s = src.toLowerCase().replace(/%pi/g, 'pi').replace(/%e/g, 'e').replace(/%i/g, 'i').replace(/π/g, 'pi').replace(/[×·]/g, '*').replace(/−/g, '-')
+  const s = src.toLowerCase().replace(/%pi/g, '\u0001').replace(/%e/g, '\u0002').replace(/%i/g, '\u0003').replace(/π/g, 'pi').replace(/[×·]/g, '*').replace(/−/g, '-')
     .replace(/√/g, 'sqrt').replace(/²/g, '^2').replace(/³/g, '^3').trim();
-  const out = [], re = /\s*(?:(\d+\.?\d*|\.\d+)|([a-z]+)|(\S))/gy;
+  const out = [], re = /\s*(?:((?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)|([a-z]+)|([\u0001-\u0003])|(\S))/gy;
   let m;
   while (re.lastIndex < s.length && (m = re.exec(s))) {
     if (m[1]) out.push({ t: 'num', v: m[1] });
     else if (m[2]) out.push(...splitWord(m[2]));
-    else out.push({ t: 'op', v: m[3] });
+    else if (m[3]) out.push({ t: 'sym', v: ['pi', 'e', 'i'][m[3].charCodeAt(0) - 1], pct: true });
+    else out.push({ t: 'op', v: m[4] });
   }
   return out;
 }
@@ -940,8 +943,8 @@ function compileExpr(str) {
     cls.add(ALIAS[k.v] || k.v);
     if (!CONSTS.has(k.v) && !vars.includes(k.v)) vars.push(k.v);
   }
-  const code = math.compile(toMath(toks));
-  return { code, cls, vars, implicit: toMath.implicit };
+  const code = math.compile(toMath(toks)), bareConst = toks.some(k => k.t === 'sym' && CONSTS.has(k.v) && !k.pct);
+  return { code, cls, vars, implicit: toMath.implicit || bareConst };
 }
 function evalAt(c, scope) {
   const v = c.code.evaluate({ ...scope });
@@ -1132,7 +1135,7 @@ const KEYSETS = {
   syntax: { mode: 'none', keys: [] },
 };
 const KEY_LABEL = { 'sqrt(': '√', pi: 'π', 'sin(': 'sin', 'cos(': 'cos', 'ln(': 'ln', inf: '∞' };
-const STACK_HINT = 'STACK syntax: write every product with * and bracket function arguments, e.g. 3*x^2, sin(2*x), 2*%pi/3';
+const STACK_HINT = 'STACK syntax: * for every product, brackets for function arguments, %pi %e %i for constants, e.g. 3*x^2, sin(2*x), 2*%pi/3';
 let S = null;
 
 function weighted(items, w) {
@@ -1490,9 +1493,16 @@ const CHECKER_CASES = [
   // STACK syntax, strict (laptop): explicit *, bracketed arguments, %pi %e %i, lg, root, abs, sec
   ['3x^2', 'expr', ['3*x^2', 'x*3*x', '3*x²', 'x^2*3'], ['3x^2', '3 x^2', 'x*3x', '3x'], { strict: true }],
   ['sin(2x)', 'expr', ['2*sin(x)*cos(x)', 'sin(2*x)'], ['sin 2x', '2sin(x)cos(x)', 'sin(2x)', 'sin(2*x'], { strict: true }],
-  ['pi/6', 'num', ['%pi/6', 'pi/6', '(1/6)*%pi'], ['1/6%pi', '2%pi/12', 'asin(1/2)'], { strict: true }],
-  ['e^(2x)', 'expr', ['%e^(2*x)', 'exp(2*x)', 'e^(2*x)', '(%e^x)^2'], ['%e^(2x)', '%e^2*x'], { strict: true }],
-  ['5+i', 'num', ['5+%i', '%i+5', '5+1*%i'], ['5+2*%i', '5+i2'], { strict: true }],
+  ['pi/6', 'num', ['%pi/6', '(1/6)*%pi', '%pi/ 6'], ['pi/6', 'π/6', '1/6%pi', '2%pi/12', 'asin(1/2)'], { strict: true }],
+  ['e^(2x)', 'expr', ['%e^(2*x)', 'exp(2*x)', '(%e^x)^2', '%e^x*exp(x)'], ['e^(2*x)', '%e^(2x)', '%e^2*x'], { strict: true }],
+  ['5+i', 'num', ['5+%i', '%i+5', '5+1*%i'], ['5+i', '5+2*%i', '5+i2'], { strict: true }],
+  ['e^(pi*i/3)/(x^3-1)', 'expr', ['%e^(%pi*%i/3)/(x^3-1)'], ['%e^(%pi%i/3)/(x^3-1)', '%e^(%pi*%i/3)/x^3-1'], { strict: true }],
+  ['(x-1)*(2x+3)', 'expr', ['(x-1)*(2*x+3)', '2*x^2+x-3'], ['(x-1)(2*x+3)', '(x-1)*(2x+3)'], { strict: true }],
+  ['174600', 'num', ['1.746E+5', '174600', '1746e2'], ['1.746*%e+5', '1.746E+4'], { strict: true }],
+  ['asinh(x)', 'expr', ['asinh(x)', 'ln(x+sqrt(x^2+1))'], ['sinh(x)', 'asin(x)'], { dom: [0.1, 0.9], strict: true }],
+  ['sech(x)', 'expr', ['1/cosh(x)', 'sech(x)'], ['sec(x)'], { strict: true }],
+  ['csch(x)', 'expr', ['1/sinh(x)', 'csch(x)'], ['csc(x)'], { strict: true }],
+  ['ln(x)/ln(2)', 'expr', ['lg(x,2)', 'log(x)/log(2)'], ['lg(2,x)', 'lg(x)'], { strict: true }],
   ['cbrt(x - 4)', 'expr', ['root(x-4,3)', '(x-4)^(1/3)'], ['root(x-4)', '(x-4)^1/3'], { dom: [4.5, 12], strict: true }],
   ['lg(x)', 'expr', ['lg(x)', 'log(x)/log(10)', 'lg(x,10)'], ['log(x)', 'lg(x,2)'], { strict: true }],
   ['abs(x - 1)', 'expr', ['abs(x-1)', 'abs(1-x)'], ['x-1'], { dom: [-2, 4], strict: true }],
