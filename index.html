@@ -141,6 +141,7 @@ const TYPES = [
   }},
   { id: 'la-Av', name: 'Matrix × vector', par: 12, cat: 'la', week: 2, weight: 1, gen() {
     const n = pick([2, 3]), A = mat(2, n, -3, 3), v = vec(n, -3, 3);
+    if (isZero(v) || A.some(isZero)) return null;
     const w = A.map(r => dot(r, v));
     return { q: T`$${matTeX(A)}${colv(v)}$`, a: w, kind: 'vec', show: colv(w) };
   }},
