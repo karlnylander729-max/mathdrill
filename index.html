@@ -536,6 +536,7 @@ const TYPES = [
   <div class="score" id="finalScore"></div>
   <div class="muted center" id="finalSub"></div>
   <button class="start" onclick="startRound()">Again</button>
+  <button id="copyBtn" style="width:100%; display:none" onclick="copySummary()">Copy for Claude</button>
   <div id="roundStats"></div>
   <button style="width:100%; margin-top: 16px" onclick="showHome()">Home</button>
   <div id="misses"></div>
@@ -712,7 +713,10 @@ const imp = (a, b) => bin('→', a, b), or = (a, b) => bin('∨', a, b), and = (
 function rf(d, L) {
   if (d === 0 || Math.random() < 0.2) return Math.random() < 0.3 ? neg(pick(L)) : pick(L);
   if (Math.random() < 0.15) return neg(rf(d - 1, L));
-  return bin(pick(BIN), rf(d - 1, L), rf(d - 1, L));
+  const a = rf(d - 1, L);
+  let b = rf(d - 1, L);
+  for (let i = 0; i < 20 && sameTree(a, b); i++) b = rf(d - 1, L);   // no degenerate R ∨ R, (P → Q) ∧ (P → Q)
+  return bin(pick(BIN), a, b);
 }
 const depth = f => typeof f === 'string' ? 0 : 1 + Math.max(depth(f.a), f.b ? depth(f.b) : 0);
 
@@ -1242,14 +1246,14 @@ function onInput() {
   const stackOnly = STRICT_STACK && (S.cur.kind === 'num' || S.cur.kind === 'expr') && check(S.cur, v, false);
   $('prev').textContent = stackOnly ? STACK_HINT : $('prev').dataset.miss || '';
 }
-function record(ok, skipped = false) {
+function record(ok, skipped = false, attempt = '') {
   const q = S.cur, type = TYPE_BY_ID[q.type], ms = Date.now() - S.start;
   S.streak = ok ? S.streak + 1 : 0;
   const ctx = { combo: comboMult(S.streak, S.mod.comboStep ?? CONFIG.combo.step), weak: weakMult(q.cat), golden: q.golden };
   const pts = points(ok, ms, type.par, ctx), { delta, change } = applyAnswer(type, ok, ms);
   S.points += pts;
   if (ok) S.correct++;
-  S.log.push({ cat: q.cat, type: type.id, ok, ms, q: q.q, ans: answerTeX(q), delta });
+  S.log.push({ cat: q.cat, type: type.id, ok, ms, q: q.q, ans: answerTeX(q), delta, attempt, skipped, bool: q.kind === 'bool', again: !!q.resurfaced });
   if (change) S.changes.push({ id: type.id, change });
   if (skipped && (q.resurfaced || 0) < 2) S.queue.push({ q: { ...q, resurfaced: (q.resurfaced || 0) + 1 }, at: S.count + ri(...CONFIG.resurfaceAfter) });
   feedback(ok, ctx, delta, q);
@@ -1272,11 +1276,11 @@ function answerTeX(q) {
   return /^[\w\s.+\-*/^()]+$/.test(q.a) ? q.a.replace(/\*/g, ' ').replace(/pi/g, T`\pi `).replace(/sqrt\((\d+)\)/g, T`\sqrt{$1}`) : T`\text{${q.a}}`;
 }
 function skip() {
-  if (S?.cur && Date.now() - S.start >= CONFIG.skipUnlockSeconds * 1000) record(false, true);
+  if (S?.cur && Date.now() - S.start >= CONFIG.skipUnlockSeconds * 1000) record(false, true, S.cur.kind === 'bool' ? '' : $('answer').value);
 }
 function answerBool(choice) {
   if (!S?.cur || S.cur.kind !== 'bool') return;
-  record(choice === S.cur.a);
+  record(choice === S.cur.a, false, S.cur.labels[choice ? 0 : 1]);
 }
 
 // ---------- juice: pitch rises with the combo, haptics where supported, pulse on the multiplier ----------
@@ -1324,9 +1328,49 @@ function endRound() {
   $('finalSub').innerHTML = `${S.correct} correct · ${pbMessage(S.points, pb)}`;
   $('roundStats').innerHTML = ratingTable(S, round) + movers(S.log) + changeList(S.changes) + catTable(round.cats) + weakBox(hist) + trendBlock(hist);
   $('misses').innerHTML = missList(S.log);
+  lastSummary = S.log.length ? roundSummary({ ...round, log: S.log, before: S.before, beforeHead: S.beforeHead }) : '';
+  $('copyBtn').style.display = lastSummary ? 'block' : 'none';
+  $('copyBtn').textContent = 'Copy for Claude';
   S = null;
   showScreen('results');
 }
+// ---------- "Copy for Claude": the round as plain text with a diagnosis request ----------
+let lastSummary = '';
+const plain = html => html.replace(/<br\s*\/?>/g, ' / ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+const secs = ms => (ms / 1000).toFixed(1) + ' s';
+function roundSummary(r) {
+  const label = e => `[${CONFIG.categories[e.cat].label} · ${TYPE_BY_ID[e.type].name}]`;
+  const misses = r.log.filter(e => !e.ok).map((e, i) => {
+    const typed = e.bool ? '' : `; I had typed: ${e.attempt.trim() ? `"${e.attempt}"` : '(nothing)'}`;
+    const how = e.skipped ? `skipped after ${secs(e.ms)}${typed}` : `I answered: ${e.attempt} (${secs(e.ms)})`;
+    return `${i + 1}. ${label(e)}${e.again ? ' (returned after skip)' : ''} Q: ${plain(e.q)}\n   Correct: ${e.ans.replace(/^\\text\{(.*)\}$/, '$1')}\n   ${how}`;
+  });
+  const slow = r.log.filter(e => e.ok && e.ms > TYPE_BY_ID[e.type].par * 1000)
+    .sort((a, b) => b.ms / TYPE_BY_ID[b.type].par - a.ms / TYPE_BY_ID[a.type].par).slice(0, 6)
+    .map(e => `- ${label(e)} ${secs(e.ms)} (par ${TYPE_BY_ID[e.type].par} s): ${plain(e.q)}`);
+  const cats = Object.entries(r.cats).map(([k, c]) => `${CONFIG.categories[k].label} ${c.ok}/${c.n}, avg ${avgS(c)}, rating ${r.catR[k]} (${r.catR[k] - (r.before[k] ?? RC.start) >= 0 ? '+' : ''}${r.catR[k] - (r.before[k] ?? RC.start)})`);
+  return [
+    `Mental-math drill round · ${new Date(r.t).toLocaleString()} · week ${CONFIG.currentWeek} · ${STRICT_STACK ? 'laptop, STACK syntax enforced' : 'phone'}`,
+    `Points ${r.points} · ${r.score} correct · ${r.log.filter(e => !e.ok).length} missed · overall rating ${r.headline} (${r.headline - Math.round(r.beforeHead) >= 0 ? '+' : ''}${r.headline - Math.round(r.beforeHead)})`,
+    '',
+    'Please review this round. My modules: Linear Algebra and Geometry I, Calculus I, Sequences and Series, Elementary Logic.',
+    'For each miss: name the gap (concept gap / algebra slip / notation or STACK-syntax slip), give the correct move, and say what to do next time.',
+    'Then point out any pattern across misses, and which slow types need the most work. Answers are in TeX; questions may contain TeX between $ signs.',
+    '',
+    `MISSES (${misses.length})`, ...(misses.length ? misses : ['none']),
+    '', 'SLOW BUT CORRECT (over par)', ...(slow.length ? slow : ['none']),
+    '', 'BY CATEGORY', ...cats.map(c => '- ' + c),
+  ].join('\n');
+}
+async function copySummary() {
+  try { await navigator.clipboard.writeText(lastSummary); }
+  catch {
+    const ta = Object.assign(document.createElement('textarea'), { value: lastSummary });
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+  }
+  $('copyBtn').textContent = 'Copied ✓ · paste into Claude';
+}
+
 function pbMessage(pts, pb) {
   if (!pb) return 'first scored round';
   if (pts > pb.points) return `<span class="up">new best, +${pts - pb.points}</span>`;
@@ -1667,6 +1711,15 @@ function incentiveTests() {
   if (!(careful > spam)) fail('careful play does not beat spam', { careful, spam });
   return { failed, ratingDeltas: table, pointsPerQuestion: { spam, careful } };
 }
+function summaryTest() {
+  const log = [{ cat: 'calc', type: 'calc-inverse', ok: false, ms: 9400, q: '$f(x) = 3x - 2$. $\\ f^{-1}(x) = ?$', ans: '(x+2)/3', delta: -30, attempt: '3x+2', skipped: true },
+    { cat: 'logic', type: 'logic-valid', ok: false, ms: 2100, q: '<span class="f">P → Q, &nbsp;Q &nbsp;∴&nbsp; P</span>', ans: T`\text{Invalid}`, delta: -30, attempt: 'Valid', skipped: false },
+    { cat: 'la', type: 'la-product', ok: true, ms: 26000, q: 'M', ans: 'x', delta: 3, attempt: '', skipped: false }];
+  const text = roundSummary({ t: Date.now(), points: 10, score: 1, log, cats: summarise(log), catR: { calc: 990, logic: 990, la: 1003 }, headline: 995,
+    before: { calc: 1000, logic: 1000, la: 1000 }, beforeHead: 1000 });
+  const need = ['I had typed: "3x+2"', 'Correct: (x+2)/3', 'I answered: Valid', 'P → Q, Q ∴ P', '2×2 product] 26.0 s (par 18 s)', 'name the gap'];
+  return need.filter(n => !text.includes(n)).map(n => ({ what: 'summary missing', n }));
+}
 // A round that runs out of time must reach the results screen (regression: endRound <-> tick recursion)
 function roundEndTest() {
   const keys = [RATINGS_KEY, PB_KEY, HISTORY_KEY], saved = keys.map(k => localStorage.getItem(k)), savedRS = RS;
@@ -1686,7 +1739,7 @@ function roundEndTest() {
   }
 }
 function masteryTests() {
-  const failed = [...roundEndTest()], log = (n, ok, ms, days) => Array.from({ length: n }, (_, i) => ({ d: `2026-10-${10 + i % days}`, ok: ok(i), ms }));
+  const failed = [...roundEndTest(), ...summaryTest()], log = (n, ok, ms, days) => Array.from({ length: n }, (_, i) => ({ d: `2026-10-${10 + i % days}`, ok: ok(i), ms }));
   const cases = [['all criteria met', log(30, () => true, 4000, 3), true], ['one day only', log(30, () => true, 4000, 1), false],
     ['median over par', log(30, () => true, 7000, 3), false], ['two misses in 30', log(30, i => i > 1, 4000, 3), false],
     ['one miss in 30', log(30, i => i > 0, 4000, 3), true], ['only 20 answers', log(20, () => true, 4000, 3), false]];
