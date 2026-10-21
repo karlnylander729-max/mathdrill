@@ -18,7 +18,9 @@
     - Retire a pool: set its weight to 0.
     - Reweight: change a category weight or a type weight.
     - Unlock future pools: raise currentWeek. Types with week > currentWeek stay off.
-    - Add a pool: copy a type line, give it a new id, edit gen().
+    - Add a pool: copy a type line, give it a new id, name and par, edit gen(). It enters at rating.start.
+    - par = seconds a fast, fluent person needs, typing included. Fixed; it never adapts to you.
+    - Tune the rating, mastery and scoring constants below.
   gen() returns null to reject a degenerate draw (the engine redraws), or:
     { q: 'prompt, TeX between $…$', a: canonical answer, kind, ...options }
   kinds: num | expr (checked by evaluation) · vec | mat (a = numbers) ·
@@ -38,43 +40,67 @@ const CONFIG = {
     seq:   { label: 'Sequences & series',   weight: 1 },
     logic: { label: 'Elementary logic',     weight: 1 },
   },
+  rating: {
+    start: 1000,     // every new type enters here
+    fluent: 1500,    // equilibrium rating for answers exactly at par
+    K: 48,           // step size: high, so each round moves the numbers
+    maxGain: 24,     // cap per answer
+    missLoss: 30,    // skip or wrong tap: the worst outcome. Keep above maxGain so guessing never pays
+    slowFloor: 3,    // a correct answer gains at least slowFloor × (1 − expected): a little when weak, ~0 when strong
+  },
+  mastery: { window: 30, accuracy: 0.95, days: 3, maintenanceWeight: 0.15 },  // last 30 answers, 95%+, median < par, 3+ days
+  weakness: { pull: 1, pointsBonus: 0.5 },   // weakest types drawn up to (1 + pull)×; weakest category scores up to (1 + bonus)×
+  decay: { afterDays: 21, perDay: 2, maxLoss: 40 },
+  skipUnlockSeconds: 5,
+  resurfaceAfter: [3, 6],                    // a skipped question returns after this many other questions
+  combo: { step: 0.1, max: 20 },             // points multiplier 1 + step × (streak − 1), capped at max
+  points: { base: 10, miss: 25 },            // correct: base × (0.5 + speed) × combo × weakness. Skip/wrong tap: −miss × weakness
+  golden: { rate: 0.03, mult: 3 },           // rare typed questions worth 3× points (never yes/no, so guessing them can't pay)
+  stackOnLaptop: true,                       // on a mouse/trackpad device, typed math must use STACK syntax
+  sound: true,
+  modifiers: [                               // one per day, in rotation
+    { name: 'Standard' },
+    { name: 'Golden rush', golden: 0.12 },
+    { name: 'Weakest focus', weakestBoost: 2 },
+    { name: 'Combo day', comboStep: 0.15 },
+  ],
 };
 
 const TYPES = [
   // ---------- Linear algebra ----------
-  { id: 'la-dot', cat: 'la', week: 1, weight: 1, gen() {
+  { id: 'la-dot', name: 'Dot product', par: 7, cat: 'la', week: 1, weight: 1, gen() {
     const n = pick([2, 3]), u = vec(n, -5, 5), v = vec(n, -5, 5);
     if (isZero(u) || isZero(v)) return null;
     return { q: T`$${colv(u)}\cdot${colv(v)}$`, a: String(dot(u, v)), kind: 'num' };
   }},
-  { id: 'la-normsq', cat: 'la', week: 1, weight: 1, gen() {
+  { id: 'la-normsq', name: 'Norm squared', par: 7, cat: 'la', week: 1, weight: 1, gen() {
     const v = vec(3, -6, 6);
     if (isZero(v)) return null;
     return { q: T`$\lVert ${colv(v)} \rVert^2$`, a: String(dot(v, v)), kind: 'num' };
   }},
-  { id: 'la-norm', cat: 'la', week: 1, weight: 1, gen() {
+  { id: 'la-norm', name: 'Norm', par: 6, cat: 'la', week: 1, weight: 1, gen() {
     const [v, len] = pythagorean();
     return { q: T`$\lVert ${colv(v)} \rVert$`, a: String(len), kind: 'num', val: Math.hypot(...v) };
   }},
-  { id: 'la-lincomb', cat: 'la', week: 1, weight: 1, gen() {
+  { id: 'la-lincomb', name: 'Linear combination', par: 14, cat: 'la', week: 1, weight: 1, gen() {
     const a = nz(-4, 4), b = nz(-4, 4), u = vec(3, -5, 5), v = vec(3, -5, 5);
     const w = u.map((x, i) => a * x + b * v[i]);
     return { q: T`$${poly([[a, T`\mathbf u`], [b, T`\mathbf v`]])}$, $\ \mathbf u = ${colv(u)},\ \mathbf v = ${colv(v)}$`,
              a: w, kind: 'vec', show: colv(w) };
   }},
-  { id: 'la-distsq', cat: 'la', week: 1, weight: 1, gen() {
+  { id: 'la-distsq', name: 'Distance squared', par: 10, cat: 'la', week: 1, weight: 1, gen() {
     const n = pick([2, 3]), u = vec(n, -5, 5), v = vec(n, -5, 5);
     const d = u.map((x, i) => x - v[i]);
     if (isZero(d)) return null;
     return { q: T`$\lVert \mathbf u - \mathbf v \rVert^2$, $\ \mathbf u = ${colv(u)},\ \mathbf v = ${colv(v)}$`, a: String(dot(d, d)), kind: 'num' };
   }},
-  { id: 'la-orth', cat: 'la', week: 1, weight: 1, gen() {
+  { id: 'la-orth', name: 'Orthogonal?', par: 6, cat: 'la', week: 1, weight: 1, gen() {
     const u = vec(3, -4, 4), w = vec(3, -2, 2);
     const v = Math.random() < 0.5 ? cross(u, w) : vec(3, -5, 5);
     if (isZero(u) || isZero(v) || v.some(x => Math.abs(x) > 9)) return null;
     return { q: T`Orthogonal? $\ ${colv(u)},\ ${colv(v)}$`, a: dot(u, v) === 0, kind: 'bool', labels: ['Yes', 'No'] };
   }},
-  { id: 'la-alpha', cat: 'la', week: 1, weight: 1, gen() {
+  { id: 'la-alpha', name: 'α for orthogonality', par: 18, cat: 'la', week: 1, weight: 1, gen() {
     const alpha = nz(-3, 3), v = vec(3, -3, 3), w = vec(3, -3, 3), u = vec(3, -4, 4);
     const i = w.findIndex(x => Math.abs(x) === 1);
     if (i < 0 || dot(v, w) === 0) return null;
@@ -84,19 +110,19 @@ const TYPES = [
     return { q: T`$\alpha$ with $(\mathbf u + \alpha\mathbf v)\perp\mathbf w$: $\ \mathbf u = ${colv(u)},\ \mathbf v = ${colv(v)},\ \mathbf w = ${colv(w)}$`,
              a: String(alpha), kind: 'num' };
   }},
-  { id: 'la-direction', cat: 'la', week: 1, weight: 1, gen() {
+  { id: 'la-direction', name: 'Line direction', par: 9, cat: 'la', week: 1, weight: 1, gen() {
     const p = vec(3, -5, 5), r = vec(3, -5, 5), d = r.map((x, i) => x - p[i]);
     if (isZero(d)) return null;
     return { q: T`A direction vector of the line through $${colv(p)}$ and $${colv(r)}$`,
              a: d, kind: 'vec', parallel: true, show: colv(d) };
   }},
-  { id: 'la-plane-d', cat: 'la', week: 1, weight: 1, gen() {
+  { id: 'la-plane-d', name: 'Plane constant d', par: 8, cat: 'la', week: 1, weight: 1, gen() {
     const n = vec(3, -4, 4), p = vec(3, -4, 4);
     if (isZero(n)) return null;
     return { q: T`Plane through $${colv(p)}$ with normal $${colv(n)}$: $\ ${poly([[n[0], 'x'], [n[1], 'y'], [n[2], 'z']])} = d$. $\ d = ?$`,
              a: String(dot(n, p)), kind: 'num' };
   }},
-  { id: 'la-size', cat: 'la', week: 2, weight: 1, gen() {
+  { id: 'la-size', name: 'Product size', par: 5, cat: 'la', week: 2, weight: 1, gen() {
     const { A, B, tex, X, Y } = balanced(() => {
       const A = [ri(1, 4), ri(1, 4)], B = [ri(1, 4), ri(1, 4)];
       const [tex, X, Y] = pick([['AB', A, B], ['BA', B, A], ['A^TB', tr(A), B], ['AB^T', A, tr(B)], ['B^TA^T', tr(B), tr(A)]]);
@@ -106,33 +132,33 @@ const TYPES = [
     return { q: T`$A$ is $${A[0]}\times${A[1]}$, $B$ is $${B[0]}\times${B[1]}$. Size of $${tex}$?`,
              a: ok ? `${X[0]}x${Y[1]}` : 'undefined', kind: 'text', keys: ['×', 'undefined'] };
   }},
-  { id: 'la-entry', cat: 'la', week: 2, weight: 1, gen() {
+  { id: 'la-entry', name: 'Product entry', par: 7, cat: 'la', week: 2, weight: 1, gen() {
     const m = pick([2, 3]), A = mat(2, m, -3, 3), B = mat(m, 2, -3, 3), i = ri(1, 2), j = ri(1, 2);
     const v = A[i - 1].reduce((s, x, k) => s + x * B[k][j - 1], 0);
     return { q: T`$(AB)_{${i}${j}}$, $\ A = ${matTeX(A)},\ B = ${matTeX(B)}$`, a: String(v), kind: 'num' };
   }},
-  { id: 'la-Av', cat: 'la', week: 2, weight: 1, gen() {
+  { id: 'la-Av', name: 'Matrix × vector', par: 12, cat: 'la', week: 2, weight: 1, gen() {
     const n = pick([2, 3]), A = mat(2, n, -3, 3), v = vec(n, -3, 3);
     const w = A.map(r => dot(r, v));
     return { q: T`$${matTeX(A)}${colv(v)}$`, a: w, kind: 'vec', show: colv(w) };
   }},
-  { id: 'la-product', cat: 'la', week: 2, weight: 1, gen() {
+  { id: 'la-product', name: '2×2 product', par: 18, cat: 'la', week: 2, weight: 1, gen() {
     const A = mat(2, 2, -3, 3), B = mat(2, 2, -3, 3);
     const C = A.map(r => [0, 1].map(j => r[0] * B[0][j] + r[1] * B[1][j]));
     return { q: T`$${matTeX(A)}${matTeX(B)}$`, a: C, kind: 'mat', show: matTeX(C) };
   }},
-  { id: 'la-rowop', cat: 'la', week: 2, weight: 1, gen() {
+  { id: 'la-rowop', name: 'Row operation', par: 11, cat: 'la', week: 2, weight: 1, gen() {
     const r1 = [1, ri(-4, 4), ri(-5, 5)], r2 = vec(3, -5, 5), c = nz(-3, 3);
     const out = r2.map((x, k) => x - c * r1[k]);
     return { q: T`$${matTeX([r1, r2])}$, $\ R_2 \to ${poly([[1, 'R_2'], [-c, 'R_1']])}$. New $R_2$?`,
              a: out, kind: 'vec', show: matTeX([out]) };
   }},
-  { id: 'la-det2', cat: 'la', week: 6, weight: 1, gen() {
+  { id: 'la-det2', name: '2×2 determinant', par: 5, cat: 'la', week: 6, weight: 1, gen() {
     const A = mat(2, 2, -6, 6), d = A[0][0] * A[1][1] - A[0][1] * A[1][0];
     if (d === 0) return null;
     return { q: T`$\det${matTeX(A)}$`, a: String(d), kind: 'num' };
   }},
-  { id: 'la-eig2', cat: 'la', week: 9, weight: 1, gen() {
+  { id: 'la-eig2', name: '2×2 eigenvalues', par: 15, cat: 'la', week: 9, weight: 1, gen() {
     const l1 = ri(-5, 5), l2 = ri(-5, 5), a = ri(-5, 5), d = l1 + l2 - a, bc = a * d - l1 * l2;
     if (l1 === l2 || bc === 0) return null;
     const b = pick(divisors(bc)), c = bc / b;
@@ -141,47 +167,47 @@ const TYPES = [
   }},
 
   // ---------- Calculus I ----------
-  { id: 'calc-trig', cat: 'calc', week: 1, weight: 1, gen() {
+  { id: 'calc-trig', name: 'Exact trig value', par: 5, cat: 'calc', week: 1, weight: 1, gen() {
     const m = pick(STD_ANGLES), f = pick(['sin', 'cos', 'tan']), v = Math[f](m * Math.PI / 12);
     if (f === 'tan' && Math.abs(Math.cos(m * Math.PI / 12)) < 1e-9) return null;
     const ex = exact(v);
     return { q: T`$${'\\' + f}\left(${piFrac(m, 12).tex}\right)$`, a: ex.s, show: ex.tex, kind: 'num', val: v };
   }},
-  { id: 'calc-arc', cat: 'calc', week: 1, weight: 1, gen() {
+  { id: 'calc-arc', name: 'Inverse trig value', par: 6, cat: 'calc', week: 1, weight: 1, gen() {
     const f = pick(['asin', 'acos', 'atan']);
     const x = pick(f === 'atan' ? TAN_VALUES : SIN_VALUES) * pick([1, -1]);
     const r = Math[f](x), p = piFrac(Math.round(r * 12 / Math.PI), 12);
     return { q: T`$\arc${f.slice(1)}\left(${exact(x).tex}\right)$`, a: p.s, show: p.tex, kind: 'num', val: r };
   }},
-  { id: 'calc-arc-branch', cat: 'calc', week: 1, weight: 1, gen() {
+  { id: 'calc-arc-branch', name: 'arcsin(sin θ) branch', par: 9, cat: 'calc', week: 1, weight: 1, gen() {
     const [inv, f] = pick([['asin', 'sin'], ['acos', 'cos'], ['atan', 'tan']]), m = ri(-11, 12), th = m * Math.PI / 6;
     if (f === 'tan' && Math.abs(Math.cos(th)) < 1e-9) return null;
     const r = Math[inv](Math[f](th)), p = piFrac(Math.round(r * 6 / Math.PI), 6);
     if (Math.abs(r - th) < 1e-9 && Math.random() < 0.7) return null;
     return { q: T`$\arc${f}\left(${'\\' + f}\left(${piFrac(m, 6).tex}\right)\right)$`, a: p.s, show: p.tex, kind: 'num', val: r };
   }},
-  { id: 'calc-log', cat: 'calc', week: 1, weight: 1, gen() {
+  { id: 'calc-log', name: 'Log of a power', par: 6, cat: 'calc', week: 1, weight: 1, gen() {
     const c = pick([2, 3, 5]), p = ri(1, 3), q = nz(-3, 6), b = c ** p, x = c ** Math.abs(q);
     if (c ** (p * 6) > 1e6 || x > 1000) return null;
     const arg = q > 0 ? String(x) : T`\frac{1}{${x}}`, f = frac(q, p);
     return { q: T`$\log_{${b}} ${arg}$`, a: f.s, show: f.tex, kind: 'num', val: q * Math.log(c) / Math.log(b) };
   }},
-  { id: 'calc-ln', cat: 'calc', week: 1, weight: 1, gen() {
+  { id: 'calc-ln', name: 'ln of an e-power', par: 4, cat: 'calc', week: 1, weight: 1, gen() {
     const k = nz(-4, 6), r = pick([1, 2, 3]), f = frac(k, r);
     const inner = r === 1 ? T`e^{${k}}` : T`\sqrt${r === 2 ? '' : '[3]'}{e^{${k}}}`;
     return { q: T`$\ln ${inner}$`, a: f.s, show: f.tex, kind: 'num', val: k / r };
   }},
-  { id: 'calc-loglaw', cat: 'calc', week: 1, weight: 1, gen() {
+  { id: 'calc-loglaw', name: 'Log law', par: 5, cat: 'calc', week: 1, weight: 1, gen() {
     const b = pick([2, 3, 5]), n = pick([2, 3, 5, 6, 7].filter(x => x !== b)), k = ri(1, 3);
     return { q: T`$\log_{${b}} ${n * b ** k} - \log_{${b}} ${n}$`, a: String(k), kind: 'num' };
   }},
-  { id: 'calc-exp', cat: 'calc', week: 1, weight: 1, gen() {
+  { id: 'calc-exp', name: 'Fractional power', par: 6, cat: 'calc', week: 1, weight: 1, gen() {
     const r = pick([2, 3, 4, 5]), q = pick([2, 3]), p = nz(-3, 3), base = r ** q;
     if (base > 125 || gcd(p, q) !== 1) return null;
     const f = p > 0 ? frac(r ** p, 1) : frac(1, r ** -p);
     return { q: T`$${base}^{${frac(p, q).tex}}$`, a: f.s, show: f.tex, kind: 'num', val: base ** (p / q) };
   }},
-  { id: 'calc-inverse', cat: 'calc', week: 1, weight: 1, gen() {
+  { id: 'calc-inverse', name: 'Inverse function', par: 12, cat: 'calc', week: 1, weight: 1, gen() {
     const a = nz(-6, 6), b = nz(-6, 6), c = ri(1, 5);
     return pick([
       { q: T`$f(x) = ${poly([[a, 'x'], [b, '']])}$. $\ f^{-1}(x) = ?$`, a: `(x - (${b}))/(${a})`, kind: 'expr' },
@@ -190,42 +216,42 @@ const TYPES = [
       { q: T`$f(x) = \dfrac{${a}}{x ${b < 0 ? '+' : '-'} ${Math.abs(b)}}$. $\ f^{-1}(x) = ?$`, a: `${b} + ${a}/x`, kind: 'expr' },
     ]);
   }},
-  { id: 'calc-compose', cat: 'calc', week: 3, weight: 1, gen() {
+  { id: 'calc-compose', name: 'Composition', par: 10, cat: 'calc', week: 3, weight: 1, gen() {
     const f = pick(OUTER), g = pick(INNER);
     if (f.tex === g.tex) return null;
     const [first, second, name] = Math.random() < 0.5 ? [f, g, 'f(g(x))'] : [g, f, 'g(f(x))'];
     return { q: T`$f(x) = ${f.tex.replaceAll('u', 'x')},\ g(x) = ${g.tex.replaceAll('u', 'x')}$. $\ ${name} = ?$`,
              a: first.s.replaceAll('u', `(${second.s.replaceAll('u', 'x')})`), kind: 'expr' };
   }},
-  { id: 'calc-cx-mul', cat: 'calc', week: 2, weight: 1, gen() {
+  { id: 'calc-cx-mul', name: 'Complex product', par: 10, cat: 'calc', week: 2, weight: 1, gen() {
     const [a, b, c, d] = [nz(-4, 4), nz(-4, 4), nz(-4, 4), nz(-4, 4)];
     return { q: T`$(${cx(a, b)})(${cx(c, d)})$`, a: cx(a * c - b * d, a * d + b * c), kind: 'num', keys: CX_KEYS };
   }},
-  { id: 'calc-cx-mod', cat: 'calc', week: 2, weight: 1, gen() {
+  { id: 'calc-cx-mod', name: 'Complex modulus', par: 4, cat: 'calc', week: 2, weight: 1, gen() {
     const [[x, y], r] = pick([[[3, 4], 5], [[5, 12], 13], [[8, 15], 17], [[6, 8], 10], [[7, 24], 25]]);
     const [a, b] = (Math.random() < 0.5 ? [x, y] : [y, x]).map(t => t * pick([1, -1]));
     return { q: T`$\lvert ${cx(a, b)} \rvert$`, a: String(r), kind: 'num' };
   }},
-  { id: 'calc-cx-arg', cat: 'calc', week: 2, weight: 1, gen() {
+  { id: 'calc-cx-arg', name: 'Principal argument', par: 8, cat: 'calc', week: 2, weight: 1, gen() {
     const m = pick(STD_ANGLES.filter(t => t > -12 && t <= 12)), th = m * Math.PI / 12, k = ri(1, 3);
     const [re, im] = argPoint(m, k), p = piFrac(m, 12);
     return { q: T`Principal $\operatorname{Arg}(${cxTeX(re, im)})$`, a: p.s, show: p.tex, kind: 'num',
              val: Math.atan2(im.v, re.v), check: Math.abs(Math.atan2(im.v, re.v) - th) < 1e-9 };
   }},
-  { id: 'calc-hyp', cat: 'calc', week: 3, weight: 1, gen() {
+  { id: 'calc-hyp', name: 'Hyperbolic at ln a', par: 12, cat: 'calc', week: 3, weight: 1, gen() {
     const a = pick([2, 3, 4, 5]), s = pick([1, -1]), f = pick(['sinh', 'cosh', 'tanh']);
     const num = { sinh: s * (a * a - 1), cosh: a * a + 1, tanh: s * (a * a - 1) }[f];
     const ans = frac(num, f === 'tanh' ? a * a + 1 : 2 * a);
     const arg = s > 0 ? T`\ln ${a}` : T`\ln\frac{1}{${a}}`;
     return { q: T`$${'\\' + f}(${arg})$`, a: ans.s, show: ans.tex, kind: 'num', val: Math[f](s * Math.log(a)) };
   }},
-  { id: 'calc-series', cat: 'calc', week: 1, weight: 1, gen() {
+  { id: 'calc-series', name: 'Series coefficient', par: 8, cat: 'calc', week: 1, weight: 1, gen() {
     const [tex, coef] = pick(SERIES)(), n = ri(0, 6), c = coef(n);
     if (c[0] === 0 && Math.random() < 0.7) return null;
     const f = frac(c[0], c[1]);
     return { q: T`Coefficient of $x^{${n}}$ in the power series of $${tex}$`, a: f.s, show: f.tex, kind: 'num' };
   }},
-  { id: 'calc-lim-std', cat: 'calc', week: 4, weight: 1, gen() {
+  { id: 'calc-lim-std', name: 'Standard limit', par: 6, cat: 'calc', week: 4, weight: 1, gen() {
     const a = ri(1, 9), b = ri(1, 9);
     if (a === b) return null;
     const [tex, ans, fn] = pick([
@@ -237,7 +263,7 @@ const TYPES = [
     ]);
     return { q: T`$\displaystyle\lim_{x\to 0} ${tex.replace(/(\D)1x/g, '$1x')}$`, a: ans.s, show: ans.tex, kind: 'num', val: fn(1e-4) };
   }},
-  { id: 'calc-lim-inf', cat: 'calc', week: 4, weight: 1, gen() {
+  { id: 'calc-lim-inf', name: 'Limit at ∞', par: 5, cat: 'calc', week: 4, weight: 1, gen() {
     const top = [nz(-6, 6), ri(-5, 5), ri(-9, 9)], bot = [nz(-6, 6), ri(-5, 5), ri(-9, 9)];
     if (Math.random() < 0.25) top[0] = 0;
     const p = c => poly([[c[0], 'x^2'], [c[1], 'x'], [c[2], '']]), f = frac(top[0], bot[0]);
@@ -245,60 +271,60 @@ const TYPES = [
     if (top.every(c => c === 0)) return null;
     return { q: T`$\displaystyle\lim_{x\to\infty} \frac{${p(top)}}{${p(bot)}}$`, a: f.s, show: f.tex, kind: 'num', val: h(top, 1e7) / h(bot, 1e7) };
   }},
-  { id: 'calc-piecewise', cat: 'calc', week: 4, weight: 1, gen() {
+  { id: 'calc-piecewise', name: 'Continuity constant', par: 12, cat: 'calc', week: 4, weight: 1, gen() {
     const c = pick([-2, -1, 1, 2, 3]), k = ri(-5, 5), p = nz(-4, 4), q = ri(-5, 5), r = p * c * c + q - k * c;
     return { q: T`$f(x) = \begin{cases} ${poly([[p, 'x^2'], [q, '']])} & x < ${c} \\ ${poly([[1, 'k x'], [r, '']])} & x \ge ${c} \end{cases}$ is continuous. $\ k = ?$`,
              a: String(k), kind: 'num' };
   }},
-  { id: 'calc-deriv', cat: 'calc', week: 6, weight: 1, gen() {
+  { id: 'calc-deriv', name: 'Derivative', par: 10, cat: 'calc', week: 6, weight: 1, gen() {
     const a = nz(-6, 6), n = ri(2, 5), b = nz(-6, 6), m = ri(0, n - 1);
     return { q: T`$\frac{d}{dx}\left(${poly([[a, `x^{${n}}`], [b, m ? `x^{${m}}` : '']])}\right)$`,
              a: `${a * n}x^${n - 1} + ${b * m}x^${Math.max(m - 1, 0)}`, kind: 'expr' };
   }},
 
   // ---------- Sequences and Series ----------
-  { id: 'seq-terms', cat: 'seq', week: 1, weight: 1, gen() {
+  { id: 'seq-terms', name: 'Number of terms', par: 4, cat: 'seq', week: 1, weight: 1, gen() {
     const a = ri(-3, 8), b = a + ri(0, 15), body = pick(['k^2', '2k+1', '\\frac1k', '(-1)^k', '3^k']);
     if (body === '\\frac1k' && a <= 0 && b >= 0) return null;
     return { q: T`Number of terms in $\displaystyle\sum_{k=${a}}^{${b}} ${body}$`, a: String(b - a + 1), kind: 'num' };
   }},
-  { id: 'seq-const', cat: 'seq', week: 1, weight: 1, gen() {
+  { id: 'seq-const', name: 'Constant sum', par: 5, cat: 'seq', week: 1, weight: 1, gen() {
     const a = ri(-2, 5), b = a + ri(1, 10), c = nz(-9, 9);
     return { q: T`$\displaystyle\sum_{k=${a}}^{${b}} ${c}$`, a: String(c * (b - a + 1)), kind: 'num' };
   }},
-  { id: 'seq-const-n', cat: 'seq', week: 1, weight: 1, gen() {
+  { id: 'seq-const-n', name: 'Index-free sum', par: 6, cat: 'seq', week: 1, weight: 1, gen() {
     const [tex, s] = pick([['n', 'n'], ['2n', '2n'], ['n+1', '(n+1)'], ['n^2', 'n^2'], ['3', '3'], ['n-1', '(n-1)']]);
     const j = pick(['j', 'k', 'i']);
     return { q: T`$\displaystyle\sum_{${j}=1}^{n} ${tex}$ (in terms of $n$)`, a: `n*${s}`, kind: 'expr', keys: N_KEYS };
   }},
-  { id: 'seq-linsum', cat: 'seq', week: 1, weight: 1, gen() {
+  { id: 'seq-linsum', name: 'Linear sum', par: 14, cat: 'seq', week: 1, weight: 1, gen() {
     const a = ri(0, 3), b = ri(a + 2, 9), c = ri(1, 5), d = ri(-5, 5);
     let s = 0;
     for (let k = a; k <= b; k++) s += c * k + d;
     return { q: T`$\displaystyle\sum_{k=${a}}^{${b}} (${poly([[c, 'k'], [d, '']])})$`, a: String(s), kind: 'num' };
   }},
-  { id: 'seq-geosum', cat: 'seq', week: 1, weight: 1, gen() {
+  { id: 'seq-geosum', name: 'Geometric sum', par: 12, cat: 'seq', week: 1, weight: 1, gen() {
     const [p, q] = pick([[2, 1], [3, 1], [-2, 1], [1, 2], [-1, 2]]), lo = ri(0, 1), hi = ri(3, p === 3 ? 4 : 6);
     let num = 0;
     for (let k = lo; k <= hi; k++) num += p ** k * q ** (hi - k);
     const f = frac(num, q ** hi), r = frac(p, q);
     return { q: T`$\displaystyle\sum_{k=${lo}}^{${hi}} ${q === 1 && p > 0 ? p : T`\left(${r.tex}\right)`}^k$`, a: f.s, show: f.tex, kind: 'num' };
   }},
-  { id: 'seq-closed', cat: 'seq', week: 1, weight: 1, gen() {
+  { id: 'seq-closed', name: 'Closed-form sum', par: 14, cat: 'seq', week: 1, weight: 1, gen() {
     const c = ri(1, 6), d = ri(-5, 5);
     return { q: T`$\displaystyle\sum_{k=1}^{n} (${poly([[c, 'k'], [d, '']])})$ (in terms of $n$)`,
              a: `${c}*n(n+1)/2 + ${d}*n`, kind: 'expr', keys: N_KEYS };
   }},
-  { id: 'seq-floor', cat: 'seq', week: 1, weight: 1, gen() {
+  { id: 'seq-floor', name: 'Floor / ceiling', par: 3, cat: 'seq', week: 1, weight: 1, gen() {
     const x = pick([1, -1]) * (ri(0, 9) + ri(1, 9) / 10), f = pick(['floor', 'ceil']);
     const tex = f === 'floor' ? T`\lfloor ${x} \rfloor` : T`\lceil ${x} \rceil`;
     return { q: T`$${tex}$`, a: String(Math[f](x)), kind: 'num' };
   }},
-  { id: 'seq-subsets', cat: 'seq', week: 1, weight: 1, gen() {
+  { id: 'seq-subsets', name: 'Subset count', par: 4, cat: 'seq', week: 1, weight: 1, gen() {
     const items = Array.from({ length: ri(0, 6) }, () => ri(1, 9)), n = new Set(items).size;
     return { q: T`Number of subsets of $\{${items.join(', ')}\}$`, a: String(2 ** n), kind: 'num' };
   }},
-  { id: 'seq-count', cat: 'seq', week: 1, weight: 1, gen() {
+  { id: 'seq-count', name: 'Set size ℕ vs ℤ', par: 7, cat: 'seq', week: 1, weight: 1, gen() {
     const D = pick(['N', 'Z']), a = ri(-6, 4), b = a + ri(1, 10), lo = pick(['<', '\\le']), hi = pick(['<', '\\le']);
     let n = 0;
     for (let x = a; x <= b; x++) {
@@ -307,23 +333,23 @@ const TYPES = [
     }
     return { q: T`$\lvert\{x\in\mathbb ${D} : ${a} ${lo} x ${hi} ${b}\}\rvert$`, a: String(n), kind: 'num' };
   }},
-  { id: 'seq-interval', cat: 'seq', week: 1, weight: 1, gen() {
+  { id: 'seq-interval', name: 'Interval ∩ / ∪', par: 9, cat: 'seq', week: 1, weight: 1, gen() {
     const I = randInterval(), J = randInterval(), op = pick(['cap', 'cup']);
     const res = op === 'cap' ? intersect(I, J) : union(I, J);
     if (!res) return null;
     return { q: T`$${ivTeX(I)} ${'\\' + op} ${ivTeX(J)}$`, a: res, kind: 'interval', show: setTeX(res) };
   }},
-  { id: 'seq-modulus', cat: 'seq', week: 3, weight: 1, gen() {
+  { id: 'seq-modulus', name: '|x − a| as interval', par: 10, cat: 'seq', week: 3, weight: 1, gen() {
     const a = ri(-9, 9), r = ri(1, 9), rel = pick(['<', '\\le', '>', '\\ge']), closed = rel.includes('le') || rel.includes('ge');
     const [L, R] = closed ? ['[', ']'] : ['(', ')'];
     const res = rel === '<' || rel === '\\le' ? `${L}${a - r},${a + r}${R}` : `(-inf,${a - r}${R} U ${L}${a + r},inf)`;
     return { q: T`$\{x\in\mathbb R : \lvert ${poly([[1, 'x'], [-a, '']])} \rvert ${rel} ${r}\}$`, a: res, kind: 'interval', show: setTeX(res) };
   }},
-  { id: 'seq-quant', cat: 'seq', week: 2, weight: 1, gen() {
+  { id: 'seq-quant', name: 'Quantified statement', par: 7, cat: 'seq', week: 2, weight: 1, gen() {
     const [tex, truth] = pick(QUANT)(pick(['N', 'Z', 'R']), pick(['N', 'Z', 'R']), ri(-3, 3));
     return { q: T`$${tex}$`, a: truth, kind: 'bool', labels: ['True', 'False'] };
   }},
-  { id: 'seq-injective', cat: 'seq', week: 2, weight: 1, gen() {
+  { id: 'seq-injective', name: 'Injective / surjective', par: 6, cat: 'seq', week: 2, weight: 1, gen() {
     const a = ri(-5, 4), b = ri(a + 1, 5), f = pick(['x^2', '\\lvert x\\rvert']), k = ri(-3, 3), c = k - ri(0, 2);
     return pick([
       { q: T`$f:[${a},${b}]\to\mathbb R,\ f(x) = ${f}$. Injective?`, a: a >= 0 || b <= 0, kind: 'bool', labels: ['Yes', 'No'] },
@@ -332,84 +358,84 @@ const TYPES = [
   }},
 
   // ---------- Elementary Logic ----------
-  { id: 'logic-famous', cat: 'logic', week: 1, weight: 1, gen() {
+  { id: 'logic-famous', name: 'Famous form valid?', par: 5, cat: 'logic', week: 1, weight: 1, gen() {
     const form = pick(FAMOUS), [A, B, C] = literals(3), [prem, conc] = form.f(A, B, C);
     return { q: argText(shuffle(prem), conc), a: valid(prem, conc), kind: 'bool', labels: ['Valid', 'Invalid'] };
   }},
-  { id: 'logic-main', cat: 'logic', week: 3, weight: 1, gen() {
+  { id: 'logic-main', name: 'Main connective', par: 4, cat: 'logic', week: 3, weight: 1, gen() {
     const f = rf(3, ['P', 'Q', 'R']);
     if (typeof f === 'string' || depth(f) < 2) return null;
     return { q: `Main connective of <span class="f">${show(f)}</span>`, a: CONNECTIVE_ALIASES[f.op], show: f.op, kind: 'text', keys: ['¬', '∧', '∨', '→', '↔'], noKeyboard: true };
   }},
-  { id: 'logic-formalise', cat: 'logic', week: 3, weight: 1, gen() {
+  { id: 'logic-formalise', name: 'Formalise', par: 6, cat: 'logic', week: 3, weight: 1, gen() {
     const [A, B] = shuffle(['P', 'Q', 'R']), [phrase, ans] = pick([
       [`${A} only if ${B}`, `${A}→${B}`], [`${A} if ${B}`, `${B}→${A}`], [`Provided that ${B}, ${A}`, `${B}→${A}`],
       [`${A} unless ${B}`, `${A}∨${B}`], [`${A} just if ${B}`, `${A}↔${B}`], [`${A} if and only if ${B}`, `${A}↔${B}`],
       [`Not ${A} unless ${B}`, `¬${A}∨${B}`], [`It's not true that ${A} only if ${B}`, `¬(${A}→${B})`]]);
     return { q: `Formalise: <span class="f">${phrase}</span>`, a: ans, kind: 'logic', keys: LOGIC_KEYS, noKeyboard: true };
   }},
-  { id: 'logic-value', cat: 'logic', week: 4, weight: 1, gen() {
+  { id: 'logic-value', name: 'Truth value', par: 7, cat: 'logic', week: 4, weight: 1, gen() {
     const L = ['P', 'Q', 'R'].slice(0, ri(2, 3)), f = rf(3, L), v = Object.fromEntries(L.map(x => [x, Math.random() < 0.5]));
     if (typeof f === 'string' || depth(f) < 2) return null;
     const asg = L.map(x => `${x}=${v[x] ? 'T' : 'F'}`).join(', ');
     return { q: `${asg}<br><span class="f">${show(f)}</span>`, a: ev(f, v), kind: 'bool', labels: ['T', 'F'] };
   }},
-  { id: 'logic-rows', cat: 'logic', week: 4, weight: 1, gen() {
+  { id: 'logic-rows', name: 'Truth-table rows', par: 4, cat: 'logic', week: 4, weight: 1, gen() {
     const f = rf(3, shuffle(['P', 'Q', 'R', 'P₁', 'Q₁']).slice(0, ri(2, 4)));
     if (depth(f) < 2) return null;
     return { q: `Truth-table rows for <span class="f">${show(f)}</span>`, a: String(2 ** letters([f]).length), kind: 'num' };
   }},
-  { id: 'logic-taut', cat: 'logic', week: 4, weight: 1, gen() {
+  { id: 'logic-taut', name: 'Tautology?', par: 8, cat: 'logic', week: 4, weight: 1, gen() {
     const f = balanced(() => pick(TAUT_SEEDS)(rf(1, ['P', 'Q']), rf(1, ['P', 'Q'])), g => valid([], g));
     return { q: `Tautology? <span class="f">${show(f)}</span>`, a: valid([], f), kind: 'bool', labels: ['Yes', 'No'] };
   }},
-  { id: 'logic-valid', cat: 'logic', week: 4, weight: 1, gen() {
+  { id: 'logic-valid', name: 'Valid?', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
     const L = ['P', 'Q', 'R'].slice(0, ri(2, 3));
     const [prem, conc] = balanced(() => [Array.from({ length: ri(1, 2) }, () => rf(2, L)), rf(1, L)], ([p, c]) => valid(p, c));
     const ok = valid(prem, conc);
     return { q: argText(prem, conc), a: ok, kind: 'bool', labels: ['Valid', 'Invalid'] };
   }},
-  { id: 'logic-equiv', cat: 'logic', week: 4, weight: 1, gen() {
+  { id: 'logic-equiv', name: 'Equivalent?', par: 9, cat: 'logic', week: 4, weight: 1, gen() {
     const [A, B] = literals(2), [f, g] = pick(EQUIV_SEEDS)(A, B);
     return { q: `Equivalent?<br><span class="f">${show(f)}</span> &nbsp;and&nbsp; <span class="f">${show(g)}</span>`,
              a: valid([f], g) && valid([g], f), kind: 'bool', labels: ['Yes', 'No'] };
   }},
-  { id: 'logic-name', cat: 'logic', week: 1, weight: 1, gen() {
+  { id: 'logic-name', name: 'Name the form', par: 7, cat: 'logic', week: 1, weight: 1, gen() {
     const form = pick(FAMOUS.filter(x => x.names)), [A, B, C] = literals(3), [prem, conc] = form.f(A, B, C);
     return { q: `Name the form: ${argText(shuffle(prem), conc)}`, a: form.names, show: T`\text{${form.title}}`, kind: 'text', mode: 'text' };
   }},
-  { id: 'logic-official', cat: 'logic', week: 3, weight: 1, gen() {
+  { id: 'logic-official', name: 'Official sentence?', par: 6, cat: 'logic', week: 3, weight: 1, gen() {
     const s = balanced(() => mutate(official(rfDeep(3, ['P', 'Q', 'R', 'P₁']))), isOfficial);
     return { q: `Official sentence of L<sub>1</sub>?<br><span class="f">${s}</span>`, a: isOfficial(s), kind: 'bool', labels: ['Yes', 'No'] };
   }},
-  { id: 'logic-sentence', cat: 'logic', week: 3, weight: 1, gen() {
+  { id: 'logic-sentence', name: 'Sentence?', par: 6, cat: 'logic', week: 3, weight: 1, gen() {
     const s = balanced(() => mutate(abbrev(rfDeep(3, ['P', 'Q', 'R']))), isSentence);
     return { q: `Sentence, official or abbreviated?<br><span class="f">${s}</span>`, a: isSentence(s), kind: 'bool', labels: ['Yes', 'No'] };
   }},
-  { id: 'logic-restore', cat: 'logic', week: 3, weight: 1, gen() {
+  { id: 'logic-restore', name: 'Restore brackets', par: 14, cat: 'logic', week: 3, weight: 1, gen() {
     const f = rfDeep(3, ['P', 'Q', 'R']), disp = show(f), ans = official(f);
     if (disp === ans) return null;
     return { q: `Restore all brackets:<br><span class="f">${disp}</span>`, a: ans, kind: 'syntax', keys: LOGIC_KEYS, noKeyboard: true,
              check: isOfficial(ans) && isSentence(disp) && sameTree(parseLogic(disp), f) };
   }},
-  { id: 'logic-drop', cat: 'logic', week: 3, weight: 1, gen() {
+  { id: 'logic-drop', name: 'Drop brackets', par: 12, cat: 'logic', week: 3, weight: 1, gen() {
     const f = rfDeep(3, ['P', 'Q', 'R']), disp = official(f), ans = show(f);
     if (disp === ans) return null;
     return { q: `Drop every bracket the conventions allow:<br><span class="f">${disp}</span>`, a: ans, kind: 'syntax', keys: LOGIC_KEYS, noKeyboard: true,
              check: isOfficial(disp) && isSentence(ans) && sameTree(parseLogic(ans), f) };
   }},
-  { id: 'logic-column', cat: 'logic', week: 4, weight: 1, gen() {
+  { id: 'logic-column', name: 'Truth-table column', par: 10, cat: 'logic', week: 4, weight: 1, gen() {
     const L = Math.random() < 0.75 ? ['P', 'Q'] : ['P', 'Q', 'R'], f = rfDeep(2, L, 1), rows = tfRows(L);
     if (letters([f]).length < L.length) return null;
     const head = rows.map(v => L.map(x => v[x] ? 'T' : 'F').join('')).join(' ');
     return { q: `Truth-table column of <span class="f">${show(f)}</span><br><span class="muted">rows (${L.join(' ')}): ${head}</span>`,
              a: rows.map(v => ev(f, v) ? 'T' : 'F').join(''), kind: 'text', keys: ['T', 'F'], noKeyboard: true };
   }},
-  { id: 'logic-truerows', cat: 'logic', week: 4, weight: 1, gen() {
+  { id: 'logic-truerows', name: 'True-row count', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
     const f = rfDeep(2, ['P', 'Q', 'R'].slice(0, ri(2, 3)), 2);
     return { q: `In how many rows is <span class="f">${show(f)}</span> true?`, a: String(tfRows(letters([f]).sort()).filter(v => ev(f, v)).length), kind: 'num' };
   }},
-  { id: 'logic-counter', cat: 'logic', week: 4, weight: 1, gen() {
+  { id: 'logic-counter', name: 'Counterexample row', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
     const L = ['P', 'Q', 'R'].slice(0, ri(2, 3)), prem = Array.from({ length: ri(1, 2) }, () => rf(2, L)), conc = rf(1, L);
     const Ls = letters([...prem, conc]).sort(), bad = tfRows(Ls).filter(v => prem.every(p => ev(p, v)) && !ev(conc, v));
     if (!bad.length || Ls.length < 2) return null;
@@ -417,17 +443,17 @@ const TYPES = [
     return { q: `Counterexample row (${Ls.join(' ')}):<br>${argText(prem, conc)}`, a: rows, show: T`\text{${rows.join(' or ')}}`,
              kind: 'text', keys: ['T', 'F'], noKeyboard: true };
   }},
-  { id: 'logic-forced', cat: 'logic', week: 4, weight: 1, gen() {
+  { id: 'logic-forced', name: 'Forced value', par: 5, cat: 'logic', week: 4, weight: 1, gen() {
     const q = balanced(forcedQuestion, x => x.a !== '?');
     return q && { ...q, kind: 'text', keys: ['T', 'F', '?'], noKeyboard: true };
   }},
-  { id: 'logic-negin', cat: 'logic', week: 4, weight: 1, gen() {
+  { id: 'logic-negin', name: 'Push ¬ inward', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
     const [A, B, C] = literals(3), inner = pick([and, or, imp])(A, Math.random() < 0.5 ? B : pick([and, or])(B, C));
     const f = neg(inner);
     return { q: `Equivalent sentence with ¬ only directly on letters:<br><span class="f">${show(f)}</span>`, a: show(nnf(f)),
              kind: 'logic', nnf: true, keys: LOGIC_KEYS, noKeyboard: true };
   }},
-  { id: 'logic-consistent', cat: 'logic', week: 4, weight: 1, gen() {
+  { id: 'logic-consistent', name: 'Consistent set?', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
     const L = ['P', 'Q', 'R'].slice(0, ri(2, 3));
     const set = balanced(() => Array.from({ length: ri(2, 3) }, () => rfDeep(2, L, 1)), consistent);
     return { q: `Consistent? <span class="f">{ ${set.map(f => show(f)).join(', ')} }</span>`, a: consistent(set), kind: 'bool', labels: ['Yes', 'No'] };
@@ -468,31 +494,48 @@ const TYPES = [
   .start { width: 100%; font-size: 22px; padding: 18px; background: var(--accent); color: #0b0c0f; font-weight: 600; margin: 16px 0; }
   .miss { padding: 6px 0; border-bottom: 1px solid #23262d; font-size: 15px; }
   h2 { font-size: 16px; color: var(--muted); font-weight: 500; margin: 20px 0 6px; }
+  .center { text-align: center; }
+  .bar.sub { padding: 0 2px; min-height: 22px; }
+  .combo { display: inline-block; font-weight: 600; color: var(--accent); }
+  .pulse { animation: pulse .25s; } @keyframes pulse { 50% { transform: scale(1.3); } }
+  .up { color: var(--good); } .down { color: var(--bad); }
+  .gold, .prompt.golden { background: #2a2112; border-radius: 10px; }
+  .gold { padding: 0 6px; color: var(--ink); }
+  button:disabled { opacity: .45; }
+  details.cat { background: var(--panel); border-radius: 10px; margin: 8px 0; padding: 2px 10px; }
+  details.cat summary { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; list-style: none; }
+  details.cat summary::-webkit-details-marker { display: none; }
+  details.cat summary b { font-size: 20px; font-variant-numeric: tabular-nums; }
+  .prog { display: inline-block; width: 60px; height: 6px; background: #2c313a; border-radius: 3px; overflow: hidden; vertical-align: middle; }
+  .prog i { display: block; height: 100%; background: var(--accent); }
   svg .pt { fill: var(--accent); } svg .ln { stroke: var(--accent); stroke-width: 2; fill: none; } svg .base { stroke: #2c313a; }
 </style>
 </head>
 <body>
 <div id="home" class="screen on">
   <div class="bar"><span class="big">Drill</span><span class="muted" id="poolInfo"></span></div>
+  <div id="homeHead"></div>
   <button class="start" onclick="startRound()">Start · 120 s</button>
   <div id="homeStats"></div>
 </div>
 
 <div id="play" class="screen">
   <div class="bar"><span class="big" id="timer">120</span><span class="big" id="score">0</span></div>
-  <div class="tag" id="tag"></div>
+  <div class="bar sub"><span class="tag" id="tag"></span><span><span id="delta"></span> <span class="combo" id="combo"></span></span></div>
   <div class="prompt" id="prompt"></div>
   <input id="answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="next">
   <div class="bools row" id="bools"><button id="bTrue"></button><button id="bFalse"></button></div>
-  <div class="row"><button style="flex:1" onclick="skip()">Skip</button><button onclick="endRound()">End</button></div>
+  <div class="row"><button style="flex:1" id="skipBtn" onclick="skip()">Skip</button><button onclick="endRound()">End</button></div>
   <div id="prev"></div>
+  <div id="pace" class="muted center"></div>
 </div>
 
 <div id="results" class="screen">
   <div class="score" id="finalScore"></div>
-  <div id="roundStats"></div>
+  <div class="muted center" id="finalSub"></div>
   <button class="start" onclick="startRound()">Again</button>
-  <button style="width:100%" onclick="showHome()">Home</button>
+  <div id="roundStats"></div>
+  <button style="width:100%; margin-top: 16px" onclick="showHome()">Home</button>
   <div id="misses"></div>
 </div>
 <div id="keys" style="display:none"></div>
@@ -831,7 +874,13 @@ const EQUIV_SEEDS = [
 
 <!-- ============================ CHECKER ============================ -->
 <script>
-const FUNCS = ['arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'sqrt', 'cbrt', 'asin', 'acos', 'atan', 'sin', 'cos', 'tan', 'exp', 'log', 'ln'];
+const FUNCS = ['arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'sqrt', 'cbrt', 'asin', 'acos', 'atan', 'root',
+  'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'exp', 'log', 'abs', 'ln', 'lg'];
+const ROOTS = new Set(['sqrt', 'cbrt', 'root']);
+// STACK extras: lg(x) = log10, lg(x, a) = log base a, root(x) = sqrt, root(x, n) = nth root
+math.import({ lg: (x, b) => b === undefined ? Math.log10(x) : Math.log(x) / Math.log(b), root: (x, n) => math.nthRoot(x, n ?? 2) });
+// STACK input on a laptop: explicit * and bracketed function arguments. The phone keypad stays lenient.
+const STRICT_STACK = CONFIG.stackOnLaptop && matchMedia('(hover: hover) and (pointer: fine)').matches;
 const MJ = { ln: 'log', arcsin: 'asin', arccos: 'acos', arctan: 'atan' };
 const ALIAS = { ln: 'log', exp: 'e', arcsin: 'asin', arccos: 'acos', arctan: 'atan' };
 const CONSTS = new Set(['e', 'pi', 'i']);
@@ -849,7 +898,7 @@ function splitWord(w) {
   return out;
 }
 function tokenize(src) {
-  const s = src.toLowerCase().replace(/π/g, 'pi').replace(/[×·]/g, '*').replace(/−/g, '-')
+  const s = src.toLowerCase().replace(/%pi/g, 'pi').replace(/%e/g, 'e').replace(/%i/g, 'i').replace(/π/g, 'pi').replace(/[×·]/g, '*').replace(/−/g, '-')
     .replace(/√/g, 'sqrt').replace(/²/g, '^2').replace(/³/g, '^3').trim();
   const out = [], re = /\s*(?:(\d+\.?\d*|\.\d+)|([a-z]+)|(\S))/gy;
   let m;
@@ -860,20 +909,21 @@ function tokenize(src) {
   }
   return out;
 }
-// Explicit '*' between adjacent values; 'sin 2x' -> sin(2*x)
+// Explicit '*' between adjacent values; 'sin 2x' -> sin(2*x). Either repair marks the input non-STACK.
 function toMath(toks) {
   const out = [];
   let prevEnd = false;
+  toMath.implicit = false;
   for (let i = 0; i < toks.length; i++) {
     const k = toks[i], starts = k.t !== 'op' || k.v === '(';
-    if (prevEnd && starts) out.push('*');
+    if (prevEnd && starts) { out.push('*'); toMath.implicit = true; }
     if (k.t === 'fn' && toks[i + 1]?.v !== '(') {
       const parts = [];
       let j = i + 1;
       if (toks[j]?.t === 'num') parts.push(toks[j++].v);
       while (toks[j]?.t === 'sym') parts.push(toks[j++].v);
       out.push(MJ[k.v] || k.v, '(', parts.join('*'), ')');
-      i = j - 1; prevEnd = true; continue;
+      i = j - 1; prevEnd = true; toMath.implicit = true; continue;
     }
     out.push(k.t === 'fn' ? (MJ[k.v] || k.v) : k.v);
     prevEnd = k.t === 'num' || k.t === 'sym' || k.v === ')';
@@ -885,12 +935,13 @@ function compileExpr(str) {
   if (!toks.length) return null;
   const cls = new Set(), vars = [];
   for (const k of toks) {
-    if (k.t === 'fn' && k.v !== 'sqrt' && k.v !== 'cbrt') cls.add(ALIAS[k.v] || k.v);
+    if (k.t === 'fn' && !ROOTS.has(k.v)) cls.add(ALIAS[k.v] || k.v);
     if (k.t !== 'sym') continue;
     cls.add(ALIAS[k.v] || k.v);
     if (!CONSTS.has(k.v) && !vars.includes(k.v)) vars.push(k.v);
   }
-  return { code: math.compile(toMath(toks)), cls, vars };
+  const code = math.compile(toMath(toks));
+  return { code, cls, vars, implicit: toMath.implicit };
 }
 function evalAt(c, scope) {
   const v = c.code.evaluate({ ...scope });
@@ -903,10 +954,10 @@ function samplePoint(vars, dom = [0.2, 3]) {
 }
 
 // Equivalence by evaluation. The answer may only use the canonical answer's variables. A numeric answer may
-// also only use its functions/constants (sqrt, cbrt always allowed), so echoing the prompt (ln(e^3) for 3) fails.
-function checkExpr(q, input) {
+// also only use its functions/constants (roots always allowed), so echoing the prompt (ln(e^3) for 3) fails.
+function checkExpr(q, input, strict) {
   const ref = q._ref || (q._ref = compileExpr(q.a)), user = compileExpr(input);
-  if (!user || user.vars.some(v => !ref.vars.includes(v))) return false;
+  if (!user || (strict && user.implicit) || user.vars.some(v => !ref.vars.includes(v))) return false;
   if (q.kind === 'num' && [...user.cls].some(c => !ref.cls.has(c))) return false;
   let good = 0;
   for (let t = 0; t < 8; t++) {
@@ -920,7 +971,7 @@ function checkExpr(q, input) {
 }
 
 function parseGrid(s) {
-  const body = s.trim().replace(/^[\[\(]+|[\]\)]+$/g, '');
+  const body = s.trim().replace(/^matrix\s*\((.*)\)$/i, '$1').replace(/^[\[\(]+|[\]\)]+$/g, '');
   return body.split(/\]\s*,\s*\[|;|\n/).map(r => r.split(/[\s,]+/).filter(Boolean)).filter(r => r.length);
 }
 function evalPlain(s) {
@@ -938,8 +989,10 @@ function checkGrid(q, input) {
   return flat.every((x, i) => Math.abs(x - wflat[i]) < 1e-9);
 }
 
+// Also STACK intervals: oo(a,b) cc(a,b) co(a,b) oc(a,b), joined by %union
+const STACK_IV = (m, k, a, b) => `${k[0] === 'o' ? '(' : '['}${a},${b}${k[1] === 'o' ? ')' : ']'}`;
 function normSet(s) {
-  const t = s.toLowerCase().replace(/\s+/g, '').replace(/−/g, '-').replace(/∞|infinity|oo/g, 'inf').replace(/\+inf/g, 'inf')
+  const t = s.toLowerCase().replace(/\b(oo|cc|co|oc)\s*\(([^,()]+),([^,()]+)\)/g, STACK_IV).replace(/\s+/g, '').replace(/%union/g, 'U').replace(/−/g, '-').replace(/∞|infinity|oo/g, 'inf').replace(/\+inf/g, 'inf')
     .replace(/∪|u/g, 'U').replace(/∅|\{\}|empty/g, '∅').replace(/^(r|ℝ|\(-inf,inf\))$/, 'R');
   return t.split('U').sort().join('U');
 }
@@ -969,10 +1022,10 @@ function checkLogic(q, input) {
   return valid([f], g) && valid([g], f);
 }
 
-function check(q, input) {
+function check(q, input, strict = STRICT_STACK) {
   if (!input.trim()) return false;
   try {
-    if (q.kind === 'num' || q.kind === 'expr') return checkExpr(q, input);
+    if (q.kind === 'num' || q.kind === 'expr') return checkExpr(q, input, strict);
     if (q.kind === 'vec' || q.kind === 'mat') return checkGrid(q, input);
     if (q.kind === 'interval') return normSet(input) === normSet(q.a);
     if (q.kind === 'text') return [].concat(q.a).some(a => normText(a) === normText(input));
@@ -983,10 +1036,91 @@ function check(q, input) {
 }
 </script>
 
+<!-- ============================= RATING ============================= -->
+<script>
+const RATINGS_KEY = 'drill-ratings-v1', PB_KEY = 'drill-pb-v1', HISTORY_KEY = 'drill-history-v1';
+const RC = CONFIG.rating;
+const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+const mean = xs => xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : RC.start;
+const dayKey = (t = Date.now()) => new Date(t).toLocaleDateString('en-CA');
+const loadJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const TYPE_BY_ID = Object.fromEntries(TYPES.map(t => [t.id, t]));
+const activeTypes = () => TYPES.filter(t => t.weight > 0 && t.week <= CONFIG.currentWeek && CONFIG.categories[t.cat]?.weight > 0);
+
+// Speed vs the fixed par: 0.5 at par, 0.95 at about half par or faster, 0 at 1.5 × par or slower
+const speedScore = (ms, par) => clamp(1.5 - ms / 1000 / par, 0, 0.95);
+const expected = r => 1 / (1 + 10 ** ((RC.fluent - r) / 400));
+// Correct: Elo step towards the speed score, floored at a small gain, capped. Skip / wrong tap: fixed worst loss.
+function ratingDelta(r, ok, ms, par) {
+  if (!ok) return -RC.missLoss;
+  const e = expected(r);
+  return clamp(Math.max(RC.K * (speedScore(ms, par) - e), RC.slowFloor * (1 - e)), 0, RC.maxGain);
+}
+function decayed(st, now = Date.now()) {
+  const idle = (now - st.last) / 864e5 - CONFIG.decay.afterDays;
+  return st.r - clamp(CONFIG.decay.perDay * idle, 0, CONFIG.decay.maxLoss);
+}
+
+let RS = loadJSON(RATINGS_KEY, {});   // { typeId: { r, last, log: [{ d, ok, ms }], mastered } }
+const ratingOf = id => RS[id] ? decayed(RS[id]) : RC.start;
+const catRating = (cat, types = activeTypes()) => mean(types.filter(t => t.cat === cat).map(t => ratingOf(t.id)));
+const headline = () => mean(activeTypes().map(t => ratingOf(t.id)));
+const weakness = r => clamp((RC.fluent - r) / (RC.fluent - RC.start), 0, 1);
+const weakMult = cat => 1 + CONFIG.weakness.pointsBonus * weakness(catRating(cat));
+function catRatings() {
+  const types = activeTypes();
+  return Object.fromEntries([...new Set(types.map(t => t.cat))].map(c => [c, Math.round(catRating(c, types))]));
+}
+
+const median = xs => {
+  const s = [...xs].sort((a, b) => a - b), m = s.length >> 1;
+  return !s.length ? Infinity : s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+// Mastered: last `window` answers at 95%+ accuracy, median correct time under par, spread over 3+ days
+function masteryStatus(log, par) {
+  const M = CONFIG.mastery, n = log.length, ok = log.filter(e => e.ok);
+  const acc = n ? ok.length / n : 0, med = median(ok.map(e => e.ms)) / 1000, days = new Set(log.map(e => e.d)).size;
+  const met = n >= M.window && acc >= M.accuracy && med < par && days >= M.days;
+  const progress = met ? 1 : Math.min(n / M.window, acc / M.accuracy, isFinite(med) ? par / med : 0, days / M.days, 0.99);
+  return { met, progress, n, acc, med, days };
+}
+function applyAnswer(type, ok, ms) {
+  const st = RS[type.id] || (RS[type.id] = { r: RC.start, last: Date.now(), log: [], mastered: false });
+  const r = decayed(st), delta = ratingDelta(r, ok, ms, type.par);
+  Object.assign(st, { r: r + delta, last: Date.now(), log: [...st.log, { d: dayKey(), ok, ms }].slice(-CONFIG.mastery.window) });
+  const met = masteryStatus(st.log, type.par).met, change = met === st.mastered ? null : met ? 'mastered' : 'lost';
+  st.mastered = met;
+  localStorage.setItem(RATINGS_KEY, JSON.stringify(RS));
+  return { delta, change };
+}
+// Mastered types drop to maintenance weight; the rest are pulled towards the weakest (new types start weakest)
+const drawFactor = id => RS[id]?.mastered ? CONFIG.mastery.maintenanceWeight : 1 + CONFIG.weakness.pull * weakness(ratingOf(id));
+
+const comboMult = (streak, step) => 1 + step * clamp(streak - 1, 0, CONFIG.combo.max);
+function points(ok, ms, par, ctx) {
+  if (!ok) return -Math.round(CONFIG.points.miss * ctx.weak);
+  return Math.round(CONFIG.points.base * (0.5 + speedScore(ms, par)) * ctx.combo * ctx.weak * (ctx.golden ? CONFIG.golden.mult : 1));
+}
+
+// Days played, counting back from today. One missed day per Mon–Sun week is forgiven; an unplayed today is pending.
+function dayStreak(days, today = dayKey()) {
+  const played = new Set(days), graced = new Set(), d = new Date(today + 'T12:00');
+  let streak = 0;
+  for (let first = true; ; first = false, d.setDate(d.getDate() - 1)) {
+    if (played.has(dayKey(d))) { streak++; continue; }
+    if (first) continue;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - (d.getDay() + 6) % 7);
+    if (graced.has(dayKey(monday))) return streak;
+    graced.add(dayKey(monday));
+  }
+}
+const todaysModifier = () => CONFIG.modifiers[Math.floor(new Date(dayKey() + 'T12:00') / 864e5) % CONFIG.modifiers.length];
+</script>
+
 <!-- ============================== APP ============================== -->
 <script>
 const $ = id => document.getElementById(id);
-const HISTORY_KEY = 'drill-history-v1';
 const KEYSETS = {
   num: { mode: 'decimal', keys: ['-', '/', 'sqrt(', 'pi', '(', ')', '^'] },
   expr: { mode: 'text', keys: ['^', '*', '/', '(', ')', 'x', 'pi', 'e', 'sin(', 'cos(', 'ln(', 'sqrt('] },
@@ -998,20 +1132,24 @@ const KEYSETS = {
   syntax: { mode: 'none', keys: [] },
 };
 const KEY_LABEL = { 'sqrt(': '√', pi: 'π', 'sin(': 'sin', 'cos(': 'cos', 'ln(': 'ln', inf: '∞' };
+const STACK_HINT = 'STACK syntax: write every product with * and bracket function arguments, e.g. 3*x^2, sin(2*x), 2*%pi/3';
 let S = null;
 
-const activeTypes = () => TYPES.filter(t => t.weight > 0 && t.week <= CONFIG.currentWeek && CONFIG.categories[t.cat]?.weight > 0);
 function weighted(items, w) {
   let r = Math.random() * items.reduce((s, x) => s + w(x), 0);
   return items.find(x => (r -= w(x)) < 0) || items[items.length - 1];
 }
-function draw(recent) {
-  const types = activeTypes(), cats = [...new Set(types.map(t => t.cat))];
+// P(type) ∝ category weight × type weight share × draw factor, so mastered categories shrink
+function drawType(mod) {
+  const types = activeTypes(), share = {};
+  types.forEach(t => { share[t.cat] = (share[t.cat] || 0) + t.weight; });
+  const cr = catRatings(), weakest = mod.weakestBoost && Object.keys(cr).sort((a, b) => cr[a] - cr[b])[0];
+  return weighted(types, t => CONFIG.categories[t.cat].weight * (t.cat === weakest ? mod.weakestBoost : 1) * t.weight / share[t.cat] * drawFactor(t.id));
+}
+function draw(recent, mod) {
   for (let tries = 0; tries < 200; tries++) {
-    const cat = weighted(cats, c => CONFIG.categories[c].weight);
-    const type = weighted(types.filter(t => t.cat === cat), t => t.weight);
-    const q = type.gen();
-    if (q && !recent.includes(q.q)) return { ...q, type: type.id, cat };
+    const type = drawType(mod), q = type.gen();
+    if (q && !recent.includes(q.q)) return { ...q, type: type.id, cat: type.cat, golden: q.kind !== 'bool' && Math.random() < (mod.golden ?? CONFIG.golden.rate) };
   }
   throw new Error('no question could be drawn');
 }
@@ -1021,30 +1159,43 @@ function renderMath(str) {
 }
 
 function startRound() {
-  S = { end: Date.now() + CONFIG.roundSeconds * 1000, log: [], recent: [], score: 0 };
+  initAudio();
+  S = { end: Date.now() + CONFIG.roundSeconds * 1000, log: [], recent: [], queue: [], count: 0, points: 0, correct: 0, streak: 0,
+        curve: [0], before: catRatings(), beforeHead: headline(), changes: [], mod: todaysModifier(), pb: loadJSON(PB_KEY, null) };
   showScreen('play');
-  $('score').textContent = '0';
-  $('prev').textContent = '';
+  ['score', 'combo', 'delta', 'prev', 'pace'].forEach(id => { $(id).textContent = id === 'score' ? '0' : ''; });
   S.timer = setInterval(tick, 200);
   nextQuestion();
 }
 function tick() {
-  const left = Math.max(0, Math.ceil((S.end - Date.now()) / 1000));
+  const left = Math.max(0, Math.ceil((S.end - Date.now()) / 1000)), sec = CONFIG.roundSeconds - left;
   $('timer').textContent = left;
+  for (let i = S.curve.length; i <= sec; i++) S.curve[i] = S.points;
+  const wait = Math.ceil(CONFIG.skipUnlockSeconds - (Date.now() - S.start) / 1000);
+  $('skipBtn').disabled = wait > 0;
+  $('skipBtn').textContent = wait > 0 ? `Skip ${wait}` : 'Skip';
+  if (S.pb) {
+    const diff = S.points - S.pb.curve[Math.min(sec, S.pb.curve.length - 1)];
+    $('pace').innerHTML = `PB pace <span class="${diff >= 0 ? 'up' : 'down'}">${diff >= 0 ? '+' : ''}${diff}</span>`;
+  }
   if (left === 0) endRound();
 }
 function nextQuestion() {
-  const q = draw(S.recent);
+  const due = S.queue.findIndex(x => x.at <= S.count);
+  const q = due >= 0 ? S.queue.splice(due, 1)[0].q : draw(S.recent, S.mod);
+  S.count++;
   S.recent = [q.q, ...S.recent].slice(0, 10);
   S.cur = q; S.start = Date.now();
-  $('tag').textContent = CONFIG.categories[q.cat].label;
+  $('tag').innerHTML = `${CONFIG.categories[q.cat].label} · ${TYPE_BY_ID[q.type].name}${q.golden ? ' <span class="gold">★ ×3</span>' : ''}`;
   $('prompt').innerHTML = `<div>${renderMath(q.q)}</div>`;
+  $('prompt').classList.toggle('golden', !!q.golden);
   const isBool = q.kind === 'bool', input = $('answer');
   input.style.display = isBool ? 'none' : 'block';
   $('bools').style.display = isBool ? 'flex' : 'none';
   if (isBool) { $('bTrue').textContent = q.labels[0]; $('bFalse').textContent = q.labels[1]; }
   setKeys(isBool ? null : q);
   input.value = '';
+  tick();
   if (!isBool) focusInput(q.noKeyboard ? 'none' : q.mode || KEYSETS[q.kind].mode);
 }
 // Swap keyboard type: blur then refocus inside the same user gesture so mobile keyboards update
@@ -1075,15 +1226,34 @@ function pressKey(k) {
   onInput();
 }
 function onInput() {
-  if (S?.cur && check(S.cur, $('answer').value)) record(true);
+  if (!S?.cur) return;
+  const v = $('answer').value;
+  if (check(S.cur, v)) return record(true);
+  const stackOnly = STRICT_STACK && (S.cur.kind === 'num' || S.cur.kind === 'expr') && check(S.cur, v, false);
+  $('prev').textContent = stackOnly ? STACK_HINT : $('prev').dataset.miss || '';
 }
-function record(ok) {
-  const q = S.cur;
-  S.log.push({ cat: q.cat, type: q.type, ok, ms: Date.now() - S.start, q: q.q, ans: answerTeX(q) });
-  if (ok) S.score++;
-  $('score').textContent = S.score;
-  $('prev').innerHTML = ok ? '' : '✗ ' + renderMath(`$${answerTeX(q)}$`);
+function record(ok, skipped = false) {
+  const q = S.cur, type = TYPE_BY_ID[q.type], ms = Date.now() - S.start;
+  S.streak = ok ? S.streak + 1 : 0;
+  const ctx = { combo: comboMult(S.streak, S.mod.comboStep ?? CONFIG.combo.step), weak: weakMult(q.cat), golden: q.golden };
+  const pts = points(ok, ms, type.par, ctx), { delta, change } = applyAnswer(type, ok, ms);
+  S.points += pts;
+  if (ok) S.correct++;
+  S.log.push({ cat: q.cat, type: type.id, ok, ms, q: q.q, ans: answerTeX(q), delta });
+  if (change) S.changes.push({ id: type.id, change });
+  if (skipped && (q.resurfaced || 0) < 2) S.queue.push({ q: { ...q, resurfaced: (q.resurfaced || 0) + 1 }, at: S.count + ri(...CONFIG.resurfaceAfter) });
+  feedback(ok, ctx, delta, q);
   nextQuestion();
+}
+function feedback(ok, ctx, delta, q) {
+  $('score').textContent = S.points;
+  $('combo').textContent = S.streak >= 2 ? `×${ctx.combo.toFixed(1)}` : '';
+  $('delta').textContent = `${delta >= 0 ? '+' : ''}${Math.round(delta)}`;
+  $('delta').className = delta >= 0 ? 'up' : 'down';
+  const miss = ok ? '' : '✗ ' + renderMath(`$${answerTeX(q)}$`);
+  $('prev').innerHTML = miss;
+  $('prev').dataset.miss = $('prev').textContent;
+  juice(ok, S.streak, q.golden);
 }
 function answerTeX(q) {
   if (q.show !== undefined) return q.show;
@@ -1091,27 +1261,87 @@ function answerTeX(q) {
   if (q.kind === 'interval') return setTeX(q.a);
   return /^[\w\s.+\-*/^()]+$/.test(q.a) ? q.a.replace(/\*/g, ' ').replace(/pi/g, T`\pi `).replace(/sqrt\((\d+)\)/g, T`\sqrt{$1}`) : T`\text{${q.a}}`;
 }
-function skip() { if (S?.cur) record(false); }
+function skip() {
+  if (S?.cur && Date.now() - S.start >= CONFIG.skipUnlockSeconds * 1000) record(false, true);
+}
 function answerBool(choice) {
   if (!S?.cur || S.cur.kind !== 'bool') return;
-  const ok = choice === S.cur.a;
-  if (!ok) { $('play').classList.remove('flash-bad'); void $('play').offsetWidth; $('play').classList.add('flash-bad'); }
-  record(ok);
+  record(choice === S.cur.a);
 }
 
+// ---------- juice: pitch rises with the combo, haptics where supported, pulse on the multiplier ----------
+let AC = null;
+function initAudio() {
+  if (!CONFIG.sound) return;
+  try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); AC.resume(); } catch { AC = null; }
+}
+function tone(freq, dur = 0.09, type = 'sine', vol = 0.08) {
+  if (!AC) return;
+  const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(AC.destination);
+  o.start(t); o.stop(t + dur);
+}
+function juice(ok, streak, golden) {
+  if (ok) {
+    tone(440 * 2 ** (Math.min(streak - 1, 24) / 12));
+    if (golden) tone(1320, 0.15, 'triangle');
+    navigator.vibrate?.(golden ? [15, 40, 15] : 12);
+  } else {
+    tone(150, 0.18, 'square', 0.05);
+    navigator.vibrate?.([40, 50, 40]);
+  }
+  restartAnimation(ok ? $('combo') : $('play'), ok ? 'pulse' : 'flash-bad');
+}
+function restartAnimation(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+
+// ---------- round end ----------
 function endRound() {
   if (!S) return;
   clearInterval(S.timer);
+  tick();
   $('keys').style.display = 'none';
   $('answer').blur();
-  const round = { t: Date.now(), score: S.score, cats: summarise(S.log) };
-  const hist = loadHistory();
+  const types = activeTypes(), hist = loadJSON(HISTORY_KEY, []);
+  const round = { t: Date.now(), score: S.correct, points: S.points, cats: summarise(S.log), catR: catRatings(), headline: Math.round(headline()),
+                  ratings: Object.fromEntries(types.map(t => [t.id, Math.round(ratingOf(t.id))])) };
   if (S.log.length) { hist.push(round); localStorage.setItem(HISTORY_KEY, JSON.stringify(hist)); }
-  $('finalScore').textContent = S.score;
-  $('roundStats').innerHTML = catTable(round.cats) + weakBox(hist) + trendBlock(hist);
+  const pb = S.pb;
+  if (S.log.length && (!pb || S.points > pb.points)) localStorage.setItem(PB_KEY, JSON.stringify({ points: S.points, curve: S.curve }));
+  $('finalScore').textContent = S.points;
+  $('finalSub').innerHTML = `${S.correct} correct · ${pbMessage(S.points, pb)}`;
+  $('roundStats').innerHTML = ratingTable(S, round) + movers(S.log) + changeList(S.changes) + catTable(round.cats) + weakBox(hist) + trendBlock(hist);
   $('misses').innerHTML = missList(S.log);
   S = null;
   showScreen('results');
+}
+function pbMessage(pts, pb) {
+  if (!pb) return 'first scored round';
+  if (pts > pb.points) return `<span class="up">new best, +${pts - pb.points}</span>`;
+  if (pts === pb.points) return 'equal to your best';
+  return `${pb.points - pts} short of your best (${pb.points})`;
+}
+const signed = d => `<span class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : ''}${d}</span>`;
+function ratingTable(st, round) {
+  const rows = Object.keys(round.catR).map(c =>
+    `<tr><td>${CONFIG.categories[c].label}</td><td class="n">${round.catR[c]}</td><td class="n">${signed(round.catR[c] - (st.before[c] ?? RC.start))}</td></tr>`);
+  const head = `<tr><td><b>Overall</b></td><td class="n"><b>${round.headline}</b></td><td class="n">${signed(round.headline - Math.round(st.beforeHead))}</td></tr>`;
+  return `<h2>Rating</h2><table><tr><th>Category</th><th class="n">Rating</th><th class="n">This round</th></tr>${head}${rows.join('')}</table>`;
+}
+// Per-type rating change this round, largest first: category averages hide single-type progress
+function movers(log) {
+  const sum = {};
+  log.forEach(e => { sum[e.type] = (sum[e.type] || 0) + e.delta; });
+  const top = Object.entries(sum).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 6);
+  if (!top.length) return '';
+  return '<h2>Biggest moves</h2><table>' + top.map(([id, d]) =>
+    `<tr><td>${TYPE_BY_ID[id].name}</td><td class="n">${Math.round(ratingOf(id))}</td><td class="n">${signed(Math.round(d))}</td></tr>`).join('') + '</table>';
+}
+function changeList(changes) {
+  if (!changes.length) return '';
+  return '<h2>Mastery</h2>' + changes.map(c => `<div class="miss">${c.change === 'mastered' ? '<span class="up">✓ Mastered</span>' : '<span class="down">✗ Lost mastery</span>'} · ${TYPE_BY_ID[c.id].name}</div>`).join('');
 }
 function summarise(log) {
   const cats = {};
@@ -1122,7 +1352,6 @@ function summarise(log) {
   }
   return cats;
 }
-const loadHistory = () => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; } };
 const pct = c => Math.round(100 * c.ok / c.n);
 const avgS = c => c.ok ? (c.ms / c.ok / 1000).toFixed(1) + ' s' : '–';
 
@@ -1131,7 +1360,7 @@ function catTable(cats) {
     const c = cats[k];
     return `<tr><td>${CONFIG.categories[k].label}</td><td class="n">${c.ok}/${c.n}</td><td class="n">${pct(c)}%</td><td class="n">${avgS(c)}</td></tr>`;
   });
-  return `<table><tr><th>Category</th><th class="n">Correct</th><th class="n">Acc.</th><th class="n">Avg time</th></tr>${rows.join('')}</table>`;
+  return `<h2>This round</h2><table><tr><th>Category</th><th class="n">Correct</th><th class="n">Acc.</th><th class="n">Avg time</th></tr>${rows.join('')}</table>`;
 }
 // Weakest = lowest accuracy over the last 5 rounds (ties: slower first). Needs 3+ attempts.
 function weakest(hist) {
@@ -1149,22 +1378,24 @@ function weakBox(hist) {
   const items = w.map(([k, c]) => `<b>${CONFIG.categories[k].label}</b> ${pct(c)}%, ${avgS(c)}`).join('<br>');
   return `<div class="weak">Weakest (last ${Math.min(5, hist.length)} rounds):<br>${items}<div class="muted">Raise their weights in CONFIG.</div></div>`;
 }
-function sparkline(values, fmt) {
-  const W = 140, H = 30, n = values.length, x = i => n > 1 ? 4 + i * (W - 8) / (n - 1) : W / 2, y = v => H - 3 - v * (H - 6);
+function sparkline(values, fmt, W = 140) {
+  const H = 30, n = values.length, x = i => n > 1 ? 4 + i * (W - 8) / (n - 1) : W / 2, y = v => H - 3 - v * (H - 6);
   const pts = values.map((v, i) => [x(i), y(v.y)]);
   const path = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
   const dots = pts.map((p, i) => `<circle class="pt" cx="${p[0]}" cy="${p[1]}" r="3"><title>${fmt(values[i])}</title></circle>`).join('');
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><line class="base" x1="0" x2="${W}" y1="${H - 3}" y2="${H - 3}"/>${n > 1 ? `<path class="ln" d="${path}"/>` : ''}${dots}</svg>`;
 }
+const shortDate = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const ratingY = r => clamp((r - RC.start + 200) / (RC.fluent - RC.start + 900), 0, 1);
 function trendBlock(hist) {
   if (!hist.length) return '';
-  const recent = hist.slice(-20), date = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  const best = Math.max(...recent.map(r => r.score), 1);
-  const scoreRow = `<tr><td>Score</td><td>${sparkline(recent.map(r => ({ y: r.score / best, r })), v => `${date(v.r.t)}: ${v.r.score}`)}</td><td class="n">${recent.at(-1).score}</td></tr>`;
+  const recent = hist.slice(-20), scored = recent.filter(r => r.points !== undefined);
+  const best = Math.max(...scored.map(r => r.points), 1);
+  const scoreRow = scored.length ? `<tr><td>Points</td><td>${sparkline(scored.map(r => ({ y: Math.max(r.points, 0) / best, r })), v => `${shortDate(v.r.t)}: ${v.r.points}`)}</td><td class="n">${scored.at(-1).points}</td></tr>` : '';
   const rows = Object.keys(CONFIG.categories).map(k => {
     const pts = recent.filter(r => r.cats[k]?.n).map(r => ({ y: r.cats[k].ok / r.cats[k].n, r, c: r.cats[k] }));
     if (!pts.length) return '';
-    return `<tr><td>${CONFIG.categories[k].label}</td><td>${sparkline(pts, v => `${date(v.r.t)}: ${pct(v.c)}%, ${avgS(v.c)}`)}</td><td class="n">${pct(pts.at(-1).c)}%</td></tr>`;
+    return `<tr><td>${CONFIG.categories[k].label}</td><td>${sparkline(pts, v => `${shortDate(v.r.t)}: ${pct(v.c)}%, ${avgS(v.c)}`)}</td><td class="n">${pct(pts.at(-1).c)}%</td></tr>`;
   });
   return `<h2>Trend · accuracy, last ${recent.length} rounds</h2><table>${scoreRow}${rows.join('')}</table>`;
 }
@@ -1174,12 +1405,32 @@ function missList(log) {
   return '<h2>Missed</h2>' + misses.map(e => `<div class="miss">${renderMath(e.q)} &nbsp;→&nbsp; ${renderMath(`$${e.ans}$`)}</div>`).join('');
 }
 
+// ---------- home: headline, streak, category dashboard with per-type mastery progress and rating trends ----------
 function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id)); }
 function showHome() {
-  const hist = loadHistory();
-  $('poolInfo').textContent = `Week ${CONFIG.currentWeek} · ${activeTypes().length} pools`;
-  $('homeStats').innerHTML = weakBox(hist) + trendBlock(hist) + (hist.length ? '' : '<p class="muted">No rounds yet.</p>');
+  const hist = loadJSON(HISTORY_KEY, []), types = activeTypes(), mastered = types.filter(t => RS[t.id]?.mastered).length;
+  const streak = dayStreak(hist.map(r => dayKey(r.t)));
+  $('poolInfo').textContent = `Week ${CONFIG.currentWeek} · ${types.length} types`;
+  $('homeHead').innerHTML = `<div class="score">${Math.round(headline())}</div>
+    <div class="muted center">rating · ${mastered}/${types.length} mastered · streak ${streak} day${streak === 1 ? '' : 's'} · today: ${todaysModifier().name}</div>`;
+  $('homeStats').innerHTML = dashboard(types, hist) + weakBox(hist) + trendBlock(hist);
   showScreen('home');
+}
+function dashboard(types, hist) {
+  return '<h2>Categories · tap for types</h2>' + [...new Set(types.map(t => t.cat))].map(cat => {
+    const ts = types.filter(t => t.cat === cat), done = ts.filter(t => RS[t.id]?.mastered).length;
+    const trend = hist.filter(r => r.catR?.[cat]).slice(-20).map(r => ({ y: ratingY(r.catR[cat]), r }));
+    return `<details class="cat"><summary><span>${CONFIG.categories[cat].label}<br><span class="muted">${done}/${ts.length} mastered</span></span>
+      ${sparkline(trend, v => `${shortDate(v.r.t)}: ${v.r.catR[cat]}`, 100)}<b>${Math.round(catRating(cat, types))}</b></summary>
+      <table>${ts.map(t => typeRow(t, hist)).join('')}</table></details>`;
+  }).join('');
+}
+function typeRow(t, hist) {
+  const st = RS[t.id], m = masteryStatus(st?.log || [], t.par);
+  const tip = `${m.n}/${CONFIG.mastery.window} answers · ${Math.round(100 * m.acc)}% · median ${isFinite(m.med) ? m.med.toFixed(1) : '–'} s (par ${t.par} s) · ${m.days}/${CONFIG.mastery.days} days`;
+  const trend = hist.filter(r => r.ratings?.[t.id] !== undefined).slice(-20).map(r => ({ y: ratingY(r.ratings[t.id]), r }));
+  const prog = st?.mastered ? '<span class="up">✓</span>' : `<span class="prog" title="${tip}"><i style="width:${Math.round(100 * m.progress)}%"></i></span>`;
+  return `<tr title="${tip}"><td>${t.name}</td><td>${prog}</td><td>${trend.length > 1 ? sparkline(trend, v => `${shortDate(v.r.t)}: ${v.r.ratings[t.id]}`, 60) : ''}</td><td class="n">${Math.round(ratingOf(t.id))}</td></tr>`;
 }
 
 // Pin the symbol row to the top of the on-screen keyboard
@@ -1210,6 +1461,7 @@ function init() {
   $('bTrue').addEventListener('click', () => answerBool(true));
   $('bFalse').addEventListener('click', () => answerBool(false));
   document.addEventListener('keydown', e => {
+    if ($('results').classList.contains('on') && e.key === 'Enter') return startRound();
     if (S?.cur?.kind !== 'bool') return;
     if (e.key === 'ArrowLeft' || e.key === '1') answerBool(true);
     if (e.key === 'ArrowRight' || e.key === '2') answerBool(false);
@@ -1226,8 +1478,8 @@ function init() {
 ===================================================================== -->
 <script>
 function runSelfTest() {
-  const out = { checker: checkerTests(), syntax: syntaxTests(), generators: generatorTests() };
-  out.ok = out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests() };
+  out.ok = out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
   const pre = $('selftest');
   pre.style.display = 'block';
   pre.textContent = JSON.stringify(out, null, 1);
@@ -1235,6 +1487,20 @@ function runSelfTest() {
 
 // [canonical, kind, inputs that must pass, inputs that must fail, extra options]
 const CHECKER_CASES = [
+  // STACK syntax, strict (laptop): explicit *, bracketed arguments, %pi %e %i, lg, root, abs, sec
+  ['3x^2', 'expr', ['3*x^2', 'x*3*x', '3*x²', 'x^2*3'], ['3x^2', '3 x^2', 'x*3x', '3x'], { strict: true }],
+  ['sin(2x)', 'expr', ['2*sin(x)*cos(x)', 'sin(2*x)'], ['sin 2x', '2sin(x)cos(x)', 'sin(2x)', 'sin(2*x'], { strict: true }],
+  ['pi/6', 'num', ['%pi/6', 'pi/6', '(1/6)*%pi'], ['1/6%pi', '2%pi/12', 'asin(1/2)'], { strict: true }],
+  ['e^(2x)', 'expr', ['%e^(2*x)', 'exp(2*x)', 'e^(2*x)', '(%e^x)^2'], ['%e^(2x)', '%e^2*x'], { strict: true }],
+  ['5+i', 'num', ['5+%i', '%i+5', '5+1*%i'], ['5+2*%i', '5+i2'], { strict: true }],
+  ['cbrt(x - 4)', 'expr', ['root(x-4,3)', '(x-4)^(1/3)'], ['root(x-4)', '(x-4)^1/3'], { dom: [4.5, 12], strict: true }],
+  ['lg(x)', 'expr', ['lg(x)', 'log(x)/log(10)', 'lg(x,10)'], ['log(x)', 'lg(x,2)'], { strict: true }],
+  ['abs(x - 1)', 'expr', ['abs(x-1)', 'abs(1-x)'], ['x-1'], { dom: [-2, 4], strict: true }],
+  ['(sin(x))^2', 'expr', ['(sin(x))^2', 'sin(x)^2', '1-cos(x)^2'], ['sin(x^2)', 'sin^2(x)'], { strict: true }],
+  ['sec(x)', 'expr', ['1/cos(x)', 'sec(x)'], ['csc(x)'], { dom: [0.1, 1.2], strict: true }],
+  ['(-1,3]', 'interval', ['oc(-1,3)', '(-1,3]'], ['oo(-1,3)', 'co(-1,3)']],
+  ['(-inf,-8] U [12,inf)', 'interval', ['oc(-inf,-8) %union co(12,inf)', 'co(12,inf) %union oc(-inf,-8)'], ['oo(-inf,-8) %union co(12,inf)']],
+  // Lenient (phone keypad): implicit multiplication and bare function arguments
   ['3x^2', 'expr', ['3x^2', '3*x^2', 'x*3x', '3x²', 'x^2*3', '3 x^2', '6x^2/2'], ['3x^3', '3x', '3x^', 'x^2', '9x^2/2']],
   ['sin(2x)', 'expr', ['2sin(x)cos(x)', '2sinxcosx', 'sin 2x', 'sin(2*x)', '2 cos(x) sin(x)'], ['sin(x)', '2sin(x)', 'sin2']],
   ['ln(x)', 'expr', ['log(x)', 'ln x', 'lnx', 'ln(x)'], ['log10(x)', 'ln(2x)', 'e^x']],
@@ -1267,7 +1533,7 @@ const CHECKER_CASES = [
 ];
 const GRID_CASES = [
   [{ kind: 'vec', a: [2, -16, 9] }, ['2,-16,9', '(2,-16,9)', '[2 -16 9]', '2, -16, 9', '4/2,-16,9'], ['2,-16', '2,16,9', '2,-16,9,0', '2,-16,9a']],
-  [{ kind: 'mat', a: [[1, 2], [3, 4]] }, ['1 2; 3 4', '[1,2;3,4]', '1,2,3,4', '[[1,2],[3,4]]', '1,2\n3,4'], ['1,3,2,4', '1 2 3', '1 2; 3 4; 5 6', '1 2 3; 4']],
+  [{ kind: 'mat', a: [[1, 2], [3, 4]] }, ['1 2; 3 4', '[1,2;3,4]', '1,2,3,4', '[[1,2],[3,4]]', '1,2\n3,4', 'matrix([1,2],[3,4])'], ['1,3,2,4', '1 2 3', '1 2; 3 4; 5 6', '1 2 3; 4', 'matrix([1,3],[2,4])']],
   [{ kind: 'vec', a: [3, -7, -4], parallel: true }, ['3,-7,-4', '-3,7,4', '6,-14,-8', '1.5,-3.5,-2'], ['3,7,4', '0,0,0', '3,-7']],
   [{ kind: 'vec', a: [2, -3], unordered: true }, ['2,-3', '-3,2', '-3, 2'], ['2,3', '2', '2,-3,2']],
 ];
@@ -1296,11 +1562,55 @@ function syntaxTests() {
   return { cases: Object.values(SYNTAX_CASES).flat().length, failed };
 }
 
+// The incentives must hold at every rating level: attempting beats skipping, guessing yes/no never pays
+function incentiveTests() {
+  const failed = [], fail = (what, detail) => failed.push({ what, detail }), par = 6;
+  const levels = [RC.start, RC.fluent, RC.fluent + 500], table = {};
+  for (const r of levels) {
+    const skipD = ratingDelta(r, false, 0, par), fast = ratingDelta(r, true, 0.4 * par * 1000, par), slow = ratingDelta(r, true, 5 * par * 1000, par);
+    table[r] = { fastCorrect: +fast.toFixed(1), atPar: +ratingDelta(r, true, par * 1000, par).toFixed(1), slowCorrect: +slow.toFixed(1), skip: skipD };
+    if (!(slow >= 0)) fail('slow correct loses rating', { r, slow });
+    if (!(slow > skipD)) fail('skip not worse than slow correct', { r, slow, skipD });
+    if (fast > RC.maxGain) fail('gain above cap', { r, fast });
+    for (const p of [0.05, 0.5, 0.95]) if (!(p * slow + (1 - p) * skipD > skipD)) fail('attempting does not beat skipping', { r, p });
+    const guess = 0.5 * ratingDelta(r, true, 300, 4) + 0.5 * skipD;
+    if (!(guess < 0)) fail('guessing yes/no gains rating', { r, guess });
+  }
+  if (!(ratingDelta(RC.start, true, 2500, par) > ratingDelta(RC.fluent + 300, true, 2500, par))) fail('weak type does not gain more', {});
+  if (!(ratingDelta(RC.start, true, 3000, par) > ratingDelta(RC.start, true, 8000, par))) fail('fast does not beat slow', {});
+  const sim = (p, ms) => {
+    let pts = 0, streak = 0;
+    for (let i = 0; i < 20000; i++) {
+      const ok = Math.random() < p;
+      streak = ok ? streak + 1 : 0;
+      pts += points(ok, ms, 6, { combo: comboMult(streak, 0.15), weak: 1 + CONFIG.weakness.pointsBonus, golden: false });
+    }
+    return +(pts / 20000).toFixed(2);
+  };
+  const spam = sim(0.5, 300), careful = sim(0.95, 6000);
+  if (!(spam < 0)) fail('guess-spamming yes/no earns points', { spam });
+  if (!(careful > spam)) fail('careful play does not beat spam', { careful, spam });
+  return { failed, ratingDeltas: table, pointsPerQuestion: { spam, careful } };
+}
+function masteryTests() {
+  const failed = [], log = (n, ok, ms, days) => Array.from({ length: n }, (_, i) => ({ d: `2026-10-${10 + i % days}`, ok: ok(i), ms }));
+  const cases = [['all criteria met', log(30, () => true, 4000, 3), true], ['one day only', log(30, () => true, 4000, 1), false],
+    ['median over par', log(30, () => true, 7000, 3), false], ['two misses in 30', log(30, i => i > 1, 4000, 3), false],
+    ['one miss in 30', log(30, i => i > 0, 4000, 3), true], ['only 20 answers', log(20, () => true, 4000, 3), false]];
+  for (const [what, l, want] of cases) if (masteryStatus(l, 6).met !== want) failed.push({ what, want });
+  const streaks = [[['2026-10-20', '2026-10-19', '2026-10-18'], '2026-10-20', 3], [['2026-10-19', '2026-10-18'], '2026-10-20', 2],
+    [['2026-10-21', '2026-10-19', '2026-10-18'], '2026-10-21', 3], [['2026-10-23', '2026-10-20', '2026-10-19'], '2026-10-23', 1],
+    [['2026-10-26', '2026-10-24', '2026-10-23'], '2026-10-26', 3], [[], '2026-10-20', 0]];
+  for (const [days, today, want] of streaks) { const got = dayStreak(days, today); if (got !== want) failed.push({ what: 'streak', days, today, want, got }); }
+  TYPES.filter(t => !t.name || !(t.par > 0)).forEach(t => failed.push({ what: 'type lacks name/par', id: t.id }));
+  return { failed };
+}
+
 function checkerTests() {
   const failed = [];
   let passed = 0;
   const run = (q, inputs, want) => inputs.forEach(s => {
-    const got = check({ ...q }, s);
+    const got = check({ ...q }, s, !!q.strict);
     if (got === want) passed++; else failed.push({ canonical: q.a, kind: q.kind, input: s, expected: want, got });
   });
   for (const [a, kind, yes, no, opt] of CHECKER_CASES) { run({ a, kind, ...opt }, yes, true); run({ a, kind, ...opt }, no, false); }
@@ -1336,7 +1646,7 @@ function validateQuestion(q) {
     try { katex.renderToString(q.show, { throwOnError: true }); } catch (e) { errs.push(`KaTeX show: ${q.show}`); }
   }
   if (q.kind === 'bool') { if (typeof q.a !== 'boolean' || q.labels?.length !== 2) errs.push('bad bool ' + q.q); return errs; }
-  if (!check({ ...q }, answerInput(q))) errs.push(`own answer rejected: ${JSON.stringify(q.a)} for ${q.q}`);
+  if (!check({ ...q }, answerInput(q), false)) errs.push(`own answer rejected: ${JSON.stringify(q.a)} for ${q.q}`);
   if (q.val !== undefined) {
     const v = evalAt(compileExpr(q.a), {});
     if (!v || !near(v, { re: q.val, im: 0 }, 1e-6)) errs.push(`value mismatch: ${q.a} vs ${q.val} for ${q.q}`);
