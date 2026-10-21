@@ -916,9 +916,9 @@ const FAMOUS = [
   { title: 'Hypothetical Syllogism', names: ['HS', 'Hypothetical Syllogism', 'Transitive Syllogism', 'Chain Argument'], f: (A, B, C) => [[imp(A, B), imp(B, C)], imp(A, C)] },
   { title: 'Disjunctive Syllogism', names: ['DS', 'Disjunctive Syllogism'], f: (A, B) => [[or(A, B), neg(A)], B] },
   { title: 'Reductio ad Absurdum', names: ['RAA', 'Reductio', 'Reductio ad Absurdum', 'Proof by Contradiction', 'Negation Introduction'], f: (A, B) => [[imp(A, B), imp(A, neg(B))], neg(A)] },
-  { title: 'Affirming the Consequent', names: ['AC', 'Affirming the Consequent'], f: (A, B) => [[imp(A, B), B], A] },
-  { title: 'Denying the Antecedent', names: ['DA', 'Denying the Antecedent'], f: (A, B) => [[imp(A, B), neg(A)], neg(B)] },
-  { title: 'Affirming a Disjunct', names: ['AD', 'Affirming a Disjunct'], f: (A, B) => [[or(A, B), A], neg(B)] },
+  { title: 'Affirming the Consequent', names: ['AC', 'Affirming the Consequent', 'Affirming a Consequent'], f: (A, B) => [[imp(A, B), B], A] },
+  { title: 'Denying the Antecedent', names: ['DA', 'Denying the Antecedent', 'Denying an Antecedent'], f: (A, B) => [[imp(A, B), neg(A)], neg(B)] },
+  { title: 'Affirming a Disjunct', names: ['AD', 'Affirming a Disjunct', 'Affirming the Disjunct'], f: (A, B) => [[or(A, B), A], neg(B)] },
   { f: (A, B, C) => [[imp(A, B), imp(C, B)], imp(A, C)] }, // unnamed, invalid
 ];
 const TAUT_SEEDS = [
