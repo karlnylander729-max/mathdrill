@@ -430,7 +430,8 @@ const TYPES = [
   { id: 'logic-rows', name: 'Truth-table rows', par: 4, cat: 'logic', week: 4, weight: 1, gen() {
     const f = rf(3, shuffle(['P', 'Q', 'R', 'P₁', 'Q₁']).slice(0, ri(2, 4)));
     if (depth(f) < 2) return null;
-    return { q: `Truth-table rows for <span class="f">${show(f)}</span>`, a: String(2 ** letters([f]).length), kind: 'num' };
+    return { q: `How many rows does the truth table for <span class="f">${show(f)}</span> have?`, a: String(2 ** letters([f]).length), kind: 'num',
+             hint: 'a number: how many rows, not the table itself' };
   }},
   { id: 'logic-taut', name: 'Tautology?', par: 8, cat: 'logic', week: 4, weight: 1, gen() {
     const f = balanced(() => pick(TAUT_SEEDS)(rf(1, ['P', 'Q']), rf(1, ['P', 'Q'])), g => valid([], g));
