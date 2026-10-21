@@ -27,6 +27,7 @@
          interval · text (a = string or list) · logic (formula, checked by truth table) ·
          bool (a = true/false, labels = [trueLabel, falseLabel]) ·
          syntax (exact L1 string; ASCII -> & v ~ accepted)
+  type flag hub: false = drill-only (see drills).
   options: show (TeX for the answer), mode (keyboard: text | decimal | none), dom [lo,hi] for real variables,
            parallel (vec: any nonzero multiple), unordered (vec as a set), keys (symbol row)
 ======================================================================= -->
@@ -39,7 +40,18 @@ const CONFIG = {
     calc:  { label: 'Calculus',             weight: 1 },
     seq:   { label: 'Sequences & series',   weight: 1 },
     logic: { label: 'Elementary logic',     weight: 1 },
+    basics: { label: 'Basics',              weight: 1 },   // drill-only skills, never in the main round
   },
+  // Focus drills: 120 s rounds on a few types. Own best score and history; ratings and mastery are shared.
+  // Types marked hub: false appear only here (not in the main round, not in the overall rating).
+  drills: [
+    { id: 'matmul',      name: 'Matrix multiplication', types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'] },
+    { id: 'signed',      name: 'Signed arithmetic',     types: ['arith-signed', 'arith-vecsub'] },
+    { id: 'counting',    name: 'Counting integers',     types: ['seq-terms', 'seq-const', 'seq-count'] },
+    { id: 'trig',        name: 'Exact trig',            types: ['calc-trig', 'calc-arc', 'calc-arc-branch'] },
+    { id: 'connectives', name: 'Connectives',           types: ['logic-connective', 'logic-forced', 'logic-value'] },
+    { id: 'forms',       name: 'Famous forms',          types: ['logic-famous', 'logic-name'] },
+  ],
   rating: {
     start: 1000,     // every new type enters here
     fluent: 1500,    // rating at which a performance score of 0.5 is expected
@@ -156,6 +168,17 @@ const TYPES = [
     return { q: T`$${matTeX([r1, r2])}$, $\ R_2 \to ${poly([[1, 'R_2'], [-c, 'R_1']])}$. New $R_2$?`,
              a: out, kind: 'vec', show: matTeX([out]) };
   }},
+  { id: 'la-rowcol', name: 'Row × column', par: 4, cat: 'la', week: 2, weight: 1, hub: false, gen() {
+    const n = pick([2, 3]), r = vec(n, -5, 5), c = vec(n, -5, 5);
+    if (isZero(r) || isZero(c)) return null;
+    return { q: T`$${matTeX([r])}${colv(c)}$`, a: String(dot(r, c)), kind: 'num' };
+  }},
+  { id: 'la-product23', name: '2×3 · 3×2 product', par: 30, cat: 'la', week: 2, weight: 1, hub: false, gen() {
+    const A = mat(2, 3, -3, 3), B = mat(3, 2, -3, 3);
+    if (A.some(isZero) || [0, 1].some(j => B.every(r => r[j] === 0))) return null;
+    const C = A.map(r => [0, 1].map(j => r.reduce((s, x, k) => s + x * B[k][j], 0)));
+    return { q: T`$${matTeX(A)}${matTeX(B)}$`, a: C, kind: 'mat', show: matTeX(C) };
+  }},
   { id: 'la-det2', name: '2×2 determinant', par: 5, cat: 'la', week: 6, weight: 1, gen() {
     const A = mat(2, 2, -6, 6), d = A[0][0] * A[1][1] - A[0][1] * A[1][0];
     if (d === 0) return null;
@@ -168,6 +191,22 @@ const TYPES = [
     if (Math.abs(b) > 9 || Math.abs(c) > 9) return null;
     return { q: T`Eigenvalues of $${matTeX([[a, b], [c, d]])}$ (comma-separated)`,
              a: [l1, l2], kind: 'vec', unordered: true, show: `${l1},\\ ${l2}` };
+  }},
+
+  // ---------- Basics (drill-only) ----------
+  { id: 'arith-signed', name: 'Signed arithmetic', par: 5, cat: 'basics', week: 1, weight: 1, hub: false, gen() {
+    const [a, b, c, d] = [nz(-9, 9), nz(-9, 9), nz(-9, 9), nz(-9, 9)], p = x => `(${x})`;
+    if ([a, b, c, d].filter(x => x < 0).length < 2) return null;
+    return pick([
+      { q: `$${p(a)}${p(b)} + ${p(c)}${p(d)}$`, a: String(a * b + c * d), kind: 'num' },
+      { q: `$${p(a)}${p(b)} - ${p(c)}${p(d)}$`, a: String(a * b - c * d), kind: 'num' },
+      { q: `$${a} - ${p(b)} - ${p(c)}$`, a: String(a - b - c), kind: 'num' },
+    ]);
+  }},
+  { id: 'arith-vecsub', name: 'Vector subtraction', par: 8, cat: 'basics', week: 1, weight: 1, hub: false, gen() {
+    const u = vec(3, -9, 9), v = vec(3, -9, 9), w = u.map((x, i) => x - v[i]);
+    if (v.filter(x => x < 0).length < 2) return null;
+    return { q: T`$${colv(u)} - ${colv(v)}$`, a: w, kind: 'vec', show: colv(w) };
   }},
 
   // ---------- Calculus I ----------
@@ -460,6 +499,11 @@ const TYPES = [
     return { q: `Equivalent sentence with ¬ only directly on letters:<br><span class="f">${show(f)}</span>`, a: show(nnf(f)),
              kind: 'logic', nnf: true, keys: LOGIC_KEYS, noKeyboard: true };
   }},
+  { id: 'logic-connective', name: 'Single connective', par: 2, cat: 'logic', week: 4, weight: 1, hub: false, gen() {
+    const op = pick(['¬', ...BIN]), v = { P: Math.random() < 0.5, Q: Math.random() < 0.5 }, tv = x => x ? 'T' : 'F';
+    const f = op === '¬' ? neg('P') : bin(op, 'P', 'Q'), expr = op === '¬' ? `¬${tv(v.P)}` : `${tv(v.P)} ${op} ${tv(v.Q)}`;
+    return { q: `<span class="f">${expr}</span>`, a: ev(f, v), kind: 'bool', labels: ['T', 'F'] };
+  }},
   { id: 'logic-consistent', name: 'Consistent set?', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
     const L = ['P', 'Q', 'R'].slice(0, ri(2, 3));
     const set = balanced(() => Array.from({ length: ri(2, 3) }, () => rfDeep(2, L, 1)), consistent);
@@ -515,6 +559,8 @@ const TYPES = [
   details.cat summary b { font-size: 20px; font-variant-numeric: tabular-nums; }
   .stk code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; white-space: nowrap; }
   .stk th { padding-top: 12px; } .stk .katex { white-space: nowrap; }
+  .drills { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .drills button { text-align: left; padding: 10px 12px; }
   .prog { display: inline-block; width: 60px; height: 6px; background: #2c313a; border-radius: 3px; overflow: hidden; vertical-align: middle; }
   .prog i { display: block; height: 100%; background: var(--accent); }
   svg .pt { fill: var(--accent); } svg .ln { stroke: var(--accent); stroke-width: 2; fill: none; } svg .base { stroke: #2c313a; }
@@ -543,7 +589,7 @@ const TYPES = [
 <div id="results" class="screen">
   <div class="score" id="finalScore"></div>
   <div class="muted center" id="finalSub"></div>
-  <button class="start" onclick="startRound()">Again</button>
+  <button class="start" onclick="startRound(lastDrill)">Again</button>
   <button id="copyBtn" style="width:100%; display:none" onclick="copySummary()">Copy for Claude</button>
   <div id="roundStats"></div>
   <button style="width:100%; margin-top: 16px" onclick="showHome()">Home</button>
@@ -1066,7 +1112,10 @@ const mean = xs => xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : RC.st
 const dayKey = (t = Date.now()) => new Date(t).toLocaleDateString('en-CA');
 const loadJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const TYPE_BY_ID = Object.fromEntries(TYPES.map(t => [t.id, t]));
-const activeTypes = () => TYPES.filter(t => t.weight > 0 && t.week <= CONFIG.currentWeek && CONFIG.categories[t.cat]?.weight > 0);
+const activeTypes = () => TYPES.filter(t => t.hub !== false && t.weight > 0 && t.week <= CONFIG.currentWeek && CONFIG.categories[t.cat]?.weight > 0);
+const DRILL_BY_ID = Object.fromEntries(CONFIG.drills.map(d => [d.id, d]));
+const drillTypes = d => d.types.map(id => TYPE_BY_ID[id]).filter(t => t && t.weight > 0 && t.week <= CONFIG.currentWeek);
+const pbKey = drill => drill ? `${PB_KEY}:${drill.id}` : PB_KEY;
 
 // Speed vs the fixed par: 0.5 at par, 0.95 at about half par or faster, 0 at 1.5 × par or slower
 const speedScore = (ms, par) => clamp(1.5 - ms / 1000 / par, 0, 0.95);
@@ -1162,15 +1211,16 @@ function weighted(items, w) {
   return items.find(x => (r -= w(x)) < 0) || items[items.length - 1];
 }
 // P(type) ∝ category weight × type weight share × draw factor, so mastered categories shrink
-function drawType(mod) {
+function drawType(mod, drill) {
+  if (drill) return weighted(drillTypes(drill), t => 1 + CONFIG.weakness.pull * weakness(ratingOf(t.id)));   // a drill ignores maintenance
   const types = activeTypes(), share = {};
   types.forEach(t => { share[t.cat] = (share[t.cat] || 0) + t.weight; });
   const cr = catRatings(), weakest = mod.weakestBoost && Object.keys(cr).sort((a, b) => cr[a] - cr[b])[0];
   return weighted(types, t => CONFIG.categories[t.cat].weight * (t.cat === weakest ? mod.weakestBoost : 1) * t.weight / share[t.cat] * drawFactor(t.id));
 }
-function draw(recent, mod) {
+function draw(recent, mod, drill) {
   for (let tries = 0; tries < 200; tries++) {
-    const type = drawType(mod), q = type.gen();
+    const type = drawType(mod, drill), q = type.gen();
     if (q && !recent.includes(q.q)) return { ...q, type: type.id, cat: type.cat, golden: q.kind !== 'bool' && Math.random() < (mod.golden ?? CONFIG.golden.rate) };
   }
   throw new Error('no question could be drawn');
@@ -1180,10 +1230,13 @@ function renderMath(str) {
   return str.split('$').map((part, i) => i % 2 ? katex.renderToString(part, { throwOnError: false }) : part).join('');
 }
 
-function startRound() {
+let lastDrill = null;
+function startRound(drillId = null) {
   initAudio();
-  S = { end: Date.now() + CONFIG.roundSeconds * 1000, log: [], recent: [], queue: [], count: 0, points: 0, correct: 0, streak: 0,
-        curve: [0], before: catRatings(), beforeHead: headline(), changes: [], mod: todaysModifier(), pb: loadJSON(PB_KEY, null) };
+  const drill = DRILL_BY_ID[drillId] || null;
+  lastDrill = drill?.id || null;
+  S = { end: Date.now() + CONFIG.roundSeconds * 1000, log: [], recent: [], queue: [], count: 0, points: 0, correct: 0, streak: 0, drill,
+        curve: [0], before: catRatings(), beforeHead: headline(), changes: [], mod: drill ? CONFIG.modifiers[0] : todaysModifier(), pb: loadJSON(pbKey(drill), null) };
   showScreen('play');
   ['score', 'combo', 'delta', 'prev', 'pace'].forEach(id => { $(id).textContent = id === 'score' ? '0' : ''; });
   S.timer = setInterval(tick, 200);
@@ -1209,11 +1262,11 @@ function tick() {
 }
 function nextQuestion() {
   const due = S.queue.findIndex(x => x.at <= S.count);
-  const q = due >= 0 ? S.queue.splice(due, 1)[0].q : draw(S.recent, S.mod);
+  const q = due >= 0 ? S.queue.splice(due, 1)[0].q : draw(S.recent, S.mod, S.drill);
   S.count++;
   S.recent = [q.q, ...S.recent].slice(0, 10);
   S.cur = q; S.start = Date.now();
-  $('tag').innerHTML = `${CONFIG.categories[q.cat].label} · ${TYPE_BY_ID[q.type].name}${q.golden ? ' <span class="gold">★ ×3</span>' : ''}`;
+  $('tag').innerHTML = `${S.drill ? S.drill.name : CONFIG.categories[q.cat].label} · ${TYPE_BY_ID[q.type].name}${q.golden ? ' <span class="gold">★ ×3</span>' : ''}`;
   $('prompt').innerHTML = `<div>${renderMath(q.q)}</div>`;
   $('prompt').classList.toggle('golden', !!q.golden);
   $('hint').textContent = formatHint(q);
@@ -1344,20 +1397,21 @@ function endRound() {
   fillCurve();
   $('keys').style.display = 'none';
   $('answer').blur();
-  const types = activeTypes(), hist = loadJSON(HISTORY_KEY, []);
+  const types = [...new Set([...activeTypes(), ...(S.drill ? drillTypes(S.drill) : [])])], hist = loadJSON(HISTORY_KEY, []);
   const round = { t: Date.now(), score: S.correct, points: S.points, cats: summarise(S.log), catR: catRatings(), headline: Math.round(headline()),
-                  ratings: Object.fromEntries(types.map(t => [t.id, Math.round(ratingOf(t.id))])) };
+                  ratings: Object.fromEntries(types.map(t => [t.id, Math.round(ratingOf(t.id))])), ...(S.drill && { drill: S.drill.id }) };
   if (S.log.length) { hist.push(round); localStorage.setItem(HISTORY_KEY, JSON.stringify(hist)); }
   const pb = S.pb;
-  if (S.log.length && (!pb || S.points > pb.points)) localStorage.setItem(PB_KEY, JSON.stringify({ points: S.points, curve: S.curve }));
+  if (S.log.length && (!pb || S.points > pb.points)) localStorage.setItem(pbKey(S.drill), JSON.stringify({ points: S.points, curve: S.curve }));
   $('finalScore').textContent = S.points;
-  $('finalSub').innerHTML = `${S.correct} correct · ${pbMessage(S.points, pb)}`;
-  $('roundStats').innerHTML = ratingTable(S, round) + movers(S.log) + changeList(S.changes) + catTable(round.cats) + weakBox(hist) + trendBlock(hist);
+  $('finalSub').innerHTML = `${S.drill ? S.drill.name + ' · ' : ''}${S.correct} correct · ${pbMessage(S.points, pb)}`;
+  const tail = S.drill ? drillTrend(hist, S.drill) : weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
+  $('roundStats').innerHTML = ratingTable(S, round) + movers(S.log) + changeList(S.changes) + catTable(round.cats) + tail;
   $('misses').innerHTML = missList(S.log);
   const q = S.cur, pending = q && { cat: q.cat, type: q.type, ok: false, unanswered: true, ms: Date.now() - S.start, q: q.q, ans: answerTeX(q),
     attempt: q.kind === 'bool' ? '' : $('answer').value, bool: q.kind === 'bool', again: !!q.resurfaced };
   const fullLog = pending ? [...S.log, pending] : S.log;
-  lastSummary = S.log.length || pending?.attempt ? roundSummary({ ...round, log: fullLog, before: S.before, beforeHead: S.beforeHead }) : '';
+  lastSummary = S.log.length || pending?.attempt ? roundSummary({ ...round, drillName: S.drill?.name, log: fullLog, before: S.before, beforeHead: S.beforeHead }) : '';
   $('copyBtn').style.display = lastSummary ? 'block' : 'none';
   $('copyBtn').textContent = 'Copy for Claude';
   S = null;
@@ -1379,10 +1433,10 @@ function questionLine(e, i) {
 }
 function roundSummary(r) {
   const signedN = n => `${n >= 0 ? '+' : ''}${n}`;
-  const cats = Object.entries(r.cats).map(([k, c]) => `${CONFIG.categories[k].label} ${c.ok}/${c.n}, avg ${avgS(c)}, rating ${r.catR[k]} (${signedN(r.catR[k] - (r.before[k] ?? RC.start))})`);
+  const cats = Object.entries(r.cats).map(([k, c]) => `${CONFIG.categories[k].label} ${c.ok}/${c.n}, avg ${avgS(c)}${r.catR[k] === undefined ? '' : `, rating ${r.catR[k]} (${signedN(r.catR[k] - (r.before[k] ?? RC.start))})`}`);
   const answered = r.log.filter(e => !e.unanswered);
   return [
-    `Mental-math drill round · ${new Date(r.t).toLocaleString()} · week ${CONFIG.currentWeek} · ${STRICT_STACK ? 'laptop, STACK syntax enforced' : 'phone'}`,
+    `Mental-math ${r.drillName ? `focus drill "${r.drillName}"` : 'drill round'} · ${new Date(r.t).toLocaleString()} · week ${CONFIG.currentWeek} · ${STRICT_STACK ? 'laptop, STACK syntax enforced' : 'phone'}`,
     `Points ${r.points} · ${r.score} correct · ${answered.filter(e => !e.ok).length} missed · overall rating ${r.headline} (${signedN(r.headline - Math.round(r.beforeHead))})`,
     '',
     'Please review this round. My modules: Linear Algebra and Geometry I, Calculus I, Sequences and Series, Elementary Logic.',
@@ -1410,7 +1464,7 @@ function pbMessage(pts, pb) {
 }
 const signed = d => `<span class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : ''}${d}</span>`;
 function ratingTable(st, round) {
-  const rows = Object.keys(round.catR).map(c =>
+  const rows = Object.keys(round.catR).filter(c => !st.drill || round.cats[c]).map(c =>
     `<tr><td>${CONFIG.categories[c].label}</td><td class="n">${round.catR[c]}</td><td class="n">${signed(round.catR[c] - (st.before[c] ?? RC.start))}</td></tr>`);
   const head = `<tr><td><b>Overall</b></td><td class="n"><b>${round.headline}</b></td><td class="n">${signed(round.headline - Math.round(st.beforeHead))}</td></tr>`;
   return `<h2>Rating</h2><table><tr><th>Category</th><th class="n">Rating</th><th class="n">This round</th></tr>${head}${rows.join('')}</table>`;
@@ -1491,6 +1545,18 @@ function missList(log) {
 }
 
 // ---------- home: headline, streak, category dashboard with per-type mastery progress and rating trends ----------
+const mainRounds = hist => hist.filter(r => !r.drill);
+function drillTrend(hist, d) {
+  const rounds = hist.filter(r => r.drill === d.id).slice(-20), best = Math.max(...rounds.map(r => r.points), 1);
+  if (!rounds.length) return '';
+  return `<h2>${d.name} · points, last ${rounds.length} rounds</h2>` + sparkline(rounds.map(r => ({ y: Math.max(r.points, 0) / best, r })), v => `${shortDate(v.r.t)}: ${v.r.points}`, 300);
+}
+function drillsBlock() {
+  return '<h2>Focus drills · 120 s on one skill</h2><div class="drills">' + CONFIG.drills.filter(d => drillTypes(d).length).map(d => {
+    const pb = loadJSON(pbKey(d), null), r = Math.round(mean(drillTypes(d).map(t => ratingOf(t.id))));
+    return `<button onclick="startRound('${d.id}')"><b>${d.name}</b><br><span class="muted">rating ${r}${pb ? ` · best ${pb.points}` : ''}</span></button>`;
+  }).join('') + '</div>';
+}
 function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id)); }
 function showHome() {
   const hist = loadJSON(HISTORY_KEY, []), types = activeTypes(), mastered = types.filter(t => RS[t.id]?.mastered).length;
@@ -1498,7 +1564,7 @@ function showHome() {
   $('poolInfo').textContent = `Week ${CONFIG.currentWeek} · ${types.length} types`;
   $('homeHead').innerHTML = `<div class="score">${Math.round(headline())}</div>
     <div class="muted center">rating · ${mastered}/${types.length} mastered · streak ${streak} day${streak === 1 ? '' : 's'} · today: ${todaysModifier().name}</div>`;
-  $('homeStats').innerHTML = dashboard(types, hist) + stackGuide() + weakBox(hist) + trendBlock(hist);
+  $('homeStats').innerHTML = drillsBlock() + dashboard(types, hist) + stackGuide() + weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
   showScreen('home');
 }
 function dashboard(types, hist) {
@@ -1604,7 +1670,7 @@ function init() {
   $('bTrue').addEventListener('click', () => answerBool(true));
   $('bFalse').addEventListener('click', () => answerBool(false));
   document.addEventListener('keydown', e => {
-    if ($('results').classList.contains('on') && e.key === 'Enter') return startRound();
+    if ($('results').classList.contains('on') && e.key === 'Enter') return startRound(lastDrill);
     if (S?.cur?.kind !== 'bool') return;
     if (e.key === 'ArrowLeft' || e.key === '1') answerBool(true);
     if (e.key === 'ArrowRight' || e.key === '2') answerBool(false);
@@ -1786,6 +1852,11 @@ function masteryTests() {
     try { katex.renderToString(tex, { throwOnError: true }); } catch (e) { failed.push({ what: 'STACK guide TeX', tex }); }
     if (canon && !check({ a: canon, kind: 'expr', dom: [0.2, 0.9] }, stack, true)) failed.push({ what: 'STACK guide example rejected', stack, canon });
   }
+  for (const d of CONFIG.drills) {
+    d.types.filter(id => !TYPE_BY_ID[id]).forEach(id => failed.push({ what: 'drill lists unknown type', drill: d.id, id }));
+    if (!drillTypes(d).length) failed.push({ what: 'drill has no active types', drill: d.id });
+  }
+  activeTypes().filter(t => t.hub === false).forEach(t => failed.push({ what: 'drill-only type in main round', id: t.id }));
   TYPES.filter(t => !t.name || !(t.par > 0)).forEach(t => failed.push({ what: 'type lacks name/par', id: t.id }));
   return { failed };
 }
