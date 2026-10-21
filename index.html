@@ -42,7 +42,9 @@ const CONFIG = {
   },
   rating: {
     start: 1000,     // every new type enters here
-    fluent: 1500,    // equilibrium rating for answers exactly at par
+    fluent: 1500,    // rating at which a performance score of 0.5 is expected
+    speedWeight: 0.65,  // share of an answer's score that comes from speed vs par; the rest is for being correct.
+                        // Lower = par matters less. At 0.65: always-slow-but-right settles ~1390, at par ~1630, very fast ~2100
     K: 48,           // step size: high, so each round moves the numbers
     maxGain: 24,     // cap per answer
     missLoss: 30,    // skip or wrong tap: the worst outcome. Keep above maxGain so guessing never pays
@@ -130,7 +132,7 @@ const TYPES = [
     }, d => d.X[1] === d.Y[0]);
     const ok = X[1] === Y[0];
     return { q: T`$A$ is $${A[0]}\times${A[1]}$, $B$ is $${B[0]}\times${B[1]}$. Size of $${tex}$?`,
-             a: ok ? `${X[0]}x${Y[1]}` : 'undefined', kind: 'text', keys: ['×', 'undefined'] };
+             a: ok ? `${X[0]}x${Y[1]}` : 'undefined', kind: 'text', keys: ['×', 'undefined'], hint: 'a size like 2x3, or undefined' };
   }},
   { id: 'la-entry', name: 'Product entry', par: 7, cat: 'la', week: 2, weight: 1, gen() {
     const m = pick([2, 3]), A = mat(2, m, -3, 3), B = mat(m, 2, -3, 3), i = ri(1, 2), j = ri(1, 2);
@@ -365,7 +367,7 @@ const TYPES = [
   { id: 'logic-main', name: 'Main connective', par: 4, cat: 'logic', week: 3, weight: 1, gen() {
     const f = rf(3, ['P', 'Q', 'R']);
     if (typeof f === 'string' || depth(f) < 2) return null;
-    return { q: `Main connective of <span class="f">${show(f)}</span>`, a: CONNECTIVE_ALIASES[f.op], show: f.op, kind: 'text', keys: ['¬', '∧', '∨', '→', '↔'], noKeyboard: true };
+    return { q: `Main connective of <span class="f">${show(f)}</span>`, a: CONNECTIVE_ALIASES[f.op], show: f.op, kind: 'text', keys: ['¬', '∧', '∨', '→', '↔'], noKeyboard: true, hint: `one connective${LOGIC_ASCII}` };
   }},
   { id: 'logic-formalise', name: 'Formalise', par: 6, cat: 'logic', week: 3, weight: 1, gen() {
     const [A, B] = shuffle(['P', 'Q', 'R']), [phrase, ans] = pick([
@@ -402,7 +404,7 @@ const TYPES = [
   }},
   { id: 'logic-name', name: 'Name the form', par: 7, cat: 'logic', week: 1, weight: 1, gen() {
     const form = pick(FAMOUS.filter(x => x.names)), [A, B, C] = literals(3), [prem, conc] = form.f(A, B, C);
-    return { q: `Name the form: ${argText(shuffle(prem), conc)}`, a: form.names, show: T`\text{${form.title}}`, kind: 'text', mode: 'text' };
+    return { q: `Name the form: ${argText(shuffle(prem), conc)}`, a: form.names, show: T`\text{${form.title}}`, kind: 'text', mode: 'text', hint: 'the name or its abbreviation, e.g. Modus Tollens or MT' };
   }},
   { id: 'logic-official', name: 'Official sentence?', par: 6, cat: 'logic', week: 3, weight: 1, gen() {
     const s = balanced(() => mutate(official(rfDeep(3, ['P', 'Q', 'R', 'P₁']))), isOfficial);
@@ -429,7 +431,7 @@ const TYPES = [
     if (letters([f]).length < L.length) return null;
     const head = rows.map(v => L.map(x => v[x] ? 'T' : 'F').join('')).join(' ');
     return { q: `Truth-table column of <span class="f">${show(f)}</span><br><span class="muted">rows (${L.join(' ')}): ${head}</span>`,
-             a: rows.map(v => ev(f, v) ? 'T' : 'F').join(''), kind: 'text', keys: ['T', 'F'], noKeyboard: true };
+             a: rows.map(v => ev(f, v) ? 'T' : 'F').join(''), kind: 'text', keys: ['T', 'F'], noKeyboard: true, hint: 'one T/F per row, top to bottom, e.g. TFTT' };
   }},
   { id: 'logic-truerows', name: 'True-row count', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
     const f = rfDeep(2, ['P', 'Q', 'R'].slice(0, ri(2, 3)), 2);
@@ -441,11 +443,11 @@ const TYPES = [
     if (!bad.length || Ls.length < 2) return null;
     const rows = bad.map(v => Ls.map(x => v[x] ? 'T' : 'F').join(''));
     return { q: `Counterexample row (${Ls.join(' ')}):<br>${argText(prem, conc)}`, a: rows, show: T`\text{${rows.join(' or ')}}`,
-             kind: 'text', keys: ['T', 'F'], noKeyboard: true };
+             kind: 'text', keys: ['T', 'F'], noKeyboard: true, hint: 'one row: a T/F per letter in the order shown, e.g. TF' };
   }},
   { id: 'logic-forced', name: 'Forced value', par: 5, cat: 'logic', week: 4, weight: 1, gen() {
     const q = balanced(forcedQuestion, x => x.a !== '?');
-    return q && { ...q, kind: 'text', keys: ['T', 'F', '?'], noKeyboard: true };
+    return q && { ...q, kind: 'text', keys: ['T', 'F', '?'], noKeyboard: true, hint: 'T, F, or ? if not forced' };
   }},
   { id: 'logic-negin', name: 'Push ¬ inward', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
     const [A, B, C] = literals(3), inner = pick([and, or, imp])(A, Math.random() < 0.5 ? B : pick([and, or])(B, C));
@@ -525,6 +527,7 @@ const TYPES = [
   <div class="bar"><span class="big" id="timer">120</span><span class="big" id="score">0</span></div>
   <div class="bar sub"><span class="tag" id="tag"></span><span><span id="delta"></span> <span class="combo" id="combo"></span></span></div>
   <div class="prompt" id="prompt"></div>
+  <div class="muted center" id="hint"></div>
   <input id="answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="next">
   <div class="bools row" id="bools"><button id="bTrue"></button><button id="bFalse"></button></div>
   <div class="row"><button style="flex:1" id="skipBtn" onclick="skip()">Skip</button><button onclick="endRound()">End</button></div>
@@ -1059,11 +1062,12 @@ const activeTypes = () => TYPES.filter(t => t.weight > 0 && t.week <= CONFIG.cur
 // Speed vs the fixed par: 0.5 at par, 0.95 at about half par or faster, 0 at 1.5 × par or slower
 const speedScore = (ms, par) => clamp(1.5 - ms / 1000 / par, 0, 0.95);
 const expected = r => 1 / (1 + 10 ** ((RC.fluent - r) / 400));
-// Correct: Elo step towards the speed score, floored at a small gain, capped. Skip / wrong tap: fixed worst loss.
+// Correct: Elo step towards a score that is part correctness, part speed; floored at a small gain, capped.
+// Skip / wrong tap: fixed worst loss.
 function ratingDelta(r, ok, ms, par) {
   if (!ok) return -RC.missLoss;
-  const e = expected(r);
-  return clamp(Math.max(RC.K * (speedScore(ms, par) - e), RC.slowFloor * (1 - e)), 0, RC.maxGain);
+  const e = expected(r), perf = 1 - RC.speedWeight + RC.speedWeight * speedScore(ms, par);
+  return clamp(Math.max(RC.K * (perf - e), RC.slowFloor * (1 - e)), 0, RC.maxGain);
 }
 function decayed(st, now = Date.now()) {
   const idle = (now - st.last) / 864e5 - CONFIG.decay.afterDays;
@@ -1203,6 +1207,7 @@ function nextQuestion() {
   $('tag').innerHTML = `${CONFIG.categories[q.cat].label} · ${TYPE_BY_ID[q.type].name}${q.golden ? ' <span class="gold">★ ×3</span>' : ''}`;
   $('prompt').innerHTML = `<div>${renderMath(q.q)}</div>`;
   $('prompt').classList.toggle('golden', !!q.golden);
+  $('hint').textContent = formatHint(q);
   const isBool = q.kind === 'bool', input = $('answer');
   input.style.display = isBool ? 'none' : 'block';
   $('bools').style.display = isBool ? 'flex' : 'none';
@@ -1268,6 +1273,18 @@ function feedback(ok, ctx, delta, q) {
   $('prev').innerHTML = miss;
   $('prev').dataset.miss = $('prev').textContent;
   juice(ok, S.streak, q.golden);
+}
+// What to type, for answers that are not a plain number
+const LOGIC_ASCII = STRICT_STACK ? ' · keyboard: ~ & v -> <->' : '';
+function formatHint(q) {
+  if (q.hint !== undefined) return q.hint;
+  if (q.kind === 'vec') return q.parallel ? 'any nonzero multiple, comma-separated, e.g. 1,-1,2' : q.unordered ? 'comma-separated, any order' : 'comma-separated, e.g. 3,-1,2';
+  if (q.kind === 'mat') return 'rows separated by ; e.g. 1,2;3,4';
+  if (q.kind === 'interval') return `e.g. (-1,3]  [2,inf)  (-inf,0) U (1,inf)  {0}  R  ∅${STRICT_STACK ? '  or STACK oc(-1,3)' : ''}`;
+  if (q.kind === 'logic' || q.kind === 'syntax') return `a sentence, e.g. ¬P → Q${LOGIC_ASCII}`;
+  if (q.kind === 'expr') return STRICT_STACK ? 'STACK syntax, e.g. 3*x^2, %e^x, sqrt(x), 5*n*(n+1)/2' : 'an expression, e.g. 3x^2, e^x, sqrt(x)';
+  if (q.kind === 'num' && /[a-z/]/.test(q.a)) return STRICT_STACK ? 'exact value: 3/4, sqrt(3)/2, 2*%pi/3, 5+2*%i' : 'exact value: 3/4, sqrt(3)/2, 2pi/3, 5+2i';
+  return '';
 }
 function answerTeX(q) {
   if (q.show !== undefined) return q.show;
