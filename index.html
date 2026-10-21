@@ -149,7 +149,8 @@ const TYPES = [
   { id: 'la-entry', name: 'Product entry', par: 7, cat: 'la', week: 2, weight: 1, gen() {
     const m = pick([2, 3]), A = mat(2, m, -3, 3), B = mat(m, 2, -3, 3), i = ri(1, 2), j = ri(1, 2);
     const v = A[i - 1].reduce((s, x, k) => s + x * B[k][j - 1], 0);
-    return { q: T`$(AB)_{${i}${j}}$, $\ A = ${matTeX(A)},\ B = ${matTeX(B)}$`, a: String(v), kind: 'num' };
+    return { q: T`$(AB)_{${i}${j}}$, $\ A = ${matTeX(A)},\ B = ${matTeX(B)}$`, a: String(v), kind: 'num',
+             hint: `one number: row ${i} of A · column ${j} of B` };
   }},
   { id: 'la-Av', name: 'Matrix × vector', par: 12, cat: 'la', week: 2, weight: 1, gen() {
     const n = pick([2, 3]), A = mat(2, n, -3, 3), v = vec(n, -3, 3);
