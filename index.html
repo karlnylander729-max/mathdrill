@@ -333,7 +333,7 @@ const TYPES = [
   }},
   { id: 'seq-const', name: 'Constant sum', par: 5, cat: 'seq', week: 1, weight: 1, gen() {
     const a = ri(-2, 5), b = a + ri(1, 10), c = nz(-9, 9);
-    return { q: T`$\displaystyle\sum_{k=${a}}^{${b}} ${c}$`, a: String(c * (b - a + 1)), kind: 'num' };
+    return { q: T`$\displaystyle\sum_{k=${a}}^{${b}} ${c < 0 ? `(${c})` : c}$`, a: String(c * (b - a + 1)), kind: 'num' };
   }},
   { id: 'seq-const-n', name: 'Index-free sum', par: 6, cat: 'seq', week: 1, weight: 1, gen() {
     const [tex, s, sh] = pick([['n', 'n', 'n^2'], ['2n', '2n', '2n^2'], ['(n+1)', '(n+1)', 'n(n+1)'], ['n^2', 'n^2', 'n^3'], ['3', '3', '3n'], ['(n-1)', '(n-1)', 'n(n-1)']]);
