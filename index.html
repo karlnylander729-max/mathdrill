@@ -1247,7 +1247,7 @@ function pressKey(k) {
 function onInput() {
   if (!S?.cur) return;
   const v = $('answer').value;
-  if (check(S.cur, v)) return record(true);
+  if (check(S.cur, v)) return record(true, false, v);
   const stackOnly = STRICT_STACK && (S.cur.kind === 'num' || S.cur.kind === 'expr') && check(S.cur, v, false);
   $('prev').textContent = stackOnly ? STACK_HINT : $('prev').dataset.miss || '';
 }
@@ -1280,7 +1280,7 @@ function formatHint(q) {
   if (q.hint !== undefined) return q.hint;
   if (q.kind === 'vec') return q.parallel ? 'any nonzero multiple, comma-separated, e.g. 1,-1,2' : q.unordered ? 'comma-separated, any order' : 'comma-separated, e.g. 3,-1,2';
   if (q.kind === 'mat') return 'rows separated by ; e.g. 1,2;3,4';
-  if (q.kind === 'interval') return `e.g. (-1,3]  [2,inf)  (-inf,0) U (1,inf)  {0}  R  ∅${STRICT_STACK ? '  or STACK oc(-1,3)' : ''}`;
+  if (q.kind === 'interval') return `e.g. (-1,3]  [2,inf)  (-inf,0) U (1,inf)  {0}  R  · empty set: {} or empty${STRICT_STACK ? '  · STACK oc(-1,3) also works' : ''}`;
   if (q.kind === 'logic' || q.kind === 'syntax') return `a sentence, e.g. ¬P → Q${LOGIC_ASCII}`;
   if (q.kind === 'expr') return STRICT_STACK ? 'STACK syntax, e.g. 3*x^2, %e^x, sqrt(x), 5*n*(n+1)/2' : 'an expression, e.g. 3x^2, e^x, sqrt(x)';
   if (q.kind === 'num' && /[a-z/]/.test(q.a)) return STRICT_STACK ? 'exact value: 3/4, sqrt(3)/2, 2*%pi/3, 5+2*%i' : 'exact value: 3/4, sqrt(3)/2, 2pi/3, 5+2i';
@@ -1345,7 +1345,10 @@ function endRound() {
   $('finalSub').innerHTML = `${S.correct} correct · ${pbMessage(S.points, pb)}`;
   $('roundStats').innerHTML = ratingTable(S, round) + movers(S.log) + changeList(S.changes) + catTable(round.cats) + weakBox(hist) + trendBlock(hist);
   $('misses').innerHTML = missList(S.log);
-  lastSummary = S.log.length ? roundSummary({ ...round, log: S.log, before: S.before, beforeHead: S.beforeHead }) : '';
+  const q = S.cur, pending = q && { cat: q.cat, type: q.type, ok: false, unanswered: true, ms: Date.now() - S.start, q: q.q, ans: answerTeX(q),
+    attempt: q.kind === 'bool' ? '' : $('answer').value, bool: q.kind === 'bool', again: !!q.resurfaced };
+  const fullLog = pending ? [...S.log, pending] : S.log;
+  lastSummary = S.log.length || pending?.attempt ? roundSummary({ ...round, log: fullLog, before: S.before, beforeHead: S.beforeHead }) : '';
   $('copyBtn').style.display = lastSummary ? 'block' : 'none';
   $('copyBtn').textContent = 'Copy for Claude';
   S = null;
@@ -1355,27 +1358,29 @@ function endRound() {
 let lastSummary = '';
 const plain = html => html.replace(/<br\s*\/?>/g, ' / ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 const secs = ms => (ms / 1000).toFixed(1) + ' s';
+// Every question in order, with status; the one on screen when the round ended is included (it never touches ratings)
+function questionLine(e, i) {
+  const par = TYPE_BY_ID[e.type].par, t = `${secs(e.ms)}, par ${par} s`;
+  const typed = e.bool ? '' : `; I had typed: ${e.attempt.trim() ? `"${e.attempt}"` : '(nothing)'}`;
+  const status = e.unanswered ? `UNANSWERED when the round ended (${secs(e.ms)})${typed}`
+    : e.ok ? `${e.ms > par * 1000 ? 'correct but SLOW' : 'correct'} (${t})${e.attempt ? `; I answered: ${e.attempt}` : ''}`
+    : e.skipped ? `MISSED, skipped (${t})${typed}` : `MISSED, I answered: ${e.attempt} (${t})`;
+  const tag = e.again ? ' (returned after skip)' : '';
+  return `${i + 1}. [${CONFIG.categories[e.cat].label} · ${TYPE_BY_ID[e.type].name}]${tag} Q: ${plain(e.q)}\n   Correct: ${e.ans.replace(/^\\text\{(.*)\}$/, '$1')}\n   ${status}`;
+}
 function roundSummary(r) {
-  const label = e => `[${CONFIG.categories[e.cat].label} · ${TYPE_BY_ID[e.type].name}]`;
-  const misses = r.log.filter(e => !e.ok).map((e, i) => {
-    const typed = e.bool ? '' : `; I had typed: ${e.attempt.trim() ? `"${e.attempt}"` : '(nothing)'}`;
-    const how = e.skipped ? `skipped after ${secs(e.ms)}${typed}` : `I answered: ${e.attempt} (${secs(e.ms)})`;
-    return `${i + 1}. ${label(e)}${e.again ? ' (returned after skip)' : ''} Q: ${plain(e.q)}\n   Correct: ${e.ans.replace(/^\\text\{(.*)\}$/, '$1')}\n   ${how}`;
-  });
-  const slow = r.log.filter(e => e.ok && e.ms > TYPE_BY_ID[e.type].par * 1000)
-    .sort((a, b) => b.ms / TYPE_BY_ID[b.type].par - a.ms / TYPE_BY_ID[a.type].par).slice(0, 6)
-    .map(e => `- ${label(e)} ${secs(e.ms)} (par ${TYPE_BY_ID[e.type].par} s): ${plain(e.q)}`);
-  const cats = Object.entries(r.cats).map(([k, c]) => `${CONFIG.categories[k].label} ${c.ok}/${c.n}, avg ${avgS(c)}, rating ${r.catR[k]} (${r.catR[k] - (r.before[k] ?? RC.start) >= 0 ? '+' : ''}${r.catR[k] - (r.before[k] ?? RC.start)})`);
+  const signedN = n => `${n >= 0 ? '+' : ''}${n}`;
+  const cats = Object.entries(r.cats).map(([k, c]) => `${CONFIG.categories[k].label} ${c.ok}/${c.n}, avg ${avgS(c)}, rating ${r.catR[k]} (${signedN(r.catR[k] - (r.before[k] ?? RC.start))})`);
+  const answered = r.log.filter(e => !e.unanswered);
   return [
     `Mental-math drill round · ${new Date(r.t).toLocaleString()} · week ${CONFIG.currentWeek} · ${STRICT_STACK ? 'laptop, STACK syntax enforced' : 'phone'}`,
-    `Points ${r.points} · ${r.score} correct · ${r.log.filter(e => !e.ok).length} missed · overall rating ${r.headline} (${r.headline - Math.round(r.beforeHead) >= 0 ? '+' : ''}${r.headline - Math.round(r.beforeHead)})`,
+    `Points ${r.points} · ${r.score} correct · ${answered.filter(e => !e.ok).length} missed · overall rating ${r.headline} (${signedN(r.headline - Math.round(r.beforeHead))})`,
     '',
     'Please review this round. My modules: Linear Algebra and Geometry I, Calculus I, Sequences and Series, Elementary Logic.',
-    'For each miss: name the gap (concept gap / algebra slip / notation or STACK-syntax slip), give the correct move, and say what to do next time.',
-    'Then point out any pattern across misses, and which slow types need the most work. Answers are in TeX; questions may contain TeX between $ signs.',
+    'For each MISSED or UNANSWERED question: name the gap (concept gap / algebra slip / notation or STACK-syntax slip) and walk me through the solution step by step.',
+    'For each SLOW one: give the faster routine. Then point out patterns across the round. Answers are in TeX; questions may contain TeX between $ signs.',
     '',
-    `MISSES (${misses.length})`, ...(misses.length ? misses : ['none']),
-    '', 'SLOW BUT CORRECT (over par)', ...(slow.length ? slow : ['none']),
+    `ALL QUESTIONS (${r.log.length}, in order)`, ...r.log.map(questionLine),
     '', 'BY CATEGORY', ...cats.map(c => '- ' + c),
   ].join('\n');
 }
@@ -1731,10 +1736,13 @@ function incentiveTests() {
 function summaryTest() {
   const log = [{ cat: 'calc', type: 'calc-inverse', ok: false, ms: 9400, q: '$f(x) = 3x - 2$. $\\ f^{-1}(x) = ?$', ans: '(x+2)/3', delta: -30, attempt: '3x+2', skipped: true },
     { cat: 'logic', type: 'logic-valid', ok: false, ms: 2100, q: '<span class="f">P → Q, &nbsp;Q &nbsp;∴&nbsp; P</span>', ans: T`\text{Invalid}`, delta: -30, attempt: 'Valid', skipped: false },
-    { cat: 'la', type: 'la-product', ok: true, ms: 26000, q: 'M', ans: 'x', delta: 3, attempt: '', skipped: false }];
-  const text = roundSummary({ t: Date.now(), points: 10, score: 1, log, cats: summarise(log), catR: { calc: 990, logic: 990, la: 1003 }, headline: 995,
+    { cat: 'la', type: 'la-product', ok: true, ms: 26000, q: 'M', ans: 'x', delta: 3, attempt: '1,2;3,4', skipped: false },
+    { cat: 'la', type: 'la-dot', ok: true, ms: 3000, q: 'D', ans: '5', delta: 20, attempt: '5', skipped: false },
+    { cat: 'seq', type: 'seq-geosum', ok: false, unanswered: true, ms: 12000, q: 'G', ans: '11', attempt: '1-2', bool: false }];
+  const text = roundSummary({ t: Date.now(), points: 10, score: 2, log, cats: summarise(log.filter(e => !e.unanswered)), catR: { calc: 990, logic: 990, la: 1003 }, headline: 995,
     before: { calc: 1000, logic: 1000, la: 1000 }, beforeHead: 1000 });
-  const need = ['I had typed: "3x+2"', 'Correct: (x+2)/3', 'I answered: Valid', 'P → Q, Q ∴ P', '2×2 product] 26.0 s (par 18 s)', 'name the gap'];
+  const need = ['I had typed: "3x+2"', 'Correct: (x+2)/3', 'MISSED, I answered: Valid', 'P → Q, Q ∴ P', 'correct but SLOW (26.0 s, par 18 s); I answered: 1,2;3,4',
+    '4. [Linear algebra · Dot product] Q: D', 'correct (3.0 s, par 7 s)', 'UNANSWERED when the round ended (12.0 s); I had typed: "1-2"', 'ALL QUESTIONS (5, in order)', 'walk me through'];
   return need.filter(n => !text.includes(n)).map(n => ({ what: 'summary missing', n }));
 }
 // A round that runs out of time must reach the results screen (regression: endRound <-> tick recursion)
