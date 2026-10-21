@@ -1172,10 +1172,15 @@ function startRound() {
   S.timer = setInterval(tick, 200);
   nextQuestion();
 }
-function tick() {
-  const left = Math.max(0, Math.ceil((S.end - Date.now()) / 1000)), sec = CONFIG.roundSeconds - left;
-  $('timer').textContent = left;
+// Points so far at each elapsed second, for the PB pace line
+function fillCurve() {
+  const sec = CONFIG.roundSeconds - Math.max(0, Math.ceil((S.end - Date.now()) / 1000));
   for (let i = S.curve.length; i <= sec; i++) S.curve[i] = S.points;
+  return sec;
+}
+function tick() {
+  const sec = fillCurve(), left = CONFIG.roundSeconds - sec;
+  $('timer').textContent = left;
   const wait = Math.ceil(CONFIG.skipUnlockSeconds - (Date.now() - S.start) / 1000);
   $('skipBtn').disabled = wait > 0;
   $('skipBtn').textContent = wait > 0 ? `Skip ${wait}` : 'Skip';
@@ -1306,7 +1311,7 @@ function restartAnimation(el, cls) { el.classList.remove(cls); void el.offsetWid
 function endRound() {
   if (!S) return;
   clearInterval(S.timer);
-  tick();
+  fillCurve();
   $('keys').style.display = 'none';
   $('answer').blur();
   const types = activeTypes(), hist = loadJSON(HISTORY_KEY, []);
@@ -1662,8 +1667,26 @@ function incentiveTests() {
   if (!(careful > spam)) fail('careful play does not beat spam', { careful, spam });
   return { failed, ratingDeltas: table, pointsPerQuestion: { spam, careful } };
 }
+// A round that runs out of time must reach the results screen (regression: endRound <-> tick recursion)
+function roundEndTest() {
+  const keys = [RATINGS_KEY, PB_KEY, HISTORY_KEY], saved = keys.map(k => localStorage.getItem(k)), savedRS = RS;
+  try {
+    startRound();
+    S.end = Date.now() - 1;
+    tick();
+    return S === null && $('results').classList.contains('on') ? [] : [{ what: 'round did not end at 0 s' }];
+  } catch (e) {
+    return [{ what: 'round end threw', error: String(e) }];
+  } finally {
+    if (S) clearInterval(S.timer);
+    S = null;
+    keys.forEach((k, i) => saved[i] === null ? localStorage.removeItem(k) : localStorage.setItem(k, saved[i]));
+    RS = savedRS;
+    showScreen('home');
+  }
+}
 function masteryTests() {
-  const failed = [], log = (n, ok, ms, days) => Array.from({ length: n }, (_, i) => ({ d: `2026-10-${10 + i % days}`, ok: ok(i), ms }));
+  const failed = [...roundEndTest()], log = (n, ok, ms, days) => Array.from({ length: n }, (_, i) => ({ d: `2026-10-${10 + i % days}`, ok: ok(i), ms }));
   const cases = [['all criteria met', log(30, () => true, 4000, 3), true], ['one day only', log(30, () => true, 4000, 1), false],
     ['median over par', log(30, () => true, 7000, 3), false], ['two misses in 30', log(30, i => i > 1, 4000, 3), false],
     ['one miss in 30', log(30, i => i > 0, 4000, 3), true], ['only 20 answers', log(20, () => true, 4000, 3), false]];
