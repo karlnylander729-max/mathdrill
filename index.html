@@ -286,7 +286,7 @@ const TYPES = [
 
   // ---------- Sequences and Series ----------
   { id: 'seq-terms', name: 'Number of terms', par: 4, cat: 'seq', week: 1, weight: 1, gen() {
-    const a = ri(-3, 8), b = a + ri(0, 15), body = pick(['k^2', '2k+1', '\\frac1k', '(-1)^k', '3^k']);
+    const a = ri(-3, 8), b = a + ri(0, 15), body = pick(['k^2', '(2k+1)', '\\frac1k', '(-1)^k', '3^k']);
     if (body === '\\frac1k' && a <= 0 && b >= 0) return null;
     return { q: T`Number of terms in $\displaystyle\sum_{k=${a}}^{${b}} ${body}$`, a: String(b - a + 1), kind: 'num' };
   }},
@@ -295,7 +295,7 @@ const TYPES = [
     return { q: T`$\displaystyle\sum_{k=${a}}^{${b}} ${c}$`, a: String(c * (b - a + 1)), kind: 'num' };
   }},
   { id: 'seq-const-n', name: 'Index-free sum', par: 6, cat: 'seq', week: 1, weight: 1, gen() {
-    const [tex, s] = pick([['n', 'n'], ['2n', '2n'], ['n+1', '(n+1)'], ['n^2', 'n^2'], ['3', '3'], ['n-1', '(n-1)']]);
+    const [tex, s] = pick([['n', 'n'], ['2n', '2n'], ['(n+1)', '(n+1)'], ['n^2', 'n^2'], ['3', '3'], ['(n-1)', '(n-1)']]);
     const j = pick(['j', 'k', 'i']);
     return { q: T`$\displaystyle\sum_{${j}=1}^{n} ${tex}$ (in terms of $n$)`, a: `n*${s}`, kind: 'expr', keys: N_KEYS };
   }},
@@ -315,7 +315,8 @@ const TYPES = [
   { id: 'seq-closed', name: 'Closed-form sum', par: 14, cat: 'seq', week: 1, weight: 1, gen() {
     const c = ri(1, 6), d = ri(-5, 5);
     return { q: T`$\displaystyle\sum_{k=1}^{n} (${poly([[c, 'k'], [d, '']])})$ (in terms of $n$)`,
-             a: `${c}*n(n+1)/2 + ${d}*n`, kind: 'expr', keys: N_KEYS };
+             a: `${c}*n(n+1)/2 + ${d}*n`, kind: 'expr', keys: N_KEYS,
+             show: T`\frac{${c === 1 ? '' : c}n(n+1)}{2}` + (d ? ` ${d < 0 ? '-' : '+'} ${Math.abs(d) === 1 ? '' : Math.abs(d)}n` : '') };
   }},
   { id: 'seq-floor', name: 'Floor / ceiling', par: 3, cat: 'seq', week: 1, weight: 1, gen() {
     const x = pick([1, -1]) * (ri(0, 9) + ri(1, 9) / 10), f = pick(['floor', 'ceil']);
