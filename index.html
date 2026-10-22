@@ -671,6 +671,7 @@ const TYPES = [
   details.cat summary { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; list-style: none; }
   details.cat summary::-webkit-details-marker { display: none; }
   details.cat summary b { font-size: 20px; font-variant-numeric: tabular-nums; }
+  .miss code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; }
   .stk code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; white-space: nowrap; }
   .stk th { padding-top: 12px; } .stk .katex { white-space: nowrap; }
   .drills { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -705,9 +706,9 @@ const TYPES = [
   <div class="muted center" id="finalSub"></div>
   <button class="start" onclick="startRound(lastDrill)">Again</button>
   <button id="copyBtn" style="width:100%; display:none" onclick="copySummary()">Copy for Claude</button>
+  <div id="misses"></div>
   <div id="roundStats"></div>
   <button style="width:100%; margin-top: 16px" onclick="showHome()">Home</button>
-  <div id="misses"></div>
 </div>
 <div id="keys" style="display:none"></div>
 <pre id="selftest" style="display:none"></pre>
@@ -1564,10 +1565,10 @@ function endRound() {
   $('finalSub').innerHTML = `${S.drill ? S.drill.name + ' · ' : ''}${S.correct} correct · ${pbMessage(S.points, pb)}`;
   const tail = S.drill ? drillTrend(hist, S.drill) : weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
   $('roundStats').innerHTML = ratingTable(S, round) + movers(S.log) + changeList(S.changes) + catTable(round.cats) + tail;
-  $('misses').innerHTML = missList(S.log);
   const q = S.cur, pending = q && { cat: q.cat, type: q.type, ok: false, unanswered: true, ms: Date.now() - S.start, q: q.q, ans: answerTeX(q),
     attempt: q.kind === 'bool' ? '' : $('answer').value, bool: q.kind === 'bool', again: !!q.resurfaced };
   const fullLog = pending ? [...S.log, pending] : S.log;
+  $('misses').innerHTML = reviewList(fullLog);
   lastSummary = S.log.length || pending?.attempt ? roundSummary({ ...round, drillName: S.drill?.name, log: fullLog, before: S.before, beforeHead: S.beforeHead }) : '';
   $('copyBtn').style.display = lastSummary ? 'block' : 'none';
   $('copyBtn').textContent = 'Copy for Claude';
@@ -1695,10 +1696,15 @@ function trendBlock(hist) {
   });
   return `<h2>Trend · accuracy, last ${recent.length} rounds</h2><table>${scoreRow}${rows.join('')}</table>`;
 }
-function missList(log) {
-  const misses = log.filter(e => !e.ok);
-  if (!misses.length) return '';
-  return '<h2>Missed</h2>' + misses.map(e => `<div class="miss">${renderMath(e.q)} &nbsp;→&nbsp; ${renderMath(`$${e.ans}$`)}</div>`).join('');
+// Misses and the unfinished last question, with your attempt next to the answer (skips the one shown at 0 s)
+function reviewList(log) {
+  const items = log.filter(e => !e.ok && !(e.unanswered && e.ms < 2000 && !e.attempt));
+  if (!items.length) return '';
+  return '<h2>Review</h2>' + items.map(e => {
+    const status = e.unanswered ? 'unfinished' : e.skipped ? 'skipped' : 'wrong';
+    const you = e.attempt ? `<code class="down">${esc(e.attempt)}</code>` : '<span class="muted">nothing typed</span>';
+    return `<div class="miss">${renderMath(e.q)}<div class="muted">${status} · you: ${you} · answer: ${renderMath(`$${e.ans}$`)}</div></div>`;
+  }).join('');
 }
 
 // ---------- home: headline, streak, category dashboard with per-type mastery progress and rating trends ----------
