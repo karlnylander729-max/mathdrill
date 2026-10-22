@@ -28,7 +28,7 @@
          bool (a = true/false, labels = [trueLabel, falseLabel]) ·
          syntax (exact L1 string; ASCII -> & v ~ accepted)
   type flag hub: false = drill-only (see drills).
-  options: show (TeX for the answer), mode (keyboard: text | decimal | none), dom [lo,hi] for real variables,
+  options: pattern (RegExp the typed answer must match, e.g. 'one logarithm'), show (TeX for the answer), mode (keyboard: text | decimal | none), dom [lo,hi] for real variables,
            parallel (vec: any nonzero multiple), unordered (vec as a set), keys (symbol row)
 ======================================================================= -->
 <script>
@@ -37,7 +37,7 @@ const CONFIG = {
   currentWeek: 4,
   categories: {
     la:    { label: 'Linear algebra',       weight: 1 },
-    calc:  { label: 'Calculus',             weight: 1 },
+    calc:  { label: 'Calculus',             weight: 1.2 },
     seq:   { label: 'Sequences & series',   weight: 1 },
     logic: { label: 'Elementary logic',     weight: 1 },
     basics: { label: 'Basics',              weight: 1 },   // drill-only skills, never in the main round
@@ -46,10 +46,18 @@ const CONFIG = {
   // Types marked hub: false appear only here (not in the main round, not in the overall rating).
   drills: [
     { id: 'matmul',      name: 'Matrix multiplication', types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'] },
+    { id: 'rowred',      name: 'Row reduction',         types: ['la-rowop', 'la-elimk', 'la-soltype'] },
     { id: 'signed',      name: 'Signed arithmetic',     types: ['arith-signed', 'arith-vecsub'] },
-    { id: 'counting',    name: 'Counting integers',     types: ['seq-terms', 'seq-const', 'seq-count'] },
+    { id: 'logs',        name: 'Logs & exponents',      types: ['calc-log', 'calc-ln', 'calc-loglaw', 'calc-exp', 'calc-logcombine', 'calc-expsolve', 'calc-explaw'] },
     { id: 'trig',        name: 'Exact trig',            types: ['calc-trig', 'calc-arc', 'calc-arc-branch'] },
-    { id: 'connectives', name: 'Connectives',           types: ['logic-connective', 'logic-forced', 'logic-value'] },
+    { id: 'complex',     name: 'Complex numbers',       types: ['calc-cx-mul', 'calc-cx-mod', 'calc-cx-arg', 'calc-cx-div', 'calc-ipow', 'calc-cx-euler'] },
+    { id: 'limits',      name: 'Limits',                types: ['calc-lim-std', 'calc-lim-inf', 'calc-piecewise', 'calc-lim-cancel'] },
+    { id: 'diff',        name: 'Differentiation',       types: ['calc-dstd', 'calc-dchain', 'calc-dprod', 'calc-deriv'] },   // week 6: appears when currentWeek reaches it
+    { id: 'counting',    name: 'Counting integers',     types: ['seq-terms', 'seq-const', 'seq-count'] },
+    { id: 'bounds',      name: 'Inequalities & bounds', types: ['seq-modulus', 'seq-interval', 'seq-findN', 'seq-maxmin', 'seq-supinf'] },
+    { id: 'negation',    name: 'Negating statements',   types: ['seq-negation', 'logic-negin'] },
+    { id: 'syntax',      name: 'Syntax',                types: ['logic-main', 'logic-restore', 'logic-drop', 'logic-official', 'logic-sentence'] },
+    { id: 'tables',      name: 'Truth tables',          types: ['logic-connective', 'logic-forced', 'logic-value', 'logic-column', 'logic-counter'] },
     { id: 'forms',       name: 'Famous forms',          types: ['logic-famous', 'logic-name'] },
   ],
   rating: {
@@ -179,6 +187,19 @@ const TYPES = [
     if (A.some(isZero) || [0, 1].some(j => B.every(r => r[j] === 0))) return null;
     const C = A.map(r => [0, 1].map(j => r.reduce((s, x, k) => s + x * B[k][j], 0)));
     return { q: T`$${matTeX(A)}${matTeX(B)}$`, a: C, kind: 'mat', show: matTeX(C) };
+  }},
+  { id: 'la-elimk', name: 'Elimination multiplier', par: 5, cat: 'la', week: 2, weight: 1, gen() {
+    const p = pick([1, 2, 3, -1, -2]), e = nz(-9, 9), r1 = [p, ri(-4, 4), ri(-5, 5)], r2 = [e, ri(-5, 5), ri(-5, 5)], k = frac(e, p);
+    return { q: T`$${matTeX([r1, r2])}$: $\ R_2 \to R_2 - kR_1$ makes the $(2,1)$ entry $0$. $\ k = ?$`, a: k.s, show: k.tex, kind: 'num' };
+  }},
+  { id: 'la-soltype', name: 'Solutions from echelon form', par: 6, cat: 'la', week: 2, weight: 1, gen() {
+    const kind = pick(['unique', 'none', 'infinite']), r1 = [nz(-3, 3), ri(-3, 3), ri(-3, 3), ri(-5, 5)];
+    const r2 = [0, nz(-3, 3), ri(-3, 3), ri(-5, 5)], r3 = { unique: [0, 0, nz(-3, 3), ri(-5, 5)], none: [0, 0, 0, nz(-5, 5)], infinite: [0, 0, 0, 0] }[kind];
+    const rows = [r1, Math.random() < 0.3 && kind === 'infinite' ? [0, 0, nz(-3, 3), ri(-5, 5)] : r2, r3];
+    const tex = T`\left(\begin{array}{ccc|c}${rows.map(r => r.join('&')).join('\\\\')}\end{array}\right)`;
+    const alias = { unique: ['unique', 'one', '1', 'exactly one'], none: ['none', 'no solution', 'no solutions', '0'], infinite: ['infinite', 'infinitely many', 'inf', 'infinity', '∞'] };
+    return { q: T`Augmented matrix in echelon form (unknowns $x_1, x_2, x_3$): $${tex}$. Solutions?`, a: alias[kind], show: T`\text{${kind}}`,
+             kind: 'text', keys: ['none', 'unique', 'infinite'], hint: 'none, unique or infinite' };
   }},
   { id: 'la-det2', name: '2×2 determinant', par: 5, cat: 'la', week: 6, weight: 1, gen() {
     const A = mat(2, 2, -6, 6), d = A[0][0] * A[1][1] - A[0][1] * A[1][0];
@@ -326,6 +347,78 @@ const TYPES = [
              a: `${a * n}x^${n - 1} + ${b * m}x^${Math.max(m - 1, 0)}`, kind: 'expr', show: poly([[a * n, xPow(n - 1)], [b * m, xPow(m - 1)]]) };
   }},
 
+  { id: 'calc-logcombine', name: 'Combine into one log', par: 12, cat: 'calc', week: 1, weight: 1, gen() {
+    const vars = shuffle(['x', 'y', 'z']).slice(0, ri(2, 3)).sort(), cs = vars.map(() => pick([1, 2, 3, -1, -2]));
+    if (!cs.some(c => c > 0) || cs.every(c => c === 1)) return null;
+    const pw = (v, c) => Math.abs(c) === 1 ? v : `${v}^${Math.abs(c)}`;
+    const num = vars.filter((v, i) => cs[i] > 0).map((v, i) => pw(v, cs[vars.indexOf(v)])), den = vars.filter((v, i) => cs[i] < 0).map(v => pw(v, cs[vars.indexOf(v)]));
+    const a = `ln(${num.join('*')}${den.length ? `/(${den.join('*')})` : ''})`;
+    const tex = poly(vars.map((v, i) => [cs[i], T`\ln ${v}`])), texNum = num.join(' ').replace(/\^(\d)/g, '^{$1}');
+    return { q: T`Write as a single logarithm: $${tex}$`, a, kind: 'expr', pattern: /^(ln|log)\((?!.*(ln|log)).*\)$/,
+             show: den.length ? T`\ln\frac{${texNum}}{${den.join(' ').replace(/\^(\d)/g, '^{$1}')}}` : T`\ln(${texNum})`, hint: 'one logarithm, e.g. ln(x^2/y)' };
+  }},
+  { id: 'calc-expsolve', name: 'Solve an exponential', par: 8, cat: 'calc', week: 1, weight: 1, gen() {
+    const a = nz(-5, 5), b = pick([2, 3, 5, 6, 7, 10]);
+    return pick([
+      { q: T`Solve $e^{${poly([[a, 'x']])}} = ${b}$. $\ x = ?$`, a: `ln(${b})/(${a})`, kind: 'num', show: overA(T`\ln ${b}`, a) },
+      { q: T`Solve $\ln(${poly([[Math.abs(a), 'x']])}) = ${b % 4 + 1}$. $\ x = ?$`, a: `e^(${b % 4 + 1})/(${Math.abs(a)})`, kind: 'num', show: overA(`e^{${b % 4 + 1}}`, Math.abs(a)) },
+    ]);
+  }},
+  { id: 'calc-explaw', name: 'Exponent laws', par: 10, cat: 'calc', week: 1, weight: 1, gen() {
+    const d = pick([2, 3]), p = nz(-5, 7), q = nz(-5, 7), r = nz(-4, 4), e = frac(p + q - r * d, d);
+    if (e.s === '0' || p % d === 0 || q % d === 0 || r === 1) return null;
+    const ex = (n, m) => frac(n, m).tex, num = e.s.includes('/') ? `x^(${e.s})` : e.s === '1' ? 'x' : `x^${e.s}`;
+    return { q: T`Simplify $\dfrac{x^{${ex(p, d)}}\cdot x^{${ex(q, d)}}}{x^{${r}}}$`, a: num, kind: 'expr', pattern: /^x(\^(-?\d+|\(-?\d+(\/\d+)?\)))?$/,
+             show: e.s === '1' ? 'x' : T`x^{${e.tex}}`, hint: 'a single power of x, e.g. x^(3/2)' };
+  }},
+  { id: 'calc-cx-div', name: 'Complex division', par: 15, cat: 'calc', week: 2, weight: 1, gen() {
+    const [p, q, c, d] = [ri(-4, 4), ri(-4, 4), nz(-3, 3), nz(-3, 3)];
+    if (p === 0 && q === 0) return null;
+    return { q: T`$\dfrac{${cx(p * c - q * d, p * d + q * c)}}{${cx(c, d)}}$`, a: cx(p, q), kind: 'num', keys: CX_KEYS };
+  }},
+  { id: 'calc-ipow', name: 'Powers of i', par: 4, cat: 'calc', week: 2, weight: 1, gen() {
+    const n = ri(2, 99), a = ['1', 'i', '-1', '-i'][n % 4];
+    return { q: T`$i^{${n}}$`, a, kind: 'num', keys: ['i', '-'], pattern: /^-?(1|%?i)$/, hint: '1, i, -1 or -i' };
+  }},
+  { id: 'calc-cx-euler', name: 'Euler form to a + bi', par: 10, cat: 'calc', week: 2, weight: 1, gen() {
+    const m = pick(STD_ANGLES.filter(t => t > -12 && t <= 12)), k = ri(1, 2), [re, im] = argPoint(m, k);
+    const diag = m % 3 === 0 && m % 6 !== 0, r = diag ? T`${k === 1 ? '' : k}\sqrt2` : String(2 * k), rv = diag ? k * Math.SQRT2 : 2 * k;
+    const sq = s => s.replace(/(\d*)\\sqrt3/, (x, c) => `${c ? c + '*' : ''}sqrt(3)`), th = m * Math.PI / 12;
+    const ang = m === 0 ? '0' : m < 0 ? `-i${piFrac(-m, 12).tex}` : `i${piFrac(m, 12).tex}`;
+    return { q: T`$${r}\,e^{${ang}}$ in the form $a + bi$`, a: `${sq(re.tex)} + (${sq(im.tex)})*i`, kind: 'num',
+             keys: [...CX_KEYS, 'sqrt('], show: cxTeX(re, im), check: Math.abs(re.v - rv * Math.cos(th)) < 1e-9 && Math.abs(im.v - rv * Math.sin(th)) < 1e-9 };
+  }},
+  { id: 'calc-lim-cancel', name: 'Factor and cancel limit', par: 10, cat: 'calc', week: 4, weight: 1, gen() {
+    const a = nz(-5, 5), b = ri(-6, 6);
+    if (a === b) return null;
+    const top = poly([[1, 'x^2'], [-(a + b), 'x'], [a * b, '']]), bot = poly([[1, 'x'], [-a, '']]);
+    return { q: T`$\displaystyle\lim_{x\to ${a}} \frac{${top}}{${bot}}$`, a: String(a - b), kind: 'num', val: ((x) => (x * x - (a + b) * x + a * b) / (x - a))(a + 1e-7) };
+  }},
+  { id: 'calc-dstd', name: 'Standard derivatives', par: 4, cat: 'calc', week: 6, weight: 1, gen() {
+    const [tex, ans, sh, dom] = pick([[T`\sin x`, 'cos(x)', T`\cos x`], [T`\cos x`, '-sin(x)', T`-\sin x`], [T`\tan x`, '1/cos(x)^2', T`\sec^2 x`, [0.1, 1.2]],
+      ['e^x', 'e^x', 'e^x'], [T`\ln x`, '1/x', T`\frac1x`], [T`\arcsin x`, '1/sqrt(1-x^2)', T`\frac{1}{\sqrt{1-x^2}}`, [0.1, 0.9]],
+      [T`\arctan x`, '1/(1+x^2)', T`\frac{1}{1+x^2}`], [T`\sinh x`, 'cosh(x)', T`\cosh x`], [T`\cosh x`, 'sinh(x)', T`\sinh x`],
+      [T`\sqrt x`, '1/(2*sqrt(x))', T`\frac{1}{2\sqrt x}`], ['2^x', 'ln(2)*2^x', T`2^x\ln 2`]]);
+    return { q: T`$\dfrac{d}{dx}\,${tex}$`, a: ans, kind: 'expr', show: sh, ...(dom && { dom }) };
+  }},
+  { id: 'calc-dchain', name: 'Chain rule (simple)', par: 8, cat: 'calc', week: 6, weight: 1, gen() {
+    const a = nz(-5, 5), b = ri(1, 6), n = ri(2, 5), A = Math.abs(a), lin = poly([[A, 'x'], [b, '']]);
+    const [tex, ans, sh, dom] = pick([
+      [`e^{${poly([[a, 'x']])}}`, `${a}*e^(${a}x)`, T`${a}e^{${poly([[a, 'x']])}}`],
+      [T`\sin(${poly([[a, 'x']])})`, `${a}*cos(${a}x)`, T`${a}\cos(${poly([[a, 'x']])})`],
+      [T`(${lin})^{${n}}`, `${n * A}*(${A}x+${b})^${n - 1}`, T`${n * A}(${lin})` + (n - 1 > 1 ? `^{${n - 1}}` : '')],
+      [T`\ln(${lin})`, `${A}/(${A}x+${b})`, T`\frac{${A}}{${lin}}`],
+    ]);
+    return { q: T`$\dfrac{d}{dx}\,${tex}$`, a: ans, kind: 'expr', show: sh.replace(/^1(?=\D)/, '').replace(/^-1(?=\D)/, '-'), ...(dom && { dom }) };
+  }},
+  { id: 'calc-dprod', name: 'Product rule (simple)', par: 12, cat: 'calc', week: 6, weight: 1, gen() {
+    const n = ri(2, 4);
+    const [tex, ans, sh] = pick([[`x^{${n}}e^x`, `(${n}x^${n - 1} + x^${n})*e^x`, T`(${n}x^{${n - 1}} + x^{${n}})e^x`],
+      [T`x^{${n}}\sin x`, `${n}x^${n - 1}*sin(x) + x^${n}*cos(x)`, T`${n}x^{${n - 1}}\sin x + x^{${n}}\cos x`],
+      [T`x\ln x`, 'ln(x) + 1', T`\ln x + 1`], [T`e^x\sin x`, 'e^x*(sin(x) + cos(x))', T`e^x(\sin x + \cos x)`]]);
+    return { q: T`$\dfrac{d}{dx}\,${tex}$`, a: ans, kind: 'expr', show: sh.replace(/x\^\{1\}/g, 'x') };
+  }},
+
   // ---------- Sequences and Series ----------
   { id: 'seq-terms', name: 'Number of terms', par: 4, cat: 'seq', week: 1, weight: 1, gen() {
     const a = ri(-3, 8), b = a + ri(0, 15), body = pick(['k^2', '(2k+1)', '\\frac1k', '(-1)^k', '3^k']);
@@ -402,6 +495,25 @@ const TYPES = [
       { q: T`$f:[${a},${b}]\to\mathbb R,\ f(x) = ${f}$. Injective?`, a: a >= 0 || b <= 0, kind: 'bool', labels: ['Yes', 'No'] },
       { q: T`$f:\mathbb R\to[${c},\infty),\ f(x) = ${poly([[1, 'x^2'], [k, '']])}$. Surjective?`, a: c === k, kind: 'bool', labels: ['Yes', 'No'] },
     ]);
+  }},
+
+  { id: 'seq-findN', name: 'Smallest N', par: 8, cat: 'seq', week: 4, weight: 1, gen() {
+    const D = pick([100, 1000]), p = ri(1, D === 100 ? 20 : 30), eps = p / D, c = ri(2, 9), K = ri(10, 5000);
+    const first = test => { for (let n = 1; ; n++) if (test(n)) return n; };
+    const [tex, n] = pick([[T`\frac1n < ${eps}`, first(n => n * p > D)], [T`\frac{${c}}{n} < ${eps}`, first(n => n * p > c * D)],
+      [T`\frac{1}{n^2} < ${eps}`, first(n => n * n * p > D)], [T`2^n > ${K}`, first(n => 2 ** n > K)], [T`\left(\tfrac12\right)^n < ${eps}`, first(n => 2 ** n * p > D)]]);
+    return { q: T`Smallest $n \in \mathbb N$ with $${tex}$`, a: String(n), kind: 'num' };
+  }},
+  { id: 'seq-maxmin', name: 'Max / min of a set', par: 7, cat: 'seq', week: 4, weight: 1, gen() {
+    return balanced(() => boundsQuestion(['max', 'min']), q => !Array.isArray(q.a));
+  }},
+  { id: 'seq-supinf', name: 'Sup / inf of a set', par: 7, cat: 'seq', week: 5, weight: 1, gen() {
+    return balanced(() => boundsQuestion(['sup', 'inf']), q => !Array.isArray(q.a));
+  }},
+  { id: 'seq-negation', name: 'Correct negation?', par: 10, cat: 'seq', week: 2, weight: 1, gen() {
+    const st = pick(NEG_TEMPLATES)(), right = Math.random() < 0.5, cand = right ? negateStatement(st) : pick(NEG_DISTRACTORS)(st);
+    if (!cand) return null;
+    return { q: T`Statement: $${quantTeX(st)}$<br>Negation? $\ ${quantTeX(cand)}$`, a: right, kind: 'bool', labels: ['Correct', 'Wrong'] };
   }},
 
   // ---------- Elementary Logic ----------
@@ -700,7 +812,7 @@ function cxTeX(re, im) {
 }
 
 // numerator / a, with the sign pulled out front: (x+6)/(-5) -> -\frac{x+6}{5}
-const overA = (num, a) => Math.abs(a) === 1 ? (a < 0 ? T`-(${num})` : num) : T`${a < 0 ? '-' : ''}\frac{${num}}{${Math.abs(a)}}`;
+const overA = (num, a) => Math.abs(a) === 1 ? (a < 0 ? (/\s[-+]\s/.test(num) ? T`-(${num})` : `-${num}`) : num) : T`${a < 0 ? '-' : ''}\frac{${num}}{${Math.abs(a)}}`;
 // Composition building blocks: u is the slot
 const OUTER = [{ tex: 'u^2', s: 'u^2', sh: '(U)^2' }, { tex: 'u^3', s: 'u^3', sh: '(U)^3' }, { tex: 'u + 3', s: 'u + 3', sh: 'U + 3' }, { tex: '2u', s: '2u', sh: '2(U)' },
   { tex: 'e^u', s: 'e^u', sh: 'e^{U}' }, { tex: T`\sqrt u`, s: 'sqrt(u)', sh: T`\sqrt{U}` }, { tex: T`\sin u`, s: 'sin(u)', sh: T`\sin(U)` },
@@ -763,6 +875,48 @@ function sqHas(A, k) {
   return Number.isInteger(r) && (A === 'Z' || r >= 1);
 }
 const rootIn = (A, x) => A === 'R' || (Number.isInteger(x) && (A === 'Z' || x >= 1));
+
+// Max/min (week 4) or sup/inf (week 5) of an interval or of {c + d/n : n ∈ N}. "none" when it does not exist.
+function boundsQuestion([hiName, loName]) {
+  const ask = pick([hiName, loName]), isHi = ask === hiName, exists = hiName === 'max';
+  let tex, hi, lo;
+  if (Math.random() < 0.5) {
+    const I = randInterval();
+    if (I.lo === -Infinity && I.hi === Infinity) return null;
+    tex = ivTeX(I);
+    hi = I.hi === Infinity ? null : (!exists || I.hc) ? I.hi : null;
+    lo = I.lo === -Infinity ? null : (!exists || I.lc) ? I.lo : null;
+  } else {
+    const c = ri(-3, 3), d = nz(-4, 4), first = c + d;
+    tex = T`\left\{${c ? c + ' ' : ''}${d < 0 ? '-' : c ? '+' : ''}\frac{${Math.abs(d)}}{n} : n\in\mathbb N\right\}`;
+    [hi, lo] = d > 0 ? [first, exists ? null : c] : [exists ? null : c, first];
+  }
+  const v = isHi ? hi : lo, a = v === null ? ['none', 'dne', 'does not exist'] : String(v);
+  return { q: T`$${'\\' + ask}\,${tex}$`, a, kind: 'text', keys: ['none', '-'], hint: 'a number, or none if it does not exist', show: v === null ? T`\text{none}` : String(v) };
+}
+
+// Quantified statements as data: { qs: [{ q: '∀'|'∃', v, dom }], lhs, rel, rhs }
+const NEG_REL = { '<': '\\ge', '\\le': '>', '>': '\\le', '\\ge': '<', '=': '\\ne' };
+const OPP_REL = { '<': '>', '\\le': '\\ge', '>': '<', '\\ge': '\\le' };
+const NEG_DOM = { '> 0': '\\le 0', '\\ge N': '< N' };
+const NEG_TEMPLATES = [
+  () => ({ qs: [{ q: '∀', v: '\\varepsilon', dom: '> 0' }, { q: '∃', v: 'N', dom: '\\in\\mathbb N' }, { q: '∀', v: 'n', dom: '\\ge N' }], lhs: '|a_n - L|', rel: pick(['<', '\\le']), rhs: '\\varepsilon' }),
+  () => ({ qs: [{ q: '∃', v: 'M', dom: '\\in\\mathbb R' }, { q: '∀', v: 'n', dom: '\\in\\mathbb N' }], lhs: 'a_n', rel: pick(['\\le', '<']), rhs: 'M' }),
+  () => ({ qs: [{ q: '∀', v: 'x', dom: '\\in\\mathbb R' }, { q: '∃', v: 'y', dom: '\\in\\mathbb R' }], lhs: 'y', rel: pick(['>', '\\ge']), rhs: 'x' }),
+  () => ({ qs: [{ q: '∃', v: 'x', dom: '\\in\\mathbb N' }, { q: '∀', v: 'y', dom: '\\in\\mathbb N' }], lhs: 'x', rel: pick(['\\le', '<']), rhs: 'y' }),
+  () => ({ qs: [{ q: '∀', v: 'x', dom: '\\in\\mathbb Z' }, { q: '∃', v: 'y', dom: '\\in\\mathbb Z' }], lhs: 'x + y', rel: '=', rhs: '0' }),
+];
+const flipQ = q => (q === '∀' ? '∃' : '∀');
+const negateStatement = st => ({ ...st, qs: st.qs.map(x => ({ ...x, q: flipQ(x.q) })), rel: NEG_REL[st.rel] });
+// The three logged error types (progress.md, 2026-10-13), plus forgetting to negate the predicate
+const NEG_DISTRACTORS = [
+  st => { const i = st.qs.findIndex(x => NEG_DOM[x.dom]); if (i < 0) return null;
+    const n = negateStatement(st); n.qs = n.qs.map((x, j) => j === i ? { ...x, dom: NEG_DOM[x.dom] } : x); return n; },   // negated the domain
+  st => { const n = negateStatement(st), i = ri(0, st.qs.length - 1); n.qs = n.qs.map((x, j) => j === i ? { ...x, q: st.qs[j].q } : x); return n; },   // one quantifier not flipped
+  st => OPP_REL[st.rel] ? { ...negateStatement(st), rel: OPP_REL[st.rel] } : null,   // opposite instead of "not"
+  st => ({ ...negateStatement(st), rel: st.rel }),   // predicate not negated
+];
+const quantTeX = st => st.qs.map(x => `${x.q === '∀' ? T`\forall` : T`\exists`} ${x.v} ${x.dom}`).join(T`\ `) + T`:\ ${st.lhs} ${st.rel} ${st.rhs}`;
 
 // ---------- propositional logic ----------
 const BIN = ['∧', '∨', '→', '↔'];
@@ -1093,6 +1247,7 @@ function checkLogic(q, input) {
 
 function check(q, input, strict = STRICT_STACK) {
   if (!input.trim()) return false;
+  if (q.pattern && !q.pattern.test(input.replace(/\s+/g, '').toLowerCase())) return false;   // required answer shape
   try {
     if (q.kind === 'num' || q.kind === 'expr') return checkExpr(q, input, strict);
     if (q.kind === 'vec' || q.kind === 'mat') return checkGrid(q, input);
@@ -1744,6 +1899,9 @@ const CHECKER_CASES = [
   ['R', 'interval', ['R', 'ℝ', '(-inf,inf)', 'r'], ['(0,inf)']],
   ['P→Q', 'logic', ['P→Q', 'P->Q', '¬Q→¬P', '(P→Q)', '¬P∨Q', '~P v Q'], ['Q→P', 'P↔Q', 'P', 'P→']],
   ['P∨Q', 'logic', ['P∨Q', 'Q∨P', '¬P→Q', '¬Q→P'], ['P∧Q', 'P→Q']],
+  ['ln(x^2/y)', 'expr', ['ln(x^2/y)', 'log(x*x/y)', 'ln(x^2*y^(-1))'], ['2ln(x)-ln(y)', 'ln(x^2)-ln(y)', 'ln(x^2/y'], { pattern: /^(ln|log)\((?!.*(ln|log)).*\)$/ }],
+  ['x^(3/2)', 'expr', ['x^(3/2)', 'x^(6/4)'], ['x^(1/2)*x', 'sqrt(x)^3', 'x^3/2'], { pattern: /^x(\^(-?\d+|\(-?\d+(\/\d+)?\)))?$/ }],
+  ['-i', 'num', ['-i', '-%i'], ['i^3', 'i^39', '-1*i'], { pattern: /^-?(1|%?i)$/ }],
   ['¬P ∨ ¬Q', 'logic', ['¬P∨¬Q', '¬Q ∨ ¬P', 'P→¬Q'], ['¬(P∧Q)', '¬¬¬P∨¬Q', 'P∨¬Q'], { nnf: true }],
   ['((P ∧ Q) → R)', 'syntax', ['((P∧Q)→R)', '((P&Q)->R)', '( ( P ∧ Q ) → R )', '((p&q)->r)'], ['(P∧Q)→R', '((P∧Q)→R', '(P∧(Q→R))']],
   ['P ∧ Q ∧ R', 'syntax', ['P∧Q∧R', 'P & Q & R'], ['((P∧Q)∧R)', 'P∧(Q∧R)']],
@@ -1856,7 +2014,7 @@ function masteryTests() {
   }
   for (const d of CONFIG.drills) {
     d.types.filter(id => !TYPE_BY_ID[id]).forEach(id => failed.push({ what: 'drill lists unknown type', drill: d.id, id }));
-    if (!drillTypes(d).length) failed.push({ what: 'drill has no active types', drill: d.id });
+    if (!d.types.some(id => TYPE_BY_ID[id])) failed.push({ what: 'drill has no types', drill: d.id });
   }
   activeTypes().filter(t => t.hub === false).forEach(t => failed.push({ what: 'drill-only type in main round', id: t.id }));
   TYPES.filter(t => !t.name || !(t.par > 0)).forEach(t => failed.push({ what: 'type lacks name/par', id: t.id }));
