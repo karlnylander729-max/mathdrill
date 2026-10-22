@@ -1576,7 +1576,7 @@ function endRound() {
 }
 // ---------- "Copy for Claude": the round as plain text with a diagnosis request ----------
 let lastSummary = '';
-const plain = html => html.replace(/<br\s*\/?>/g, ' / ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+const plain = html => html.replace(/<br\s*\/?>/g, ' / ').replace(/<\/?(span|sub|b|i)\b[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 const secs = ms => (ms / 1000).toFixed(1) + ' s';
 // Every question in order, with status; the one on screen when the round ended is included (it never touches ratings)
 function questionLine(e, i) {
@@ -1973,11 +1973,12 @@ function summaryTest() {
     { cat: 'logic', type: 'logic-valid', ok: false, ms: 2100, q: '<span class="f">P → Q, &nbsp;Q &nbsp;∴&nbsp; P</span>', ans: T`\text{Invalid}`, delta: -30, attempt: 'Valid', skipped: false },
     { cat: 'la', type: 'la-product', ok: true, ms: 26000, q: 'M', ans: 'x', delta: 3, attempt: '1,2;3,4', skipped: false },
     { cat: 'la', type: 'la-dot', ok: true, ms: 3000, q: 'D', ans: '5', delta: 20, attempt: '5', skipped: false },
-    { cat: 'seq', type: 'seq-geosum', ok: false, unanswered: true, ms: 12000, q: 'G', ans: '11', attempt: '1-2', bool: false }];
+    { cat: 'seq', type: 'seq-geosum', ok: false, unanswered: true, ms: 12000, q: 'G', ans: '11', attempt: '1-2', bool: false },
+    { cat: 'seq', type: 'seq-count', ok: true, ms: 3000, q: '$|\\{x : -3 < x \\le 2\\}| > 0$', ans: '5', attempt: '5' }];
   const text = roundSummary({ t: Date.now(), points: 10, score: 2, log, cats: summarise(log.filter(e => !e.unanswered)), catR: { calc: 990, logic: 990, la: 1003 }, headline: 995,
     before: { calc: 1000, logic: 1000, la: 1000 }, beforeHead: 1000 });
-  const need = ['I had typed: "3x+2"', 'Correct: (x+2)/3', 'MISSED, I answered: Valid', 'P → Q, Q ∴ P', 'correct but SLOW (26.0 s, par 18 s); I answered: 1,2;3,4',
-    '4. [Linear algebra · Dot product] Q: D', 'correct (3.0 s, par 7 s)', 'UNANSWERED when the round ended (12.0 s); I had typed: "1-2"', 'ALL QUESTIONS (5, in order)', 'walk me through'];
+  const need = ['-3 < x \\le 2\\}| > 0', 'I had typed: "3x+2"', 'Correct: (x+2)/3', 'MISSED, I answered: Valid', 'P → Q, Q ∴ P', 'correct but SLOW (26.0 s, par 18 s); I answered: 1,2;3,4',
+    '4. [Linear algebra · Dot product] Q: D', 'correct (3.0 s, par 7 s)', 'UNANSWERED when the round ended (12.0 s); I had typed: "1-2"', 'ALL QUESTIONS (6, in order)', 'walk me through'];
   return need.filter(n => !text.includes(n)).map(n => ({ what: 'summary missing', n }));
 }
 // A round that runs out of time must reach the results screen (regression: endRound <-> tick recursion)
