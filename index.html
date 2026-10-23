@@ -1563,7 +1563,7 @@ function endRound() {
   if (S.log.length && (!pb || S.points > pb.points)) localStorage.setItem(pbKey(S.drill), JSON.stringify({ points: S.points, curve: S.curve }));
   $('finalScore').textContent = S.points;
   $('finalSub').innerHTML = `${S.drill ? S.drill.name + ' · ' : ''}${S.correct} correct · ${pbMessage(S.points, pb)}`;
-  const tail = S.drill ? drillTrend(hist, S.drill) : weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
+  const tail = S.drill ? statsBlock(hist, S.drill.id, S.drill.name, true) : statsBlock(hist, null, 'Main round') + weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
   $('roundStats').innerHTML = ratingTable(S, round) + movers(S.log) + changeList(S.changes) + catTable(round.cats) + tail;
   const q = S.cur, pending = q && { cat: q.cat, type: q.type, ok: false, unanswered: true, ms: Date.now() - S.start, q: q.q, ans: answerTeX(q),
     attempt: q.kind === 'bool' ? '' : $('answer').value, bool: q.kind === 'bool', again: !!q.resurfaced };
@@ -1709,10 +1709,32 @@ function reviewList(log) {
 
 // ---------- home: headline, streak, category dashboard with per-type mastery progress and rating trends ----------
 const mainRounds = hist => hist.filter(r => !r.drill);
-function drillTrend(hist, d) {
-  const rounds = hist.filter(r => r.drill === d.id).slice(-20), best = Math.max(...rounds.map(r => r.points), 1);
+// ---------- stats: per drill (and the main round), from the saved history ----------
+const roundTotals = r => Object.values(r.cats).reduce((a, c) => ({ n: a.n + c.n, ok: a.ok + c.ok, ms: a.ms + c.ms }), { n: 0, ok: 0, ms: 0 });
+const secsPerQ = t => t.ok ? t.ms / t.ok / 1000 : null;
+const sumTotals = rs => rs.map(roundTotals).reduce((a, c) => ({ n: a.n + c.n, ok: a.ok + c.ok, ms: a.ms + c.ms }), { n: 0, ok: 0, ms: 0 });
+const when = t => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+function statsBlock(hist, id, name, open = false) {
+  const rounds = hist.filter(r => (r.drill || null) === id && r.points !== undefined && roundTotals(r).n);
   if (!rounds.length) return '';
-  return `<h2>${d.name} · points, last ${rounds.length} rounds</h2>` + sparkline(rounds.map(r => ({ y: Math.max(r.points, 0) / best, r })), v => `${shortDate(v.r.t)}: ${v.r.points}`, 300);
+  const top = [...rounds].sort((a, b) => b.points - a.points || (secsPerQ(roundTotals(a)) ?? 1e9) - (secsPerQ(roundTotals(b)) ?? 1e9)).slice(0, 3);
+  const t3 = secsPerQ(sumTotals(top)), all = sumTotals(rounds), fmt = x => x === null ? '–' : x.toFixed(1) + ' s';
+  const rows = top.map((r, i) => { const t = roundTotals(r);
+    return `<tr><td>${i + 1}. ${when(r.t)}</td><td class="n">${r.points}</td><td class="n">${t.ok}/${t.n}</td><td class="n">${fmt(secsPerQ(t))}</td></tr>`; }).join('');
+  const recent = rounds.slice(-20), times = recent.map(r => secsPerQ(roundTotals(r))), tMax = Math.max(...times.filter(x => x !== null), 1);
+  const timeLine = sparkline(recent.map((r, i) => ({ y: times[i] === null ? 0 : 1 - times[i] / tMax, r, s: times[i] })), v => `${when(v.r.t)}: ${fmt(v.s)} per question`, 260);
+  const best = Math.max(...recent.map(r => r.points), 1);
+  const ptsLine = sparkline(recent.map(r => ({ y: Math.max(r.points, 0) / best, r })), v => `${when(v.r.t)}: ${v.r.points} points`, 260);
+  return `<details class="cat"${open ? ' open' : ''}><summary><span>${name}<br><span class="muted">${rounds.length} round${rounds.length === 1 ? '' : 's'} · best ${top[0].points}</span></span>
+    <span class="muted">best-3 avg</span><b>${fmt(t3)}</b></summary>
+    <table><tr><th>Best rounds</th><th class="n">Points</th><th class="n">Correct</th><th class="n">s / question</th></tr>${rows}</table>
+    <p class="muted">All rounds: ${Math.round(100 * all.ok / all.n)}% correct, ${fmt(secsPerQ(all))} per correct answer. Best-3 average is per question, pooled over those rounds.</p>
+    <div class="muted">Time per question (higher line = faster)</div>${timeLine}
+    <div class="muted">Points</div>${ptsLine}</details>`;
+}
+function statsSection(hist) {
+  const blocks = [statsBlock(hist, null, 'Main round'), ...CONFIG.drills.map(d => statsBlock(hist, d.id, d.name))].join('');
+  return blocks ? `<h2>Stats · tap for best rounds and trends</h2>${blocks}` : '';
 }
 function drillsBlock() {
   return '<h2>Focus drills · 120 s on one skill</h2><div class="drills">' + CONFIG.drills.filter(d => drillTypes(d).length).map(d => {
@@ -1727,7 +1749,7 @@ function showHome() {
   $('poolInfo').textContent = `Week ${CONFIG.currentWeek} · ${types.length} types`;
   $('homeHead').innerHTML = `<div class="score">${Math.round(headline())}</div>
     <div class="muted center">rating · ${mastered}/${types.length} mastered · streak ${streak} day${streak === 1 ? '' : 's'} · today: ${todaysModifier().name}</div>`;
-  $('homeStats').innerHTML = drillsBlock() + dashboard(types, hist) + stackGuide() + weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
+  $('homeStats').innerHTML = drillsBlock() + statsSection(hist) + dashboard(types, hist) + stackGuide() + weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
   showScreen('home');
 }
 function dashboard(types, hist) {
@@ -2005,8 +2027,17 @@ function roundEndTest() {
     showScreen('home');
   }
 }
+function statsTest() {
+  const mk = (pts, ok, n, ms, drill) => ({ t: Date.now(), points: pts, drill, cats: { la: { n, ok, ms } } });
+  const hist = [mk(249, 12, 12, 120100, 'matmul'), mk(118, 7, 8, 94100, 'matmul'), mk(7, 1, 2, 20200, 'matmul'), mk(7, 1, 2, 45700, 'matmul'), mk(50, 3, 3, 9000)];
+  const html = statsBlock(hist, 'matmul', 'Matrix multiplication');
+  const want = ['4 rounds', 'best 249', '11.7 s'];   // best-3 pooled: (120.1 + 94.1 + 20.2) s / 20 correct
+  const fails = want.filter(w => !html.includes(w)).map(w => ({ what: 'stats block missing', w }));
+  if (statsBlock(hist, null, 'Main').includes('249')) fails.push({ what: 'main stats include drill rounds' });
+  return fails;
+}
 function masteryTests() {
-  const failed = [...roundEndTest(), ...summaryTest()], log = (n, ok, ms, days) => Array.from({ length: n }, (_, i) => ({ d: `2026-10-${10 + i % days}`, ok: ok(i), ms }));
+  const failed = [...roundEndTest(), ...summaryTest(), ...statsTest()], log = (n, ok, ms, days) => Array.from({ length: n }, (_, i) => ({ d: `2026-10-${10 + i % days}`, ok: ok(i), ms }));
   const cases = [['all criteria met', log(30, () => true, 4000, 3), true], ['one day only', log(30, () => true, 4000, 1), false],
     ['median over par', log(30, () => true, 7000, 3), false], ['two misses in 30', log(30, i => i > 1, 4000, 3), false],
     ['one miss in 30', log(30, i => i > 0, 4000, 3), true], ['only 20 answers', log(20, () => true, 4000, 3), false]];
