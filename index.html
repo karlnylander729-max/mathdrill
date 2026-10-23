@@ -1527,7 +1527,7 @@ const wordCount = s => s.split(/\s+/).filter(Boolean).length;
   <div class="muted" id="cMeta"></div>
   <div class="tabs" id="cTabs"><button data-tab="picture" onclick="conceptTab('picture')">Picture</button><button data-tab="algebra" onclick="conceptTab('algebra')">Algebra</button><button data-tab="origin" onclick="conceptTab('origin')">Origin</button><button data-tab="try" onclick="conceptTab('try')">Try</button></div>
   <div id="cBody"></div>
-  <div class="row"><button onclick="askClaude()">Ask Claude about this</button><button onclick="closeConcept()">Back to drilling</button></div>
+  <div class="row"><button id="askBtn" onclick="askClaude()">Ask Claude about this</button><button onclick="closeConcept()">Back to drilling</button></div>
 </div>
 <div id="keys" style="display:none"></div>
 <pre id="selftest" style="display:none"></pre>
@@ -3586,12 +3586,15 @@ function roundSummary(r) {
     '', 'BY CATEGORY', ...cats.map(c => '- ' + c),
   ].join('\n');
 }
-async function copySummary() {
-  try { await navigator.clipboard.writeText(lastSummary); }
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); }
   catch {
-    const ta = Object.assign(document.createElement('textarea'), { value: lastSummary });
+    const ta = Object.assign(document.createElement('textarea'), { value: text });
     document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
   }
+}
+async function copySummary() {
+  await copyText(lastSummary);
   $('copyBtn').textContent = 'Copied ✓ · paste into Claude';
 }
 
@@ -3853,7 +3856,23 @@ function stackGuide() {
 const SEEN_KEY = 'drill-concepts-seen-v1';
 const seenConcepts = () => new Set(loadJSON(SEEN_KEY, []));
 function markSeen(id) { localStorage.setItem(SEEN_KEY, JSON.stringify([...seenConcepts().add(id)])); }
-function askClaude() {}   // stub: Task 5 replaces this
+// "Ask Claude about this": the concept's four lenses (and the missed question, if any) as plain text
+function conceptAskText(c, context = {}) {
+  const q = context.q, attempt = (context.attempt || '').trim();
+  const missed = q ? [`Q: ${plain(q.q)}`, `Correct: ${q.ans ?? answerTeX(q)}`, attempt ? `I had typed: "${attempt}"` : 'I had typed: (nothing)'] : [];
+  return [`I am studying "${c.name}" in my maths course and I am stuck.`, '',
+    `Picture: ${c.picture.alt}`, `Algebra: ${plain(c.algebra)}`, `Origin: ${plain(c.originText)}`, '',
+    ...missed, ...(q ? [''] : []), "Explain the step I'm stuck on, then let me ask follow-ups."].join('\n');
+}
+// From the Try tab the context is the Try question and what is typed so far
+function askContext() {
+  const input = $('tryAnswer');
+  return input && CV.q ? { q: CV.q, attempt: input.value } : CV.context;
+}
+async function askClaude() {
+  await copyText(conceptAskText(CV.c, askContext()));
+  $('askBtn').textContent = 'Copied ✓ · paste into Claude';
+}
 const conceptById = id => CONCEPTS.find(c => c.id === id);
 let CV = null;   // the open concept: { c, prev, context, q }
 function openConcept(id, context = {}) {
@@ -3989,8 +4008,8 @@ function init() {
 ===================================================================== -->
 <script>
 function runSelfTest() {
-  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests() };
-  out.ok = out.concepts.length === 0 && out.entry.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests(), askClaude: askClaudeTextTest() };
+  out.ok = out.concepts.length === 0 && out.entry.length === 0 && out.askClaude.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
   const pre = $('selftest');
   pre.style.display = 'block';
   pre.textContent = JSON.stringify(out, null, 1);
@@ -4162,6 +4181,16 @@ function tryStrictOne() {
   conceptTab('try');
   tryInput({ a: '3x^2', kind: 'expr' }, '3x^2');
   return $('tryMsg').textContent === STACK_HINT && !seenConcepts().has('fxT') ? [] : ['strict Try accepts 3x^2 or shows no STACK hint'];
+}
+
+function askClaudeTextTest() {
+  const f = [], c = fixtureConcept('fxK', []), end = "Explain the step I'm stuck on, then let me ask follow-ups.";
+  const withQ = conceptAskText(c, { q: { q: 'Find <b>$x$</b>', a: '3', kind: 'num' }, attempt: '4' }), none = conceptAskText(c);
+  for (const [what, ok] of [['name', withQ.includes(c.name)], ['alt', withQ.includes('fixture')], ['algebra TeX', withQ.includes('$x^2$')],
+    ['origin', withQ.includes('Fixture origin.')], ['Q line', withQ.includes('Q: Find $x$')], ['typed line', withQ.includes('I had typed: "4"')],
+    ['no Q without context', !/^Q:/m.test(none) && !none.includes('I had typed')], ['request line last', withQ.endsWith(end) && none.endsWith(end)]])
+    if (!ok) f.push(`ask text: ${what}`);
+  return f;
 }
 
 // ---- entry point checks: Why? links, concept-first in focus drills, concept accuracy, unopened count ----
