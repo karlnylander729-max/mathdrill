@@ -2858,8 +2858,8 @@ function svgArrow(p, a, b, color) {
   svgEl(p, 'polygon', { points: [b, h(0.4), h(-0.4)].map(q => q.join(',')).join(' '), fill: color });
 }
 // Line of readout text: parts = [[text, colour], ...]
-function svgReadout(p, parts, y = 212) {
-  const t = svgText(p, [8, y], undefined, { style: 'white-space: pre' });
+function svgReadout(p, parts, y = 212, size = 13) {
+  const t = svgText(p, [8, y], undefined, { style: 'white-space: pre', 'font-size': size });
   for (const [s, fill] of parts) svgEl(t, 'tspan', { fill }, s);
 }
 function nearest(pts, p, r = 32) {
@@ -3101,7 +3101,220 @@ const PICTURES = {
       return null;
     }, () => {});
   },
+  // matrixGrid { M: [[1, 2], [3, 4]] (integers, 2×2 up to 3×4), row: i, col: j (0-based; highlight a row and/or column),
+  //              ops: bool (buttons: pick row, pick k, swap, add, scale, reset; exact fractions) }
+  matrixGrid(svg, p) {
+    const g = svgEl(svg, 'g'), st = { M: matrixStart(p.M), start: p.M, i: 0, k: 5, said: '' };
+    const draw = () => {
+      g.replaceChildren();
+      matrixCells(g, st.M, p, p.ops ? 14 : 50);
+      if (p.ops) svgButtons(g, matrixButtons(st));
+      svgReadout(g, [[st.said || matrixHighlightText(p), PC.muted]]);
+    };
+    draw();
+    if (p.ops) onButtons(svg, () => matrixButtons(st), draw);
+  },
+  // argand { z: [a, b] (start point), w: [c, d] (optional second point; adds the product zw) }; drag z (and w) in steps of ½
+  argand(svg, p) {
+    const O = [150, 86], s = 28, scr = ([a, b]) => [O[0] + s * a, O[1] - s * b], pts = [[...p.z]];
+    if (p.w) pts.push([...p.w]);
+    svgLine(svg, [4, O[1]], [296, O[1]]); svgLine(svg, [O[0], 8], [O[0], 164]);
+    svgText(svg, [300, O[1] + 4], 'Re', { fill: PC.muted, 'font-size': 11 }); svgText(svg, [O[0] + 5, 12], 'Im', { fill: PC.muted, 'font-size': 11 });
+    const g = svgEl(svg, 'g'), draw = () => { g.replaceChildren(); argandDraw(g, pts, scr); };
+    draw();
+    onDrag(svg, pt => nearest(pts.map(scr), pt), (i, pt) => {
+      pts[i] = [clamp(Math.round(2 * (pt[0] - O[0]) / s) / 2, -5, 5), clamp(Math.round(2 * (O[1] - pt[1]) / s) / 2, -2.5, 2.5)];
+      draw();
+    });
+  },
+  // ndStepper { lines: [{ n: 3, formula: 'P \\land Q', rule: '∧I', deps: [1, 2] }, ...] (at most 7 lines) }; Next / Back reveal one line at a time
+  ndStepper(svg, p) {
+    const box = svgEl(svg, 'foreignObject', { x: 0, y: 0, width: 320, height: 168 }), g = svgEl(svg, 'g'), st = { k: 1 };
+    const draw = () => {
+      g.replaceChildren();
+      box.replaceChildren(ndRows(p.lines, st.k));
+      svgButtons(g, ndButtons(p.lines, st));
+      svgReadout(g, [[ndReadout(p.lines, st.k), PC.muted]]);
+    };
+    draw();
+    onButtons(svg, () => ndButtons(p.lines, st), draw);
+  },
+  // unitSquare { M: [[a, b], [c, d]] (integers; columns = images of e₁, e₂) }; drag the two arrow tips
+  unitSquare(svg, p) {
+    const O = [160, 105], s = 25, scr = v => [O[0] + s * v[0], O[1] - s * v[1]];
+    for (let i = -6; i <= 6; i++) svgLine(svg, scr([i, -3.6]), scr([i, 3.6]), i ? PC.key : PC.base);
+    for (let j = -3; j <= 3; j++) svgLine(svg, scr([-6.2, j]), scr([6.2, j]), j ? PC.key : PC.base);
+    const cv = [[p.M[0][0], p.M[1][0]], [p.M[0][1], p.M[1][1]]], g = svgEl(svg, 'g'), draw = () => { g.replaceChildren(); unitSquareDraw(g, cv, scr); };
+    draw();
+    onDrag(svg, pt => nearest(cv.map(scr), pt), (i, pt) => {
+      cv[i] = [clamp(Math.round((pt[0] - O[0]) / s), -6, 6), clamp(Math.round((O[1] - pt[1]) / s), -3, 3)];
+      draw();
+    });
+  },
 };
+// ---- buttons (tap targets drawn in the SVG): { x, y, w, h, label, act, off } ----
+function svgButtons(g, list) {
+  for (const b of list) {
+    svgEl(g, 'rect', { x: b.x, y: b.y, width: b.w, height: b.h, rx: 7, fill: PC.key, stroke: b.off ? PC.base : PC.acc });
+    svgText(g, [b.x + b.w / 2, b.y + b.h / 2 + 4], b.label, { 'text-anchor': 'middle', 'font-size': 12, fill: b.off ? PC.muted : PC.ink });
+  }
+}
+function onButtons(svg, list, redraw) {
+  onDrag(svg, ([x, y]) => {
+    const b = list().find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h);
+    if (b && !b.off) { b.act(); redraw(); }
+    return null;
+  }, () => {});
+}
+const minus = s => String(s).replace(/-/g, '−');
+
+// ---- matrixGrid ----
+const MATRIX_KS = [[-3, 1], [-2, 1], [-1, 1], [-1, 2], [1, 2], [2, 1], [3, 1]];
+const matrixStart = M => M.map(r => r.map(x => [x, 1]));
+const ratNorm = ([p, q]) => { const g = gcd(p, q) || 1, s = q < 0 ? -1 : 1; return [s * p / g, s * q / g]; };
+const ratAdd = (a, b) => ratNorm([a[0] * b[1] + b[0] * a[1], a[1] * b[1]]);
+const ratMul = (a, b) => ratNorm([a[0] * b[0], a[1] * b[1]]);
+const ratText = r => minus(frac(r[0], r[1]).s);
+// Row operation on a matrix of [p, q] rationals: op = { t: 'swap' | 'add' | 'scale', i, j, k: [p, q] }; returns a new matrix
+function matrixRowOp(M, op) {
+  const R = M.map(r => r.map(x => [...x]));
+  if (op.t === 'swap') [R[op.i], R[op.j]] = [R[op.j], R[op.i]];
+  else if (op.t === 'add') R[op.i] = R[op.i].map((x, c) => ratAdd(x, ratMul(op.k, R[op.j][c])));
+  else R[op.i] = R[op.i].map(x => ratMul(op.k, x));
+  return R;
+}
+function matrixOpText(op) {
+  const a = `R${op.i + 1}`, b = `R${op.j + 1}`, k = ratText(op.k);
+  if (op.t === 'swap') return `${a} ↔ ${b}`;
+  if (op.t === 'scale') return `${a} → ${k}·${a}`;
+  return `${a} → ${a} ${op.k[0] < 0 ? '−' : '+'} ${ratText(ratMul(op.k, [Math.sign(op.k[0]), 1]))}·${b}`;
+}
+function matrixHighlightText(p) {
+  return [p.row === undefined ? '' : `row ${p.row + 1}`, p.col === undefined ? '' : `column ${p.col + 1}`].filter(Boolean).join(', ');
+}
+function matrixCells(g, M, p, y0) {
+  const n = M[0].length, cw = Math.min(56, 220 / n), rh = 30, x0 = (320 - cw * n) / 2, W = cw * n, H = rh * M.length;
+  const hl = (x, y, w, h, o) => svgEl(g, 'rect', { x, y, width: w, height: h, rx: 5, fill: PC.acc, 'fill-opacity': o });
+  if (p.row !== undefined) hl(x0, y0 + rh * p.row, W, rh, 0.2);
+  if (p.col !== undefined) hl(x0 + cw * p.col, y0, cw, H, 0.2);
+  if (p.row !== undefined && p.col !== undefined) hl(x0 + cw * p.col, y0 + rh * p.row, cw, rh, 0.35);
+  M.forEach((row, r) => row.forEach((v, c) => svgText(g, [x0 + cw * (c + 0.5), y0 + rh * (r + 0.5) + 6], ratText(v), { 'text-anchor': 'middle', 'font-size': 17 })));
+  for (const [x, d] of [[x0 - 4, 1], [x0 + W + 4, -1]]) svgEl(g, 'path', { d: `M${x + 6 * d} ${y0} H${x} V${y0 + H} H${x + 6 * d}`, fill: 'none', stroke: PC.muted, 'stroke-width': 2 });
+}
+function matrixButtons(st) {
+  const n = st.M.length, i = st.i, j = (i + 1) % n, k = MATRIX_KS[st.k];
+  const btn = (c, r, label, act) => ({ x: 8 + c * 104, y: 124 + r * 32, w: 96, h: 26, label, act });
+  const run = t => () => { const op = { t, i, j, k }; st.M = matrixRowOp(st.M, op); st.said = matrixOpText(op); };
+  return [
+    btn(0, 0, `row R${i + 1}`, () => { st.i = j; }),
+    btn(1, 0, `k = ${ratText(k)}`, () => { st.k = (st.k + 1) % MATRIX_KS.length; }),
+    btn(2, 0, 'reset', () => { st.M = matrixStart(st.start); st.said = ''; }),
+    btn(0, 1, `R${i + 1} ↔ R${j + 1}`, run('swap')),
+    btn(1, 1, `R${i + 1} + k·R${j + 1}`, run('add')),
+    btn(2, 1, `R${i + 1} × k`, run('scale')),
+  ];
+}
+
+// ---- argand ----
+const cmul = ([a, b], [c, d]) => [a * c - b * d, a * d + b * c];
+const cnum = x => minus(+x.toFixed(2));
+function complexText(a, b) {
+  if (b === 0) return cnum(a);
+  const im = Math.abs(b) === 1 ? 'i' : `${cnum(Math.abs(b))}i`;
+  return a === 0 ? `${b < 0 ? '−' : ''}${im}` : `${cnum(a)} ${b < 0 ? '−' : '+'} ${im}`;
+}
+function angleText(th) {
+  const m = th * 12 / Math.PI;
+  return Math.abs(m - Math.round(m)) < 1e-9 ? piText(Math.round(m)) : `${cnum(th)} rad`;
+}
+// Modulus text for coordinates in steps of ¼: r = s√t / 4 with t square-free, e.g. 1.414… -> √2, 2.5·√2 -> 5√2/2
+function modulusText(r) {
+  const N = Math.round(r * r * 16);
+  if (Math.abs(N - r * r * 16) > 1e-6) return cnum(r);
+  let sq = 1, t = N;
+  for (let d = 2; d * d <= t; d++) while (t % (d * d) === 0) { t /= d * d; sq *= d; }
+  const g = gcd(sq, 4), p = sq / g, q = 4 / g, root = t === 1 ? '' : `√${t}`;
+  if (N === 0) return '0';
+  return `${p === 1 && root ? '' : p}${root}${q === 1 ? '' : '/' + q}`;
+}
+// z = [a, b] -> modulus, argument in (−π, π] (null at 0) and their texts
+function argandInfo([a, b]) {
+  const r = Math.hypot(a, b), th = r ? Math.atan2(b + 0, a) : null;
+  return { r, th, zs: complexText(a, b), rs: modulusText(r), ths: th === null ? 'undefined' : angleText(th) };
+}
+function argandArc(g, th, R, col) {
+  const P = a => `${R * Math.cos(a)} ${-R * Math.sin(a)}`;
+  svgEl(g, 'path', { d: `M${P(0)} A${R} ${R} 0 0 ${th > 0 ? 0 : 1} ${P(th)}`, fill: 'none', stroke: col, 'stroke-width': 2 });
+}
+function argandPoint(g, scr, it) {
+  const P = scr(it.z), O = scr([0, 0]);
+  if (it.legs) { svgLine(g, O, scr([it.z[0], 0]), PC.bad, 3); svgLine(g, scr([it.z[0], 0]), P, PC.good, 3); }
+  svgLine(g, O, P, it.col, 2);
+  if (it.info.th !== null) argandArc(svgEl(g, 'g', { transform: `translate(${O})` }), it.info.th, it.R, it.col);
+  svgDot(g, P, it.col, it.drag ? 8 : 5);
+  svgText(g, [P[0] + 9, P[1] - 7], it.name, { fill: it.col, 'font-weight': 600 });
+}
+function argandDraw(g, pts, scr) {
+  const items = [{ z: pts[0], name: 'z', col: PC.acc, R: 20, legs: pts.length === 1, drag: true }];
+  if (pts[1]) items.push({ z: pts[1], name: 'w', col: PC.good, R: 27, drag: true }, { z: cmul(pts[0], pts[1]), name: 'zw', col: PC.ink, R: 34, prod: true });
+  items.forEach(it => { it.info = argandInfo(it.z); });
+  items.forEach(it => argandPoint(g, scr, it));
+  items.forEach((it, i) => {
+    const mod = it.prod ? `${items[0].info.rs}·${items[1].info.rs} = ${it.info.rs}` : it.info.rs;
+    svgReadout(g, [[`${it.name} = ${it.info.zs}, |${it.name}| = ${mod}, arg ${it.name} = ${it.info.ths}`, it.col]], 212 - 16 * (items.length - 1 - i), items.length > 1 ? 11 : 13);
+  });
+}
+
+// ---- ndStepper ----
+// Which lines show after k steps, and which of them the newest line cites
+const ndView = (lines, k) => ({ shown: lines.slice(0, k), cited: k > 0 ? lines[k - 1].deps || [] : [] });
+function ndRows(lines, k) {
+  const { shown, cited } = ndView(lines, k), box = document.createElement('div');
+  box.style.cssText = `padding:6px 8px;color:${PC.ink};font-size:13px;line-height:1.5`;
+  shown.forEach((l, i) => {
+    const row = Object.assign(document.createElement('div'), { className: 'nd-row' });
+    row.style.cssText = `display:flex;gap:8px;align-items:center;padding:0 6px;border-radius:6px;min-height:20px;`
+      + (cited.includes(l.n) ? `background:rgba(110,168,254,.28);` : '') + (i === k - 1 ? `outline:1px solid ${PC.acc};` : '');
+    const rule = [l.rule, (l.deps || []).join(', ')].filter(Boolean).join(' ');
+    row.innerHTML = `<span style="color:${PC.muted};width:18px">${l.n}</span><span style="flex:1">${katex.renderToString(l.formula, { throwOnError: false })}</span><span style="color:${PC.muted}">${rule}</span>`;
+    box.append(row);
+  });
+  return box;
+}
+function ndButtons(lines, st) {
+  return [
+    { x: 8, y: 174, w: 96, h: 26, label: '← Back', off: st.k <= 1, act: () => { st.k--; } },
+    { x: 216, y: 174, w: 96, h: 26, label: 'Next →', off: st.k >= lines.length, act: () => { st.k++; } },
+  ];
+}
+function ndReadout(lines, k) {
+  const { cited } = ndView(lines, k);
+  return `line ${k} of ${lines.length}` + (cited.length ? `, uses ${cited.join(', ')}` : '');
+}
+
+// ---- unitSquare ----
+function unitSquareInfo([a, b]) {
+  const det = a[0] * b[1] - a[1] * b[0];
+  return { det, ds: `det = ${minus(det)}`, orient: det > 0 ? 'orientation kept' : det < 0 ? 'orientation reversed' : 'collapsed to a line', col: det > 0 ? PC.good : det < 0 ? PC.bad : PC.muted };
+}
+// Small arc at the origin from the first column to the second: its turning direction is the orientation
+function unitSquareArc(g, [a, b], O, info) {
+  const P = v => { const t = Math.atan2(v[1], v[0]); return `${O[0] + 18 * Math.cos(t)} ${O[1] - 18 * Math.sin(t)}`; };
+  svgEl(g, 'path', { d: `M${P(a)} A18 18 0 0 ${info.det > 0 ? 0 : 1} ${P(b)}`, fill: 'none', stroke: info.col, 'stroke-width': 2 });
+}
+function unitSquareDraw(g, cv, scr) {
+  const [a, b] = cv, info = unitSquareInfo(cv), O = scr([0, 0]), pts = pts => pts.map(q => scr(q).join(',')).join(' ');
+  svgEl(g, 'polygon', { points: pts([[0, 0], [1, 0], [1, 1], [0, 1]]), fill: 'none', stroke: PC.muted, 'stroke-dasharray': '4 3' });
+  svgEl(g, 'polygon', { points: pts([[0, 0], a, [a[0] + b[0], a[1] + b[1]], b]), fill: info.col, 'fill-opacity': 0.3, stroke: info.col, 'stroke-width': 1.5 });
+  if (info.det) unitSquareArc(g, cv, O, info);
+  cv.forEach((v, i) => {
+    const T = scr(v);
+    svgArrow(g, O, T, i ? PC.ink : PC.acc); svgDot(g, T, i ? PC.ink : PC.acc, 6);
+    svgText(g, [T[0] + 8, T[1] - 8], i ? 'Ae₂' : 'Ae₁', { fill: i ? PC.ink : PC.acc, 'font-weight': 600 });
+  });
+  svgReadout(g, [[minus(`A = [[${a[0]}, ${b[0]}], [${a[1]}, ${b[1]}]]`), PC.muted]], 196);
+  svgReadout(g, [[`${info.ds}   `, info.col], [info.orient, info.col]]);
+}
 // Fill one region of a set diagram: clip to each set in the code, mask out each set not in it
 function setRegion(g, code, sets, uid) {
   let host = g;
@@ -4154,6 +4367,10 @@ const PICTURE_SAMPLES = {
   plane3d: { n: [1, 3, -2], a: [0, 0, 1] },
   truthGrid: { head: ['P', 'Q', 'P→Q'], rows: [['T', 'T', 'T'], ['T', 'F', 'F'], ['F', 'T', 'T'], ['F', 'F', 'T']] },
   setDiagram: { sets: ['A', 'B'], shade: ['A', 'AB'] },
+  matrixGrid: { M: [[1, 2, 3], [4, 5, 6]], row: 0, col: 1, ops: true },
+  argand: { z: [1, 1], w: [0, 1] },
+  ndStepper: { lines: [{ n: 1, formula: 'P \\land Q', rule: 'premise' }, { n: 2, formula: 'P', rule: '\\land E', deps: [1] }, { n: 3, formula: 'Q \\land P', rule: '\\land I', deps: [1, 2] }] },
+  unitSquare: { M: [[2, 1], [1, 1]] },
 };
 function pictureFitsTest(svg, name) {
   const f = [];
@@ -4164,7 +4381,7 @@ function pictureFitsTest(svg, name) {
 }
 function pictureTests() {
   const f = [];
-  for (const name of ['unitCircle', 'numberLine', 'graphSlider', 'vectors2d', 'plane3d', 'truthGrid', 'setDiagram']) {
+  for (const name of Object.keys(PICTURE_SAMPLES)) {
     const div = document.createElement('div');
     try { renderPicture(div, { template: name, params: PICTURE_SAMPLES[name], caption: 'c', alt: 'a' }); } catch (e) { f.push(`${name}: throws ${e.message}`); continue; }
     const svg = div.querySelector('svg');
@@ -4182,8 +4399,39 @@ function pictureHelperTests() {
   if (Math.abs(dot(pp.n, X) - dot(pp.n, pp.a)) > 1e-9) f.push(`planePoint off plane: ${X}`);
   for (const [m, fn, want] of [[10, 'sin', 2], [18, 'sin', -6], [16, 'cos', 8], [8, 'tan', -4], [6, 'tan', null]])
     if (windowAngle(m, fn) !== want) f.push(`windowAngle(${m}, ${fn}) gave ${windowAngle(m, fn)}`);
+  f.push(...pictureBehaviourTests());
   const iv = numberLineInterval('[-1,2)');
   if (JSON.stringify(iv) !== '{"lo":-1,"hi":2,"lc":true,"hc":false}') f.push(`numberLineInterval gave ${JSON.stringify(iv)}`);
+  return f;
+}
+
+function pictureText(name, params) {
+  const div = document.createElement('div');
+  renderPicture(div, { template: name, params });
+  return div.querySelector('svg').textContent;
+}
+// The four interactive templates: row ops, Argand readout, stepper order, unit-square determinant
+function pictureBehaviourTests() {
+  const f = [], same = (what, got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) f.push(`${what}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`); };
+  const M = matrixStart([[1, 2], [3, 4]]), K = r => [r, 1];
+  same('matrix swap', matrixRowOp(M, { t: 'swap', i: 0, j: 1 }), matrixStart([[3, 4], [1, 2]]));
+  same('matrix add', matrixRowOp(M, { t: 'add', i: 1, j: 0, k: K(-3) }), matrixStart([[1, 2], [0, -2]]));
+  same('matrix scale', matrixRowOp(M, { t: 'scale', i: 0, k: [1, 2] }), [[[1, 2], [1, 1]], [[3, 1], [4, 1]]]);
+  same('matrix op text', matrixOpText({ t: 'add', i: 1, j: 0, k: K(-3) }), 'R2 → R2 − 3·R1');
+  const z = argandInfo([1, 1]);
+  same('argand z=1+i', [z.zs, z.rs, z.ths], ['1 + i', '√2', 'π/4']);
+  same('argand arg −i', argandInfo([0, -1]).ths, '−π/2');
+  same('argand arg −1', argandInfo([-1, 0]).ths, 'π');
+  same('argand product', cmul([1, 1], [0, 1]), [-1, 1]);
+  if (!pictureText('argand', { z: [1, 1] }).includes('z = 1 + i, |z| = √2, arg z = π/4')) f.push('argand readout text missing');
+  const lines = PICTURE_SAMPLES.ndStepper.lines;
+  same('stepper start', ndView(lines, 1), { shown: [lines[0]], cited: [] });
+  same('stepper step 3', [ndView(lines, 3).shown.map(l => l.n), ndView(lines, 3).cited], [[1, 2, 3], [1, 2]]);
+  const rows = () => { const d = document.createElement('div'); renderPicture(d, { template: 'ndStepper', params: PICTURE_SAMPLES.ndStepper }); return d.querySelectorAll('.nd-row').length; };
+  same('stepper rows at start', rows(), 1);
+  same('unitSquare det', unitSquareInfo([[2, 1], [1, 1]]).det, 1);
+  same('unitSquare flip', unitSquareInfo([[0, 1], [1, 0]]).orient, 'orientation reversed');
+  if (!pictureText('unitSquare', { M: [[2, 1], [1, 1]] }).includes('det = 1')) f.push('unitSquare readout text missing');
   return f;
 }
 
