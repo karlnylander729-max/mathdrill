@@ -48,7 +48,7 @@ const CONFIG = {
     { id: 'matmul',      name: 'Matrix multiplication', types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'] },
     { id: 'rowred',      name: 'Row reduction',         types: ['la-rowop', 'la-elimk', 'la-elementary', 'la-soltype'] },
     { id: 'subspaces',   name: 'Subspaces & span',      types: ['la-subspace', 'la-inspan', 'la-indep', 'la-basis'] },
-    { id: 'dimension',   name: 'Pivots & dimension',    types: ['la-freevars', 'la-soltype', 'la-dimnamed', 'la-dimcond'] },
+    { id: 'dimension',   name: 'Pivots & dimension',    types: ['la-freevars', 'la-soltype', 'la-dimnamed', 'la-dimcond', 'la-dimmat'] },
     { id: 'signed',      name: 'Signed arithmetic',     types: ['arith-signed', 'arith-vecsub'] },
     { id: 'logs',        name: 'Logs & exponents',      types: ['calc-log', 'calc-ln', 'calc-loglaw', 'calc-exp', 'calc-logcombine', 'calc-expsolve', 'calc-explaw'] },
     { id: 'trig',        name: 'Exact trig',            types: ['calc-trig', 'calc-arc', 'calc-arc-branch'] },
@@ -63,6 +63,16 @@ const CONFIG = {
     { id: 'syntax',      name: 'Syntax',                types: ['logic-main', 'logic-restore', 'logic-drop', 'logic-official', 'logic-sentence'] },
     { id: 'tables',      name: 'Truth tables',          types: ['logic-connective', 'logic-forced', 'logic-value', 'logic-column', 'logic-counter'] },
     { id: 'forms',       name: 'Famous forms',          types: ['logic-famous', 'logic-name'] },
+    { id: 'seqlim',      name: 'Sequence limits',       types: ['seq-convdiv', 'seq-ratlim', 'seq-growth', 'seq-rootlim', 'seq-elim', 'seq-boundlim'] },
+    { id: 'epsn0',       name: 'ε–n₀ and sandwich',     types: ['seq-epsdist', 'seq-n0', 'seq-findN', 'seq-sandbound', 'seq-boundlim'] },
+    { id: 'seqprops',    name: 'Bounded, monotone, subsequences', types: ['seq-bddseq', 'seq-mono', 'seq-subseq', 'seq-limpts'] },
+    { id: 'series',      name: 'Series',                types: ['seq-geoseries', 'seq-termtest', 'seq-pseries', 'seq-alt', 'seq-elim'] },
+    { id: 'detinv',      name: 'Determinants & inverses', types: ['la-det2', 'la-cof3', 'la-det3', 'la-detrowops', 'la-detrules', 'la-inv2', 'la-invcof'] },
+    { id: 'linmaps',     name: 'Linear maps',             types: ['la-linmap', 'la-matT', 'la-matpoly', 'la-Av'] },
+    { id: 'ranknull',    name: 'Rank & nullity',          types: ['la-ranknull', 'la-exists', 'la-rankinsp', 'la-kernel', 'la-freevars'] },
+    { id: 'cob',         name: 'Change of basis',         types: ['la-coords', 'la-transition', 'la-inv2'] },
+    { id: 'eigen',       name: 'Eigen',                   types: ['la-eig2', 'la-eigvec', 'la-charpoly', 'la-diag2'] },
+    { id: 'laexam',      name: 'LA exam section A',       types: ['la-dotexp', 'la-linept', 'la-consist', 'la-depc', 'la-dimmat', 'la-linmap', 'la-invcof', 'la-detrowops', 'la-ranknull', 'la-matpoly'] },
   ],
   rating: {
     start: 1000,     // every new type enters here
@@ -263,12 +273,12 @@ const TYPES = [
     }, x => x.a);
     return q && { ...q, kind: 'bool', labels: ['Yes', 'No'] };
   }},
-  { id: 'la-det2', name: '2×2 determinant', par: 5, cat: 'la', week: 6, weight: 1, gen() {
+  { id: 'la-det2', name: '2×2 determinant', par: 5, cat: 'la', week: 10, weight: 1, gen() {
     const A = mat(2, 2, -6, 6), d = A[0][0] * A[1][1] - A[0][1] * A[1][0];
     if (d === 0) return null;
     return { q: T`$\det${matTeX(A)}$`, a: String(d), kind: 'num' };
   }},
-  { id: 'la-eig2', name: '2×2 eigenvalues', par: 15, cat: 'la', week: 9, weight: 1, gen() {
+  { id: 'la-eig2', name: '2×2 eigenvalues', par: 15, cat: 'la', week: 11, weight: 1, gen() {
     const l1 = ri(-5, 5), l2 = ri(-5, 5), a = ri(-5, 5), d = l1 + l2 - a, bc = a * d - l1 * l2;
     if (l1 === l2 || bc === 0) return null;
     const b = pick(divisors(bc)), c = bc / b;
@@ -748,6 +758,280 @@ const TYPES = [
     const set = balanced(() => Array.from({ length: ri(2, 3) }, () => rfDeep(2, L, 1)), consistent);
     return { q: `Consistent? <span class="f">{ ${set.map(f => show(f)).join(', ')} }</span>`, a: consistent(set), kind: 'bool', labels: ['Yes', 'No'] };
   }},
+  // ---------- Linear algebra: exam drills for weeks 1-5, then linear maps, rank, change of basis, determinants, eigen ----------
+  { id: 'la-dotexp', name: 'Dot expansion, unit vectors', par: 35, cat: 'la', week: 1, weight: 1, gen() {
+    const V = [-9, -8, -6, -4, -3, 0, 3, 4, 6, 8, 9], [P, Q, R] = [pick(V), pick(V), pick(V)];   // twelfths: ±3/4, ±2/3, ±1/2, ±1/3, ±1/4, 0
+    const a = pick([1, -1, 2]), b = nz(-2, 2), c = nz(-3, 3), d = nz(-4, 4), e = nz(-3, 3);
+    const N = 12 * (a * c + b * d) + (a * d + b * c) * P + a * e * R + b * e * Q, v = frac(N, 12), f = x => frac(x, 12).tex;
+    const U = T`\mathbf u`, Vv = T`\mathbf v`, W = T`\mathbf w`;
+    return { q: T`$${U}, ${Vv}, ${W}$ are unit vectors, $${U}\cdot${Vv} = ${f(P)}$, $${Vv}\cdot${W} = ${f(Q)}$, $${W}\cdot${U} = ${f(R)}$. $\ (${poly([[a, U], [b, Vv]])})\cdot(${poly([[c, U], [d, Vv], [e, W]])}) = ?$`,
+             a: v.s, show: v.tex, kind: 'num', hint: 'exact value, e.g. -5/6' };
+  }},
+  { id: 'la-linept', name: 'Point on a line: unknown entry', par: 25, cat: 'la', week: 1, weight: 1, gen() {
+    const d = vec(3, -4, 4), t0 = nz(-3, 3), [i, j, k] = shuffle([0, 1, 2]);
+    if (d[j] === 0) return null;
+    if (Math.random() < 0.5) {   // hidden direction entry λ (May 2025 A3)
+      const p = vec(3, -5, 5), q = p.map((x, m) => x + t0 * d[m]), shown = d.map((x, m) => m === i ? T`\lambda` : x);
+      return { q: T`The line $\mathbf v = ${colv(p)} + t${colv(shown)}$ contains $(${q.join(', ')})$. $\ \lambda = ?$`, a: String(d[i]), kind: 'num' };
+    }
+    const al = nz(-5, 5), m = pick([1, -1, 2, -2]), q = [0, 0, 0];   // point with entries α and mα (May 2026 A3)
+    q[i] = al; q[k] = m * al; q[j] = ri(-5, 5);
+    const p = q.map((x, r) => x - t0 * d[r]), shown = q.map((x, r) => r === i ? T`\alpha` : r === k ? poly([[m, T`\alpha`]]) : x);
+    if (p.some(x => Math.abs(x) > 12)) return null;
+    return { q: T`The line $\mathbf v = ${colv(p)} + t${colv(d)}$ contains $(${shown.join(', ')})$. $\ \alpha = ?$`, a: String(al), kind: 'num' };
+  }},
+  { id: 'la-consist', name: 'α for a consistent system', par: 30, cat: 'la', week: 3, weight: 1, gen() {
+    const r1 = [1, ri(-3, 3), ri(-3, 3)], r2 = vec(3, -3, 3), a = nz(-2, 2), b = nz(-2, 2), b1 = ri(-6, 6), b2 = ri(-6, 6);
+    const r3 = r1.map((x, i) => a * x + b * r2[i]);
+    if (isZero(cross(r1, r2)) || r3.some(x => Math.abs(x) > 9) || isZero(r3)) return null;
+    const rows = [[...r1, b1], [...r2, b2], [...r3, T`\alpha`]];
+    if (Math.random() < 0.5) [rows[0], rows[1]] = [rows[1], rows[0]];
+    const tex = T`\left(\begin{array}{ccc|c}${rows.map(r => r.join('&')).join('\\\\')}\end{array}\right)`;
+    return { q: T`For which $\alpha$ is the system with augmented matrix $${tex}$ consistent?`, a: String(a * b1 + b * b2), kind: 'num' };
+  }},
+  { id: 'la-depc', name: 'c making vectors dependent', par: 35, cat: 'la', week: 5, weight: 1, gen() {
+    const u = vec(3, -3, 3), v = vec(3, -3, 3), w = vec(3, -3, 3), k = ri(0, 2);
+    w[k] = 0; const beta = det3([u, v, w]); w[k] = 1; const alpha = det3([u, v, w]) - beta;   // det = αc + β
+    if (alpha === 0 || [u, v].some(isZero) || (beta % alpha !== 0 && Math.random() < 0.7)) return null;
+    const c = frac(-beta, alpha), wc = w.map((x, i) => i === k ? 'c' : x);
+    if (Math.abs(beta / alpha) > 12) return null;
+    if (Math.random() < 0.5) return { q: T`For which $c$ are $${colv(u)}, ${colv(v)}, ${colv(wc)}$ linearly dependent?`, a: c.s, show: c.tex, kind: 'num' };
+    const P = x => poly([[x[0], ''], [x[1], 't'], [x[2], 't^2']]), mono = ['', 't', 't^2'][k], rest = P(w.map((x, i) => i === k ? 0 : x));
+    const h = rest === '0' ? `c${mono}` : `${rest} + c${mono}`;
+    return { q: T`For which $c$ is $\{${P(u)},\ ${P(v)},\ ${h}\}$ not a basis of $P_2$?`, a: c.s, show: c.tex, kind: 'num' };
+  }},
+  { id: 'la-dimmat', name: 'Dimension of a matrix space', par: 8, cat: 'la', week: 5, weight: 1, gen() {
+    const n = ri(2, 5), [tex, d] = pick(LA_MAT_SPACES)(n);
+    return { q: T`$\dim\{A \in M_{${n}}(\mathbb R) : ${tex}\}$`, a: String(d), kind: 'num' };
+  }},
+  { id: 'la-linmap', name: 'Linear map?', par: 8, cat: 'la', week: 6, weight: 1, gen() {
+    const q = balanced(() => pick(LA_LIN_FAMILIES)(), x => x.a);
+    return q && { q: T`Linear? $\ ${q.tex}$`, a: q.a, kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'la-matT', name: 'Matrix of T from a formula', par: 20, cat: 'la', week: 7, weight: 1, gen() {
+    const m = pick([2, 3]), n = pick([2, 3]), A = mat(m, n, -3, 3), xs = ['x', 'y', 'z'].slice(0, n);
+    if (A.some(isZero) || !A.flat().includes(0)) return null;
+    const out = A.map(r => poly(r.map((c, j) => [c, xs[j]]))).join(T`,\ `);
+    return { q: T`Matrix of $T:\mathbb R^${n}\to\mathbb R^${m}$, $\ T(${xs.join(', ')}) = (${out})$`, a: A, kind: 'mat', show: matTeX(A) };
+  }},
+  { id: 'la-matpoly', name: 'Matrix of a polynomial map', par: 30, cat: 'la', week: 7, weight: 1, gen() {
+    const { tex, to, img } = pick(LA_POLY_MAPS)(), M = LA_T([0, 1, 2].map(img));
+    const basis = to === 3 ? T`\{1, t, t^2\}\text{ and }\{1, t, t^2, t^3\}` : T`\{1, t, t^2\}`;
+    if (isZero(M.flat())) return null;
+    return { q: T`$T:P_2\to P_${to}$, $\ ${tex}$. Matrix of $T$ in the monomial basis $${basis}$`, a: M, kind: 'mat', show: matTeX(M) };
+  }},
+  { id: 'la-ranknull', name: 'Rank–nullity count', par: 10, cat: 'la', week: 8, weight: 1, gen() {
+    const n = ri(2, 12), m = ri(2, 12), r = ri(1, Math.min(m, n)), map = T`A:\mathbb R^{${n}}\to\mathbb R^{${m}}`;
+    const [given, ask, ans] = pick([[T`r(A) = ${r}`, T`n(A)`, n - r], [T`n(A) = ${n - r}`, T`r(A)`, r],
+      [T`n(A) = ${n - r}`, T`n(A^T)`, m - r], [T`r(A) = ${r}`, T`n(A^T)`, m - r]]);
+    return { q: T`$${map}$ is linear with $${given}$. $\ ${ask} = ?$`, a: String(ans), kind: 'num' };
+  }},
+  { id: 'la-exists', name: 'Does such a map exist?', par: 10, cat: 'la', week: 8, weight: 1, gen() {
+    const q = balanced(() => { const n = ri(1, 6), m = ri(1, 6), [tex, a] = pick(LA_EXISTS)(n, m); return { n, m, tex, a }; }, x => x.a);
+    return q && { q: T`Is there a linear map $A:\mathbb R^{${q.n}}\to\mathbb R^{${q.m}}$ with $${q.tex}$?`, a: q.a, kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'la-rankinsp', name: 'Rank of a small matrix', par: 20, cat: 'la', week: 8, weight: 1, gen() {
+    const cols = pick([3, 4]), r = ri(1, 3), base = Array.from({ length: r }, () => vec(cols, -3, 3));
+    if (LA_rank(base) !== r) return null;
+    const extra = Array.from({ length: 3 - r }, () => base.reduce((s, b) => { const c = ri(-2, 2); return s.map((x, i) => x + c * b[i]); }, Array(cols).fill(0)));
+    const M = shuffle([...base, ...extra]);
+    if (M.some(isZero) || M.flat().some(x => Math.abs(x) > 9)) return null;
+    return { q: T`$r(A)$, $\ A = ${matTeX(M)}$`, a: String(r), kind: 'num' };
+  }},
+  { id: 'la-kernel', name: 'Kernel vector', par: 20, cat: 'la', week: 8, weight: 1, gen() {
+    let M, k;
+    if (Math.random() < 0.4) { const a = nz(-4, 4), b = nz(-4, 4), c = nz(-3, 3); M = [[a, b], [c * a, c * b]]; k = [-b, a]; }
+    else { M = mat(2, 3, -3, 3); k = cross(M[0], M[1]); }
+    if (isZero(k) || M.some(isZero) || M.flat().some(x => Math.abs(x) > 9)) return null;
+    const g = k.reduce((s, x) => gcd(s, x), 0), kk = k.map(x => x / g + 0);
+    return { q: T`A nonzero vector in $\operatorname{Ker} A$, $\ A = ${matTeX(M)}$`, a: kk, kind: 'vec', parallel: true, show: colv(kk) };
+  }},
+  { id: 'la-coords', name: 'Coordinates in a basis', par: 25, cat: 'la', week: 9, weight: 1, gen() {
+    const f1 = vec(2, -3, 3), f2 = vec(2, -3, 3), al = ri(-4, 4), be = ri(-4, 4);
+    if (LA_det2([f1, f2]) === 0 || (!al && !be)) return null;
+    const v = f1.map((x, i) => al * x + be * f2[i]);
+    if (Math.random() < 0.5) return { q: T`$[\mathbf v]_F$ for $\mathbf v = ${colv(v)}$, $\ F = \left\{${colv(f1)}, ${colv(f2)}\right\}$`, a: [al, be], kind: 'vec', show: colv([al, be]) };
+    const P = x => poly([[x[0], ''], [x[1], 't']]);
+    return { q: T`$[f]_F$ for $f(t) = ${P(v)}$, $\ F = \{${P(f1)},\ ${P(f2)}\}$ (a basis of $P_1$)`, a: [al, be], kind: 'vec', show: colv([al, be]) };
+  }},
+  { id: 'la-transition', name: 'Transition matrix', par: 25, cat: 'la', week: 9, weight: 1, gen() {
+    const F = LA_smallDet2(-3, 3, [1, -1, 2, -2]);
+    if (!F || F.flat().filter(x => x === 0).length > 1) return null;
+    const [f1, f2] = LA_T(F), toF = Math.random() < 0.5, [x, y] = toF ? ['E', 'F'] : ['F', 'E'], inv = LA_inv2(F);
+    return { q: T`$E$ = standard basis, $F = \left\{${colv(f1)}, ${colv(f2)}\right\}$. Transition matrix $[I]_{${x}${y}}$ from $${x}$ to $${y}$, so $[\mathbf v]_${y} = [I]_{${x}${y}}[\mathbf v]_${x}$`,
+             a: toF ? inv.a : F, kind: 'mat', show: toF ? inv.show : matTeX(F) };
+  }},
+  { id: 'la-cof3', name: '3×3 cofactor', par: 15, cat: 'la', week: 10, weight: 1, gen() {
+    const A = mat(3, 3, -4, 4), i = ri(0, 2), j = ri(0, 2), m = LA_minor(A, i, j);
+    if (m === 0 || ((i + j) % 2 === 0 && Math.random() < 0.5)) return null;   // favour the minus-sign positions
+    return { q: T`$C_{${i + 1}${j + 1}}(A)$, $\ A = ${matTeX(A)}$`, a: String(LA_cof(A, i, j)), kind: 'num' };
+  }},
+  { id: 'la-det3', name: '3×3 determinant', par: 20, cat: 'la', week: 10, weight: 1, gen() {
+    const form = pick(['row', 'tri', 'dep']);
+    let A = mat(3, 3, -5, 5);
+    if (form === 'row') { const r = ri(0, 2), keep = ri(0, 2); A[r] = A[r].map((x, j) => j === keep ? nz(-5, 5) : 0); }
+    if (form === 'tri') A = A.map((row, i) => row.map((x, j) => j < i ? 0 : j === i ? nz(-4, 4) : x));
+    if (form === 'dep') { const a = ri(-2, 2), b = nz(-2, 2); A[2] = A[0].map((x, j) => a * x + b * A[1][j]); A = shuffle(A); }
+    if (Math.random() < 0.5) A = LA_T(A);
+    if (A.some(isZero) || A.flat().some(x => Math.abs(x) > 9)) return null;
+    return { q: T`$\det${matTeX(A)}$`, a: String(det3(A)), kind: 'num' };
+  }},
+  { id: 'la-invcof', name: 'Inverse entry by cofactors', par: 45, cat: 'la', week: 10, weight: 1, gen() {
+    const A = LA_smallDet3();
+    if (!A) return null;
+    const i = ri(0, 2), j = ri(0, 2), c = LA_cof(A, j, i);   // a_ij = C_ji(A) / det A
+    if (i !== j && c === LA_cof(A, i, j)) return null;   // off the diagonal, transposing must matter
+    const v = frac(c, det3(A));
+    return { q: T`$A = ${matTeX(A)}$, $\ A^{-1} = (a_{ij})$. $\ a_{${i + 1}${j + 1}} = ?$`, a: v.s, show: v.tex, kind: 'num', hint: 'exact value, e.g. -3/2' };
+  }},
+  { id: 'la-inv2', name: '2×2 inverse', par: 20, cat: 'la', week: 10, weight: 1, gen() {
+    const A = LA_smallDet2(-5, 5, [1, -1, 2, -2]);
+    if (!A || A.flat().filter(x => x === 0).length > 1) return null;
+    const { a, show } = LA_inv2(A);
+    return { q: T`$${matTeX(A)}^{-1}$`, a, show, kind: 'mat', hint: 'rows separated by ; fractions allowed, e.g. 1/2,-1;0,3' };
+  }},
+  { id: 'la-detrowops', name: 'Determinant after row operations', par: 20, cat: 'la', week: 10, weight: 1, gen() {
+    const n = ri(3, 5), { steps, f } = LA_rowOps(n), d = nz(-4, 4), back = Math.random() < 0.6;
+    const q = back ? T`$A$ is $${n}\times${n}$. Apply in order: ${steps}. The result has determinant $${f * d}$. $\ \det A = ?$`
+      : T`$A$ is $${n}\times${n}$ with $\det A = ${d}$. Apply in order: ${steps}. Determinant of the result?`;
+    return { q, a: String(back ? d : f * d), kind: 'num' };
+  }},
+  { id: 'la-detrules', name: 'Determinant rules', par: 12, cat: 'la', week: 10, weight: 1, gen() {
+    const n = ri(2, 4), k = pick([2, 3, -2, -3]), d = nz(-3, 3), e = nz(-3, 3), [tex, p, q] = pick(LA_DET_RULES)(n, k, d, e), v = frac(p, q);
+    return { q: T`$A, B$ are $${n}\times${n}$, $\det A = ${d}$, $\det B = ${e}$. $\ ${tex} = ?$`, a: v.s, show: v.tex, kind: 'num' };
+  }},
+  { id: 'la-eigvec', name: 'Eigenvector?', par: 15, cat: 'la', week: 11, weight: 1, gen() {
+    const q = balanced(() => {
+      const l1 = ri(-4, 4), l2 = ri(-4, 4), { P, A } = LA_similar2([[l1, 0], [0, l2]]), s = pick([1, -1, 2]);
+      if (l1 === l2 || A.flat().some(x => Math.abs(x) > 9)) return null;
+      const v = Math.random() < 0.5 ? LA_T(P)[0].map(x => s * x) : vec(2, -3, 3), Av = A.map(r => dot(r, v));
+      if (isZero(v)) return null;
+      const yes = Av[0] * v[1] - Av[1] * v[0] === 0, i = v[0] ? 0 : 1;
+      return { A, v, yes, l: yes ? Av[i] / v[i] : null };
+    }, x => x.yes);
+    if (!q) return null;
+    return { q: T`Is $${colv(q.v)}$ an eigenvector of $${matTeX(q.A)}$? Its eigenvalue, or no`, a: q.yes ? String(q.l) : ['no', 'none', 'not'],
+             show: q.yes ? String(q.l) : T`\text{no}`, kind: 'text', keys: ['no', '-'], hint: 'the eigenvalue, or no' };
+  }},
+  { id: 'la-charpoly', name: 'Characteristic polynomial', par: 20, cat: 'la', week: 11, weight: 1, gen() {
+    const A = mat(2, 2, -5, 5), tr = A[0][0] + A[1][1], dt = LA_det2(A);
+    if (A.flat().filter(x => x === 0).length > 1) return null;
+    return { q: T`$p(\lambda) = \det(A - \lambda I)$ for $A = ${matTeX(A)}$. Type $\lambda$ as l.`, a: `l^2-(${tr})*l+(${dt})`, kind: 'expr',
+             show: poly([[1, T`\lambda^2`], [-tr, T`\lambda`], [dt, '']]), keys: ['l', '^', '*', '(', ')', '+', '-'], hint: 'use l for λ, e.g. l^2-3*l+2' };
+  }},
+  { id: 'la-diag2', name: 'Diagonalisable?', par: 15, cat: 'la', week: 11, weight: 1, gen() {
+    const q = balanced(() => {
+      const l = ri(-4, 4), l2 = ri(-4, 4), form = pick(['distinct', 'distinct', 'jordan', 'jordan', 'jordan', 'scalar']);
+      if (form === 'distinct' && l === l2) return null;
+      const D = { distinct: [[l, 0], [0, l2]], jordan: [[l, 1], [0, l]], scalar: [[l, 0], [0, l]] }[form], { A } = LA_similar2(D);
+      return A.flat().some(x => Math.abs(x) > 9) ? null : { A, a: form !== 'jordan' };
+    }, x => x.a);
+    return q && { q: T`Diagonalisable over $\mathbb R$? $\ ${matTeX(q.A)}$`, a: q.a, kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  // ---------- Sequences and series: limits, ε–n0, monotone, subsequences, series (notes §9–15) ----------
+  { id: 'seq-convdiv', name: 'Converges or diverges?', par: 6, cat: 'seq', week: 5, weight: 1, gen() {
+    const f = pick(SS_CONVDIV)();
+    if (!f) return null;
+    return { q: T`$s_n = ${f[0]}$. $\ \displaystyle\lim_{n\to\infty} s_n = ?$`, ...SS_lim(f[1]), hint: SS_HINT };
+  }},
+  { id: 'seq-epsdist', name: '|s_n − ℓ| in closed form', par: 15, cat: 'seq', week: 5, weight: 1, gen() {
+    const v = Math.random() < 0.3 ? 'n^2' : 'n', a = nz(-5, 5), b = ri(-6, 6), c = ri(1, 4), d = ri(0, 6);
+    const K = Math.abs(b * c - a * d), g = gcd(K, gcd(c * c, c * d)), L = frac(a, c);
+    if (K === 0) return null;
+    const [num, A, B] = [K / g, c * c / g, c * d / g];
+    return { q: T`$s_n = \dfrac{${poly([[a, v], [b, '']])}}{${poly([[c, v], [d, '']])}} \to \ell = ${L.tex}$. $\ |s_n - \ell| = ?$`,
+             a: `${num}/(${A}*${v}+${B})`, kind: 'expr', show: T`\dfrac{${num}}{${poly([[A, v], [B, '']])}}`,
+             pattern: /^\d+\/[\dn*+()^]+$/, keys: N_KEYS, hint: 'one fraction in n, no modulus, e.g. 5/(n+3)' };
+  }},
+  { id: 'seq-n0', name: 'n₀(ε) for a null sequence', par: 12, cat: 'seq', week: 5, weight: 1, gen() {
+    const [tex, u, v, n0] = SS_n0Draw();
+    if (n0 < 2) return null;
+    return { q: T`Smallest $n_0 \in \mathbb N$ with $${tex} < ${SS_epsTeX(u, v)}$ for all $n \ge n_0$`, a: String(n0), kind: 'num' };
+  }},
+  { id: 'seq-bddseq', name: 'Bounded sequence?', par: 5, cat: 'seq', week: 5, weight: 1, gen() {
+    return balanced(() => {
+      const f = pick(SS_BDD)();
+      return f && { q: T`Is $s_n = ${f[0]}$ bounded?`, a: f[1], kind: 'bool', labels: ['Bounded', 'Unbounded'] };
+    }, q => q.a);
+  }},
+  { id: 'seq-ratlim', name: 'Limit of a rational sequence', par: 8, cat: 'seq', week: 6, weight: 1, gen() {
+    const q = Math.random() < 0.65 ? SS_ratPoly() : SS_ratExp();
+    return q && { ...q, hint: SS_HINT };
+  }},
+  { id: 'seq-sandbound', name: 'Sandwich bound', par: 10, cat: 'seq', week: 7, weight: 1, gen() {
+    const a = nz(-6, 6), b = nz(-5, 5), k = ri(1, 3), c = ri(1, 6), f = '\\' + pick(['sin', 'cos']), M = Math.abs(a) + Math.abs(b), nk = SS_pw('n', k);
+    const top = poly([[a, ''], [b, T`${f} n`]]);
+    return { q: T`Using $|${f} n| \le 1$ and $${nk} + ${c} > ${nk}$: $\ \left|\dfrac{${top}}{${nk} + ${c}}\right| \le\ ?$`,
+             a: k === 1 ? `${M}/n` : `${M}/n^${k}`, kind: 'expr', show: T`\dfrac{${M}}{${nk}}`, pattern: /^[\d\/n^()*.]+$/, keys: N_KEYS, hint: 'e.g. 5/n^2' };
+  }},
+  { id: 'seq-boundlim', name: 'Bounded × null', par: 7, cat: 'seq', week: 7, weight: 1, gen() {
+    const a = Math.random() < 0.3 ? 0 : nz(-5, 5), b = nz(-5, 5), c = ri(1, 5), d = ri(1, 9), k = ri(1, 3), nk = SS_pw('n', k), L = frac(a, c);
+    const osc = pick([T`\sin n`, T`\cos n`, '(-1)^n', T`\sin(n^2)`, T`\cos(n!)`]), N = 1e8;
+    return { q: T`$\displaystyle\lim_{n\to\infty} \frac{${poly([[a, nk], [b, osc]])}}{${poly([[c, nk], [d, '']])}}$`, a: L.s, show: L.tex, kind: 'num',
+             val: a * N ** k / (c * N ** k + d) };
+  }},
+  { id: 'seq-growth', name: 'Growth hierarchy', par: 5, cat: 'seq', week: 7, weight: 1, gen() {
+    const [f, rf] = pick(SS_GROWTH)(), [g, rg] = pick(SS_GROWTH)();
+    if (rf === rg) return null;
+    return { q: T`$\displaystyle\lim_{n\to\infty} \frac{${f}}{${g}}$`, ...SS_lim(rf < rg ? frac(0, 1) : 'inf'), hint: 'a number, or inf' };
+  }},
+  { id: 'seq-rootlim', name: 'Limits with a^{1/n}', par: 8, cat: 'seq', week: 7, weight: 1, gen() {
+    const [X, fx] = SS_rootTerm(), [Y, fy] = SS_rootTerm(), [p, q, r, s] = [nz(-5, 5), ri(-6, 6), nz(-5, 5), ri(-6, 6)];
+    const lin = Math.random() < 0.4, m = lin ? T`n\,` : '', w = n => lin ? n : 1;
+    const den = n => r * w(n) * fy(n) + s, sn = n => (p * w(n) * fx(n) + q) / den(n);
+    if (!lin && r + s === 0) return null;
+    for (let n = 1; n <= 60; n++) if (Math.abs(den(n)) < 1e-9) return null;
+    const ans = lin ? frac(p, r) : frac(p + q, r + s);
+    return { q: T`$\displaystyle\lim_{n\to\infty} \frac{${SS_dotPoly([[p, m + X], [q, '']])}}{${SS_dotPoly([[r, m + Y], [s, '']])}}$`,
+             a: ans.s, show: ans.tex, kind: 'num', val: sn(1e12) };
+  }},
+  { id: 'seq-mono', name: 'Monotone?', par: 7, cat: 'seq', week: 8, weight: 1, gen() {
+    const f = pick(SS_MONO)(), cls = f && SS_monotone(f[1]);
+    if (!cls) return null;
+    return { q: T`$s_n = ${f[0]}$: increasing, decreasing or neither?`, a: SS_MONO_ALIASES[cls], show: T`\text{${cls}}`, kind: 'text',
+             keys: ['increasing', 'decreasing', 'neither'], hint: 'increasing, decreasing or neither (strict)' };
+  }},
+  { id: 'seq-subseq', name: 'Limit of a subsequence', par: 7, cat: 'seq', week: 9, weight: 1, gen() {
+    const [tex, f, , subs] = pick(SS_SUBSEQ)(), [idx, nk, lim] = pick(subs);
+    return { q: T`$s_n = ${tex}$. $\ \displaystyle\lim_{k\to\infty} s_{${idx}} = ?$`, a: String(lim), kind: 'num', val: f(nk(1e8)) };
+  }},
+  { id: 'seq-limpts', name: 'Set of limit points', par: 9, cat: 'seq', week: 9, weight: 1, gen() {
+    const fam = Math.random() < 0.6 ? pick(SS_SUBSEQ)() : pick(SS_LIMPTS)(), tex = fam[0], pts = [...new Set(fam[fam.length === 4 ? 2 : 1])].sort((x, y) => x - y);
+    return { q: T`Limit points of $s_n = ${tex}$`, a: `{${pts.join(',')}}`, kind: 'set', show: T`\{${pts.join(', ')}\}`,
+             keys: ['{', '}', ',', '-'], hint: 'a set, e.g. {-1,1}' };
+  }},
+  { id: 'seq-geoseries', name: 'Infinite geometric series', par: 12, cat: 'seq', week: 10, weight: 1, gen() {
+    const g = SS_geoTerm(), m = ri(0, 2), a = nz(-4, 4);
+    if (!g || (Math.abs(g.p) >= g.q) !== (Math.random() < 0.25)) return null;   // about 1 in 4 diverges
+    const co = Math.abs(a) === 1 ? SS_coef(a) : T`${a}\cdot `, q = T`$\displaystyle\sum_{k=${m}}^{\infty} ${co}${g.base}^k$`;
+    if (Math.abs(g.p) >= g.q) return { q, ...SS_lim('div'), hint: 'a fraction, or diverges' };
+    let v = 0;
+    for (let k = m; k < m + 400; k++) v += a * (g.p / g.q) ** k;
+    return { q, ...SS_lim(frac(a * g.p ** m * g.q, g.q ** m * (g.q - g.p))), val: v, hint: 'a fraction, or diverges' };
+  }},
+  { id: 'seq-elim', name: '(1 + a/n)^n → e^a', par: 8, cat: 'seq', week: 10, weight: 1, gen() {
+    const a = ri(1, 5), b = ri(1, 4), c = nz(-3, 3), E = frac(a * c, b), N = 1e9;
+    if (gcd(a, b) !== 1) return null;
+    const inner = b === 1 ? T`\frac{${a}}{n}` : T`\frac{${a}}{${b}n}`;
+    return { q: T`$\displaystyle\lim_{n\to\infty} \left(1 + ${inner}\right)^{${poly([[c, 'n']])}}$`, a: E.s === '1' ? 'e' : `e^(${E.s})`,
+             show: E.s === '1' ? 'e' : T`e^{${E.tex}}`, kind: 'num', val: Math.exp(c * N * Math.log1p(a / (b * N))), hint: 'exact, e.g. e^(2/3)' };
+  }},
+  { id: 'seq-termtest', name: 'Term test', par: 5, cat: 'seq', week: 10, weight: 1, gen() {
+    const t = balanced(() => pick(SS_TERMS)(), x => x[1]);
+    if (!t) return null;
+    return { q: T`Term test on $\displaystyle\sum_{k=1}^{\infty} ${t[0]}$: diverges or inconclusive?`, a: t[1] ? SS_DIV : SS_INCONCLUSIVE,
+             show: T`\text{${t[1] ? 'diverges' : 'inconclusive'}}`, kind: 'text', keys: ['diverges', 'inconclusive'], hint: 'diverges or inconclusive' };
+  }},
+  { id: 'seq-pseries', name: 'p-series / comparison', par: 7, cat: 'seq', week: 11, weight: 1, gen() {
+    const t = balanced(() => pick(SS_PSER)(), x => x[1]);
+    return t && { q: T`$\displaystyle\sum_{k=1}^{\infty} ${t[0]}$`, a: t[1], kind: 'bool', labels: ['Converges', 'Diverges'] };
+  }},
+  { id: 'seq-alt', name: 'Absolutely / conditionally?', par: 8, cat: 'seq', week: 11, weight: 1, gen() {
+    const t = pick(SS_ALT)();
+    if (!t) return null;
+    return { q: T`$\displaystyle\sum_{k=1}^{\infty} ${t[0]}$: converges absolutely, conditionally, or diverges?`, ...SS_ALT_ANS[t[1]], kind: 'text',
+             keys: ['absolutely', 'conditionally', 'diverges'], hint: 'absolutely, conditionally or diverges' };
+  }},
 ];
 </script>
 <!-- ============================ END CONFIG ============================ -->
@@ -1079,6 +1363,326 @@ const BOUNDED_SETS = [
     return [ivTeX(I), lo && hi ? 'both' : lo ? 'below' : hi ? 'above' : 'neither']; },
   () => pick([[T`\mathbb N`, 'below'], [T`\mathbb Z`, 'neither'], [T`\{2^{-n} : n\in\mathbb N\}`, 'both'], [T`\{-n^2 : n\in\mathbb N\}`, 'above']]),
 ];
+
+// ---------- Linear algebra, weeks 6-11 (linear maps, rank, change of basis, determinants, eigen) ----------
+const LA_T = M => M[0].map((_, j) => M.map(r => r[j]));
+const LA_matmul = (A, B) => A.map(r => B[0].map((_, j) => r.reduce((s, x, k) => s + x * B[k][j], 0) + 0));
+const LA_det2 = M => M[0][0] * M[1][1] - M[0][1] * M[1][0];
+// Minor M_ij(A) and cofactor C_ij(A) = (-1)^(i+j) M_ij(A) of a 3×3 matrix, 0-based i, j (Def 5.2.16)
+const LA_minor = (A, i, j) => LA_det2(A.filter((_, r) => r !== i).map(r => r.filter((_, c) => c !== j)));
+const LA_cof = (A, i, j) => (-1) ** (i + j) * LA_minor(A, i, j);
+const LA_tPow = p => p === 0 ? '' : p === 1 ? 't' : `t^{${p}}`;
+
+// 3×3 integer matrix with det ±1 or ±2: unit lower × upper triangular, rows shuffled
+function LA_smallDet3() {
+  const L = [[1, 0, 0], [ri(-2, 2), 1, 0], [ri(-2, 2), ri(-2, 2), 1]];
+  const d = shuffle([pick([1, -1, 2, -2]), pick([1, -1]), pick([1, -1])]);
+  const U = [[d[0], ri(-2, 2), ri(-2, 2)], [0, d[1], ri(-2, 2)], [0, 0, d[2]]];
+  const A = shuffle(LA_matmul(L, U)), flat = A.flat();
+  return flat.some(x => Math.abs(x) > 9) || flat.filter(x => x === 0).length > 3 ? null : A;
+}
+// 2×2 integer matrix with entries in [lo, hi] and determinant in dets
+function LA_smallDet2(lo, hi, dets) {
+  for (let i = 0; i < 200; i++) { const M = mat(2, 2, lo, hi); if (dets.includes(LA_det2(M))) return M; }
+  return null;
+}
+// Inverse of a 2×2 matrix: numbers for the checker, exact fractions for display
+function LA_inv2(M) {
+  const d = LA_det2(M), adj = [[M[1][1], -M[0][1]], [-M[1][0], M[0][0]]];
+  return { a: adj.map(r => r.map(x => x / d + 0)), show: matTeX(adj.map(r => r.map(x => frac(x, d).tex))) };
+}
+// P D P^{-1} with an integer P of determinant ±1, so the result is an integer matrix
+function LA_similar2(D) {
+  const P = LA_smallDet2(-2, 2, [1, -1]);
+  return { P, A: LA_matmul(LA_matmul(P, D), LA_inv2(P).a).map(r => r.map(x => Math.round(x) + 0)) };
+}
+// Rank by Gaussian elimination (floating point; inputs are small integers)
+function LA_rank(M) {
+  const A = M.map(r => [...r]);
+  let rank = 0;
+  for (let c = 0; c < A[0].length && rank < A.length; c++) {
+    const p = A.findIndex((r, i) => i >= rank && Math.abs(r[c]) > 1e-9);
+    if (p < 0) continue;
+    [A[rank], A[p]] = [A[p], A[rank]];
+    for (let i = rank + 1; i < A.length; i++) { const f = A[i][c] / A[rank][c]; A[i] = A[i].map((x, k) => x - f * A[rank][k]); }
+    rank++;
+  }
+  return rank;
+}
+
+// Three elementary row operations on an n×n matrix, worded like the exam (May 2026 A11), and their det factor
+function LA_rowOps(n) {
+  const ops = [];
+  let f = 1;
+  for (const kind of shuffle(['scale', 'add', 'swap', pick(['scale', 'add', 'swap'])]).slice(0, 3)) {
+    const [i, j] = shuffle(Array.from({ length: n }, (_, k) => k + 1)).slice(0, 2), k = pick([2, 3, 4, -1, -2, -3]);
+    if (kind === 'scale') { ops.push(`multiply row ${i} by $${k}$`); f *= k; }
+    else if (kind === 'add') ops.push(`add $${k}$ times row ${j} to row ${i}`);
+    else { ops.push(`interchange row ${i} and row ${j}`); f = -f; }
+  }
+  return { steps: ops.map((s, k) => `(${k + 1}) ${s}`).join('; '), f };
+}
+// Determinant rules (Thm 5.2.12, 5.2.14, multilinearity): (n, k, d, e) -> [tex, numerator, denominator]
+const LA_DET_RULES = [
+  (n, k, d) => [T`\det(${k}A)`, k ** n * d, 1],
+  (n, k, d, e) => [T`\det(A^T B)`, d * e, 1],
+  (n, k, d) => [T`\det(A^{-1})`, 1, d],
+  (n, k, d, e) => [T`\det(A^2 B^{-1})`, d * d, e],
+  (n, k, d, e) => [T`\det(${k}A^T B)`, k ** n * d * e, 1],
+  (n, k, d, e) => [T`\det(B^{-1} A B)`, d, 1],
+  (n, k, d, e) => [T`\det(A^{-1} B^3)`, e ** 3, d],
+];
+// Subspaces of M_n(R) given by conditions on the entries: n -> [condition tex, dimension]
+const LA_MAT_SPACES = [
+  n => [T`A^T = A`, n * (n + 1) / 2],
+  n => [T`A^T = -A`, n * (n - 1) / 2],
+  n => [T`a_{ij} = 0 \text{ for } i > j`, n * (n + 1) / 2],
+  n => [T`a_{ij} = 0 \text{ for } i \ge j`, n * (n - 1) / 2],
+  n => [T`a_{ij} = 0 \text{ for } i \ne j`, n],
+  n => [T`a_{11} + a_{22} + \dots + a_{${n}${n}} = 0`, n * n - 1],
+];
+// Linear? families (Def 3.0.1; exams 2023 A7, 2024 A8): { tex, a }
+const LA_LIN_FAMILIES = [
+  () => { const [a, b, c, d] = vec(4, -3, 3), k = Math.random() < 0.5 ? 0 : nz(-4, 4);
+    if ((!a && !b) || (!c && !d)) return null;
+    return { tex: T`T:\mathbb R^2\to\mathbb R^2,\ T(x, y) = (${poly([[a, 'x'], [b, 'y'], [k, '']])},\ ${poly([[c, 'x'], [d, 'y']])})`, a: k === 0 }; },
+  () => { const bad = pick(['xy', 'x^2', 'y^2', T`\lvert x\rvert`, T`\lvert y\rvert`, 'x^3']);
+    return { tex: T`T:\mathbb R^2\to\mathbb R^2,\ T(x, y) = (${poly([[nz(-3, 3), 'x'], [nz(-3, 3), bad]])},\ ${poly([[nz(-3, 3), 'y']])})`, a: false }; },
+  () => { const k = pick([2, 3, -1, -2]), m = ri(2, 3);
+    const f = pick([T`f(${poly([[k, 't']])})`, T`f(${poly([[1, 't'], [k, '']])})`, T`(${poly([[1, 't'], [k, '']])})f'(t)`, T`t^{${m}} f(t)`,
+      T`f(t^{${m}})`, T`f(${k})\,t^{${m}}`, T`${poly([[k, "f'(t)"], [1, 'f(t)']])}`]);
+    return { tex: T`T:P\to P,\ Tf(t) = ${f}`, a: true }; },
+  () => { const k = nz(-3, 3), m = ri(1, 3);
+    const f = pick([T`${poly([[1, 'f(t)'], [k, LA_tPow(m)]])}`, T`${poly([[1, 'f(t)'], [k, '']])}`, T`${poly([[k, "(f'(t))^2"]])}`,
+      T`${poly([[1, "f'(t)"], [k, 't^2']])}`, T`f(t)\,f(${k})`, T`${poly([[k, 't\\,f(t)^2']])}`]);
+    return { tex: T`T:P\to P,\ Tf(t) = ${f}`, a: false }; },
+];
+// Polynomial maps on P_2 in the monomial basis: img(j) = coefficients of T(t^j) (Example 3.2.6, May 2026 A8)
+const LA_POLY_MAPS = [
+  () => { const k = pick([2, 3, -1, -2]); return { tex: T`Tf(t) = f(${poly([[k, 't']])})`, to: 2, img: j => [0, 1, 2].map(i => i === j ? k ** j : 0) }; },
+  () => { const k = nz(-3, 3); return { tex: T`Tf(t) = f(${poly([[1, 't'], [k, '']])})`, to: 2, img: j => [[1, 0, 0], [k, 1, 0], [k * k, 2 * k, 1]][j] }; },
+  () => { const a = ri(-3, 3), b = nz(-3, 3);
+    return { tex: T`Tf(t) = ${poly([[a, 'f(t)'], [b, "f'(t)"]])}`, to: 2, img: j => [0, 1, 2].map(i => (i === j ? a : 0) + (i === j - 1 ? b * j : 0)) }; },
+  () => ({ tex: T`Tf(t) = t\,f(t)`, to: 3, img: j => [0, 1, 2, 3].map(i => i === j + 1 ? 1 : 0) }),
+  () => { const k = nz(-3, 3);
+    return { tex: T`Tf(t) = (${poly([[1, 't'], [k, '']])})f'(t)`, to: 2, img: j => [0, 1, 2].map(i => (i === j ? j : 0) + (i === j - 1 ? k * j : 0)) }; },
+];
+// Does a linear map R^n -> R^m with this property exist? (Thm 4.4.8; May 2026 B14): (n, m) -> [tex, exists]
+const LA_EXISTS = [
+  (n, m) => { const r = ri(0, 6); return [T`r(A) = ${r}`, r <= Math.min(n, m)]; },
+  (n, m) => { const k = ri(0, 6); return [T`n(A) = ${k}`, k <= n && n - k <= m]; },
+  (n, m) => [T`\operatorname{Ker} A = \{\mathbf 0\}`, n <= m],
+  (n, m) => [T`\operatorname{Im} A = \mathbb R^{${m}}`, n >= m],
+  (n, m) => [T`A \text{ invertible}`, n === m],
+  (n, m) => [T`\operatorname{Im} A = \mathbb R^{${m}} \text{ and } \operatorname{Ker} A \ne \{\mathbf 0\}`, n > m],
+];
+
+// ---------- Sequences and series: limits, ε–n0, series (SS_) ----------
+// Notation follows 4CCM115A notes §9–15: sequences s_n, limit ℓ, threshold n_0, N = {1,2,...}, log = natural log.
+const SS_DIV = ['diverges', 'diverge', 'divergent', 'div', 'neither', 'none', 'dne', 'oscillates'];
+const SS_HINT = 'a number, inf, -inf or diverges';
+const SS_coef = c => c === 1 ? '' : c === -1 ? '-' : String(c);
+const SS_pw = (v, p) => p === 0 ? '' : p === 1 ? v : `${v}^{${p}}`;
+const SS_fracTerm = (c, den) => (c < 0 ? ' - ' : ' + ') + T`\frac{${Math.abs(c)}}{${den}}`;
+// Like poly(), but a coefficient before a body that starts with a digit gets \cdot: 2\cdot 4^n, not 24^n
+const SS_dotPoly = terms => poly(terms.map(([c, v]) => [c, /^\d/.test(v) && Math.abs(c) !== 1 ? T`\cdot ${v}` : v]));
+const SS_poly3 = (c, v = 'n') => poly([[c[0], `${v}^2`], [c[1], v], [c[2], '']]);
+const SS_ev = (c, n) => (c[0] * n + c[1]) * n + c[2];
+// k^p for a positive rational p = frac object: k, \sqrt k or k^{p}
+const SS_kpow = p => p.s === '1' ? 'k' : p.s === '1/2' ? T`\sqrt k` : T`k^{${p.tex}}`;
+
+// Limit answer: a frac object {s, tex}, or 'inf' / '-inf' / 'div'
+function SS_lim(r) {
+  if (r === 'inf') return { a: INF_ALIASES, kind: 'text', show: T`\infty` };
+  if (r === '-inf') return { a: INF_ALIASES.map(x => '-' + x), kind: 'text', show: T`-\infty` };
+  if (r === 'div') return { a: SS_DIV, kind: 'text', show: T`\text{diverges}` };
+  return { a: r.s, kind: 'num', show: r.tex };
+}
+
+// Ratio r = p/q in lowest terms (q <= 5, r != 1) -> { base: TeX to raise to a power, p, q }
+function SS_geoTerm() {
+  const q = ri(1, 5), p = nz(-6, 6);
+  if (gcd(p, q) !== 1 || (p === 1 && q === 1)) return null;
+  const base = q > 1 ? T`\left(${frac(p, q).tex}\right)` : p < 0 ? `(${p})` : String(p);
+  return { base, p, q };
+}
+// lim r^n: 0 for |r| < 1, inf for r > 1, diverges for r <= -1
+const SS_geoLim = g => Math.abs(g.p) < g.q ? frac(0, 1) : g.p > 0 ? 'inf' : 'div';
+
+// Coefficients [n^2, n, 1] of a polynomial of exact degree d (d <= 2)
+function SS_coefs(d) {
+  const c = [ri(-5, 5), ri(-6, 6), ri(-9, 9)].map((x, i) => i < 2 - d ? 0 : x);
+  c[2 - d] = nz(-6, 6);
+  return c;
+}
+// lim (quadratic-or-less)/(quadratic-or-less): compare degrees (notes §10.1, §10.4)
+function SS_ratPoly() {
+  const db = ri(1, 2), dt = db === 2 ? pick([2, 2, 1, 0]) : pick([1, 1, 0, 2]);
+  const top = SS_coefs(dt), bot = SS_coefs(db);
+  if (bot.filter(x => x).length < 2) return null;   // a one-term denominator makes it trivial
+  for (let n = 1; n <= 20; n++) if (SS_ev(bot, n) === 0) return null;
+  const lt = top[2 - dt], lb = bot[2 - db];
+  const r = dt < db ? frac(0, 1) : dt === db ? frac(lt, lb) : lt * lb > 0 ? 'inf' : '-inf', ans = SS_lim(r);
+  return { q: T`$\displaystyle\lim_{n\to\infty} \frac{${SS_poly3(top)}}{${SS_poly3(bot)}}$`, ...ans,
+           ...(ans.kind === 'num' && { val: SS_ev(top, 1e9) / SS_ev(bot, 1e9) }) };
+}
+// lim (a A^n + b B^n)/(c A^n + d B^n), A > B > 1: divide by A^n (notes §10.1 ex. 4)
+function SS_ratExp() {
+  const [A, B] = pick([[3, 2], [4, 3], [5, 2], [5, 3], [5, 4], [4, 2]]);
+  const a = Math.random() < 0.15 ? 0 : nz(-5, 5), b = nz(-5, 5), c = Math.random() < 0.15 ? 0 : nz(-5, 5), d = nz(-5, 5);
+  const den = n => c * A ** n + d * B ** n, ex = (x, y) => SS_dotPoly([[x, `${A}^n`], [y, `${B}^n`]]);
+  if (a === 0 && c === 0) return null;
+  for (let n = 1; n <= 12; n++) if (den(n) === 0) return null;
+  const ans = SS_lim(c !== 0 ? frac(a, c) : a * d > 0 ? 'inf' : '-inf');
+  return { q: T`$\displaystyle\lim_{n\to\infty} \frac{${ex(a, b)}}{${ex(c, d)}}$`, ...ans,
+           ...(ans.kind === 'num' && { val: (a * A ** 200 + b * B ** 200) / den(200) }) };
+}
+
+// Converge / diverge to ±inf / diverge otherwise (notes §9.3–9.4): [TeX of s_n, limit code]
+const SS_CONVDIV = [
+  () => { const g = SS_geoTerm(); return g && [`${g.base}^n`, SS_geoLim(g)]; },
+  () => { const c = nz(-4, 4), k = ri(1, 2); return [T`${SS_coef(c)}(-1)^n ${SS_pw('n', k)}`, 'div']; },
+  () => { const c = nz(-5, 5), k = ri(1, 3); return [T`\frac{${SS_coef(c)}(-1)^n}{${SS_pw('n', k)}}`, frac(0, 1)]; },
+  () => { const c = nz(-5, 5), k = ri(1, 3); return [poly([[c, SS_pw('n', k)]]), c > 0 ? 'inf' : '-inf']; },
+  () => { const c = nz(-5, 5); return [poly([[c, T`\sqrt n`]]), c > 0 ? 'inf' : '-inf']; },
+  () => { const c = nz(-5, 5); return [T`\frac{${c}}{\sqrt n}`, frac(0, 1)]; },
+  () => { const c = nz(-5, 5); return [T`(-1)^n${SS_fracTerm(c, 'n')}`, 'div']; },
+  () => { const c = nz(-5, 5), k = ri(1, 2); return [T`${c} + \frac{(-1)^n}{${SS_pw('n', k)}}`, frac(c, 1)]; },
+  () => { const c = ri(1, 3); return [T`${SS_coef(c)}\left(1 + (-1)^n\right)n`, 'div']; },
+];
+
+// Growth classes (notes §11): [TeX, rank]; a lower rank is o(higher rank)
+const SS_GROWTH = [
+  () => [T`\log n`, 0],
+  () => [T`\sqrt n`, 1.005],
+  () => { const k = ri(1, 5); return [SS_pw('n', k), 1 + k / 100]; },
+  () => { const a = ri(2, 5); return [`${a}^n`, 2 + a / 100]; },
+  () => ['n!', 3],
+  () => ['n^n', 4],
+];
+
+// a^{1/n} -> 1 for a > 0 (notes §11.4); n^{1/n} -> 1 (Wilde's older notes, ex. 3.35): [TeX, s(n)]
+function SS_rootTerm() {
+  const a = ri(2, 20), u = Math.random();
+  if (u < 0.2) return [T`n^{1/n}`, n => n ** (1 / n)];
+  if (u < 0.4) return [T`\left(\frac{1}{${a}}\right)^{1/n}`, n => (1 / a) ** (1 / n)];
+  return [T`${a}^{1/n}`, n => a ** (1 / n)];
+}
+
+// Smallest n >= 1 with test(n), for a test that stays true once true; guess = the real threshold
+function SS_first(test, guess) {
+  let n = Math.max(1, Math.floor(guess) - 2);
+  while (!test(n)) n++;
+  return n;
+}
+// ε as u/v: shown as a decimal or a fraction
+const SS_epsTeX = (u, v) => Math.random() < 0.5 && String(u / v).length <= 6 ? String(u / v) : T`\frac{${u}}{${v}}`;
+// n_0 for c/n^2, c/sqrt n or K/(n+d) below ε = u/v (integer arithmetic: exact at the boundary)
+function SS_n0Draw() {
+  const c = ri(2, 9), j = ri(3, 12), [u, v] = pick([[1, 10], [1, 20], [1, 50], [1, 4], [1, 5], [3, 10], [2, 5], [1, 25]]);
+  return pick([
+    () => { const [uu, vv] = Math.random() < 0.5 ? [1, c * j * j] : [u, v * pick([1, 10])];   // half the time c/ε is a perfect square
+            return [T`\frac{${c}}{n^2}`, uu, vv, SS_first(n => uu * n * n > c * vv, Math.sqrt(c * vv / uu))]; },
+    () => { const cc = ri(1, 5); return [T`\frac{${cc}}{\sqrt n}`, u, v, SS_first(n => u * u * n > cc * cc * v * v, (cc * v / u) ** 2)]; },
+    () => { const K = ri(1, 9), d = ri(1, 6), vv = v * pick([1, 10]);
+            return [T`\frac{${K}}{n + ${d}}`, u, vv, SS_first(n => u * (n + d) > K * vv, K * vv / u - d)]; },
+  ])();
+}
+
+// Bounded sequence? (notes §9.5): [TeX, bounded]
+const SS_BDD = [
+  () => { const a = nz(-4, 4), c = nz(-5, 5); return [T`${SS_coef(a)}(-1)^n${SS_fracTerm(c, 'n')}`, true]; },
+  () => { const [a, b, c, d] = [nz(-5, 5), ri(-6, 6), ri(1, 4), ri(1, 6)]; return [T`\frac{${poly([[a, 'n'], [b, '']])}}{${poly([[c, 'n'], [d, '']])}}`, true]; },
+  () => { const [a, b, c, d] = [nz(-5, 5), ri(-6, 6), ri(1, 4), ri(1, 6)]; return [T`\frac{${poly([[a, 'n^2'], [b, '']])}}{${poly([[c, 'n'], [d, '']])}}`, false]; },
+  () => { const g = SS_geoTerm(); return g && [`${g.base}^n`, Math.abs(g.p) <= g.q]; },
+  () => { const c = nz(-4, 4), k = ri(1, 3); return [T`${SS_coef(c)}(-1)^n ${SS_pw('n', k)}`, false]; },
+  () => { const c = nz(-5, 5), d = ri(-5, 5); return [poly([[c, pick([T`\sin n`, T`\cos n`])], [d, '']]), true]; },
+  () => { const c = nz(-5, 5); return [poly([[c, pick([T`\sqrt n`, T`\log n`])]]), false]; },
+  () => { const k = ri(1, 3), a = ri(2, 4); return [T`\frac{${SS_pw('n', k)}}{${a}^n}`, true]; },
+  () => { const c = ri(1, 5); return [T`${SS_coef(c)}n^{(-1)^n}`, false]; },
+  () => { const a = nz(-4, 4), d = ri(1, 6); return [T`${SS_coef(a)}(-1)^n\frac{n}{n + ${d}}`, true]; },
+];
+
+// Monotone? (notes §12): [TeX, s(n)]; classified numerically by SS_monotone
+const SS_MONO = [
+  () => { const c = nz(-6, 6), k = ri(1, 3); return [T`\frac{${c}}{${SS_pw('n', k)}}`, n => c / n ** k]; },
+  () => { const [a, b, c, d] = [nz(-5, 5), ri(-6, 6), ri(1, 4), ri(1, 6)];
+          return [T`\frac{${poly([[a, 'n'], [b, '']])}}{${poly([[c, 'n'], [d, '']])}}`, n => (a * n + b) / (c * n + d)]; },
+  () => { const g = SS_geoTerm(); return g && [`${g.base}^n`, n => (g.p / g.q) ** n]; },
+  () => { const c = pick([1, 2, 4, 6, 8]); return [poly([[1, 'n^2'], [-c, 'n']]), n => n * n - c * n]; },
+  () => { const k = ri(1, 3), a = ri(2, 4); return [T`\frac{${SS_pw('n', k)}}{${a}^n}`, n => n ** k / a ** n]; },
+  () => { const c = nz(-3, 3), k = ri(1, 2); return [T`\frac{${SS_coef(c)}(-1)^n}{${SS_pw('n', k)}}`, n => c * (-1) ** n / n ** k]; },
+  () => { const c = nz(-3, 3); return [poly([[1, 'n'], [c, '(-1)^n']]), n => n + c * (-1) ** n]; },
+];
+const SS_MONO_ALIASES = { increasing: ['increasing', 'inc', 'incr', 'strictlyincreasing'], decreasing: ['decreasing', 'dec', 'decr', 'strictlydecreasing'],
+                          neither: ['neither', 'notmonotone', 'none', 'no'] };
+// Strictly increasing / decreasing / neither over n = 1..81; null if two neighbours are equal (non-strict: avoided)
+function SS_monotone(f) {
+  let up = 0, down = 0;
+  for (let n = 1; n <= 80; n++) {
+    const d = f(n + 1) - f(n);
+    if (Math.abs(d) <= 1e-9 * Math.max(Math.abs(f(n)), Math.abs(f(n + 1)))) return null;
+    if (d > 0) up++; else down++;
+  }
+  return !down ? 'increasing' : !up ? 'decreasing' : 'neither';
+}
+
+// Sequences with integer limit points (notes §13): [TeX, s(n), limit points, [[subscript, n(k), subsequence limit]]]
+const SS_SUBSEQ = [
+  () => { const a = nz(-4, 4), b = ri(-4, 4), c = nz(-5, 5), k = ri(1, 2);
+          return [poly([[a, '(-1)^n'], [b, '']]) + SS_fracTerm(c, SS_pw('n', k)), n => a * (-1) ** n + b + c / n ** k, [b - a, b + a],
+                  [['2k', k => 2 * k, b + a], ['2k+1', k => 2 * k + 1, b - a], ['2k-1', k => 2 * k - 1, b - a], ['4k', k => 4 * k, b + a]]]; },
+  () => { const a = nz(-4, 4), b = ri(-4, 4);
+          return [poly([[a, T`\sin\left(\frac{n\pi}{2}\right)`], [b, '']]), n => a * Math.sin(n * Math.PI / 2) + b, [b - a, b, b + a],
+                  [['4k', k => 4 * k, b], ['4k+1', k => 4 * k + 1, b + a], ['4k+3', k => 4 * k + 3, b - a], ['4k-1', k => 4 * k - 1, b - a], ['2k', k => 2 * k, b]]]; },
+  () => { const a = pick([-4, -2, 2, 4]), b = ri(-4, 4);
+          return [poly([[a, T`\cos\left(\frac{n\pi}{3}\right)`], [b, '']]), n => a * Math.cos(n * Math.PI / 3) + b, [b - a, b - a / 2, b + a / 2, b + a],
+                  [['6k', k => 6 * k, b + a], ['6k+3', k => 6 * k + 3, b - a], ['6k+1', k => 6 * k + 1, b + a / 2], ['6k+2', k => 6 * k + 2, b - a / 2]]]; },
+];
+// Limit-point-only families (no subsequence question): [TeX, limit points]
+const SS_LIMPTS = [
+  () => { const c = ri(1, 3), m = nz(-4, 4), b = ri(-6, 6), d = ri(1, 6); return [T`\frac{${poly([[c * m, 'n'], [b, '']])}}{${poly([[c, 'n'], [d, '']])}}`, [m]]; },
+  () => { const a = nz(-4, 4), d = ri(1, 6); return [T`${SS_coef(a)}(-1)^n\frac{n}{n + ${d}}`, [-a, a]]; },
+  () => { const c = ri(1, 5); return [T`${SS_coef(c)}n^{(-1)^n}`, [0]]; },
+];
+
+// Term test (notes §14: sum converges => a_k -> 0): [TeX of a_k, lim a_k != 0]
+const SS_TERMS = [
+  () => { const [a, b, c, d] = [nz(-5, 5), ri(-5, 5), ri(1, 4), ri(1, 6)]; return [T`\frac{${poly([[a, 'k'], [b, '']])}}{${poly([[c, 'k'], [d, '']])}}`, true]; },
+  () => { const [a, b, c, d] = [nz(-5, 5), ri(-5, 5), ri(1, 4), ri(1, 6)]; return [T`\frac{${poly([[a, 'k'], [b, '']])}}{${poly([[c, 'k^2'], [d, '']])}}`, false]; },
+  () => { const g = SS_geoTerm(); return g && [`${g.base}^k`, Math.abs(g.p) >= g.q]; },
+  () => { const a = ri(1, 5); return [T`\left(1 + \frac{${a}}{k}\right)^k`, true]; },
+  () => { const a = ri(2, 9); return [T`${a}^{1/k}`, true]; },
+  () => { const c = ri(1, 6); return [T`\frac{${c}}{\sqrt k}`, false]; },
+  () => { const c = nz(-5, 5); return [T`\frac{${SS_coef(c)}(-1)^k}{k}`, false]; },
+  () => { const c = nz(-5, 5); return [T`${SS_coef(c)}(-1)^k`, true]; },
+];
+const SS_INCONCLUSIVE = ['inconclusive', 'noconclusion', 'nothing', 'unknown'];
+
+// Positive-term series: p-series and comparison by leading exponents (notes §14.3, §15.1): [TeX of a_k, converges]
+const SS_PSER = [
+  () => { const r = ri(1, 9), s = pick([1, 2, 3]); return gcd(r, s) === 1 ? [T`\frac{1}{${SS_kpow(frac(r, s))}}`, r > s] : null; },
+  () => { const m = ri(0, 3), n = ri(m + 1, m + 3), [a, b, c, d] = [ri(1, 5), m ? ri(0, 6) : 0, ri(1, 5), ri(1, 6)];
+          return [T`\frac{${poly([[a, SS_pw('k', m)], [b, '']])}}{${poly([[c, SS_pw('k', n)], [d, '']])}}`, n - m > 1]; },
+  () => { const n = ri(1, 3), [b, c, d] = [ri(1, 6), ri(1, 5), ri(1, 6)]; return [T`\frac{\sqrt k + ${b}}{${poly([[c, SS_pw('k', n)], [d, '']])}}`, n >= 2]; },
+  () => { const a = ri(2, 5), b = ri(2, 5), c = ri(1, 9); return a !== b ? [T`\frac{${a}^k}{${b}^k + ${c}}`, a < b] : null; },
+];
+
+// Σ(−1)^k a_k: absolutely / conditionally / diverges (notes §15): [TeX of the term, class]
+const SS_ALT = [
+  () => { const r = ri(-2, 9), s = pick([1, 2, 3]), p = r / s;
+          if (gcd(r, s) !== 1) return null;
+          const tex = r === 0 ? '(-1)^k' : r < 0 ? T`(-1)^k ${SS_kpow(frac(-r, s))}` : T`\frac{(-1)^k}{${SS_kpow(frac(r, s))}}`;
+          return [tex, p > 1 ? 'abs' : p > 0 ? 'cond' : 'div']; },
+  () => { const m = ri(0, 2), n = ri(1, 4), c = ri(1, 6), d = n - m;
+          return [T`\frac{(-1)^k ${SS_pw('k', m)}}{${poly([[1, SS_pw('k', n)], [c, '']])}}`, d > 1 ? 'abs' : d > 0 ? 'cond' : 'div']; },
+  () => { const n = ri(1, 2), c = ri(1, 6); return [T`\frac{(-1)^k\sqrt k}{${poly([[1, SS_pw('k', n)], [c, '']])}}`, n === 2 ? 'abs' : 'cond']; },
+];
+const SS_ALT_ANS = {
+  abs: { a: ['absolutely', 'absolute', 'abs', 'convergesabsolutely', 'absolutelyconvergent'], show: T`\text{absolutely}` },
+  cond: { a: ['conditionally', 'conditional', 'cond', 'convergesconditionally', 'conditionallyconvergent'], show: T`\text{conditionally}` },
+  div: { a: SS_DIV, show: T`\text{diverges}` },
+};
 
 // ---------- propositional logic ----------
 const BIN = ['∧', '∨', '→', '↔'];
