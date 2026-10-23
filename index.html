@@ -63,6 +63,16 @@ const CONFIG = {
     { id: 'syntax',      name: 'Syntax',                types: ['logic-main', 'logic-restore', 'logic-drop', 'logic-official', 'logic-sentence'] },
     { id: 'tables',      name: 'Truth tables',          types: ['logic-connective', 'logic-forced', 'logic-value', 'logic-column', 'logic-counter'] },
     { id: 'forms',       name: 'Famous forms',          types: ['logic-famous', 'logic-name'] },
+    { id: 'natded',      name: 'Natural deduction',     types: ['logic-ndrule', 'logic-goalrule', 'logic-ndassume', 'logic-ndrule2', 'logic-quantlegal', 'logic-eqelim'] },
+    { id: 'predsyntax',  name: 'Predicate syntax',      types: ['logic-freebound', 'logic-freevars', 'logic-l2sentence', 'logic-subst'] },
+    { id: 'structures',  name: 'Structures',            types: ['logic-l2true', 'logic-quantneg', 'logic-mindomain'] },
+    { id: 'formal2',     name: 'Formalising L2',        types: ['logic-l2formal', 'logic-quantneg'] },
+    { id: 'setsrel',     name: 'Sets & relations',      types: ['logic-setop', 'logic-setmember', 'logic-setcard', 'logic-relprop'] },
+    { id: 'limits2',     name: 'Limits II',             types: ['calc-growth', 'calc-limtrick', 'calc-squeeze', 'calc-bigo', 'calc-lhopform', 'calc-lhop'] },
+    { id: 'diff2',       name: 'Differentiation II',    types: ['calc-dstd', 'calc-dstd2', 'calc-dchain', 'calc-chain2', 'calc-dprod', 'calc-quot', 'calc-logdiff', 'calc-dval'] },
+    { id: 'implicit',    name: 'Implicit & parametric', types: ['calc-invder', 'calc-implicit', 'calc-param', 'calc-stat', 'calc-maxmin'] },
+    { id: 'integration', name: 'Integration',           types: ['calc-ftc', 'calc-anti', 'calc-defint', 'calc-subst', 'calc-csq', 'calc-parts', 'calc-pf', 'calc-improper'] },
+    { id: 'taylor',      name: 'Series & Taylor',       types: ['calc-ratio', 'calc-radius', 'calc-series', 'calc-taylor', 'calc-taylora'] },
     { id: 'seqlim',      name: 'Sequence limits',       types: ['seq-convdiv', 'seq-ratlim', 'seq-growth', 'seq-rootlim', 'seq-elim', 'seq-boundlim'] },
     { id: 'epsn0',       name: 'ε–n₀ and sandwich',     types: ['seq-epsdist', 'seq-n0', 'seq-findN', 'seq-sandbound', 'seq-boundlim'] },
     { id: 'seqprops',    name: 'Bounded, monotone, subsequences', types: ['seq-bddseq', 'seq-mono', 'seq-subseq', 'seq-limpts'] },
@@ -1032,6 +1042,369 @@ const TYPES = [
     return { q: T`$\displaystyle\sum_{k=1}^{\infty} ${t[0]}$: converges absolutely, conditionally, or diverges?`, ...SS_ALT_ANS[t[1]], kind: 'text',
              keys: ['absolutely', 'conditionally', 'diverges'], hint: 'absolutely, conditionally or diverges' };
   }},
+  // ---------- Calculus II (limits II, differentiation II, integration, series) ----------
+  { id: 'calc-growth', name: 'Growth: ln vs power vs exp', par: 5, cat: 'calc', week: 5, weight: 1, gen() {
+    const [r1, r2] = shuffle([0, 1, 2]).slice(0, 2);
+    const q = T`$\displaystyle\lim_{x\to\infty} \frac{${CAL_growthTerm(r1)}}{${CAL_growthTerm(r2)}}$`;
+    return r1 < r2 ? { q, a: '0', kind: 'num', hint: 'a number, or inf' } : { q, a: INF_ALIASES, kind: 'text', show: T`\infty`, hint: 'a number, or inf' };
+  }},
+  { id: 'calc-limtrick', name: 'x ln x, x sin(a/x), x(e^(a/x) − 1)', par: 7, cat: 'calc', week: 5, weight: 1, gen() {
+    const a = nz(-5, 5), b = ri(1, 3), p = ri(1, 3), A = T`${a < 0 ? '-' : ''}\frac{${Math.abs(a)}}{x}`;
+    return pick([
+      { q: T`$\displaystyle\lim_{x\to 0^+} ${pick([xPow(p), T`\sqrt{x}`])}\ln x$`, a: '0', kind: 'num' },
+      { q: T`$\displaystyle\lim_{x\to 0^+} x^{${poly([[p, 'x']])}}$`, a: '1', kind: 'num' },
+      { q: T`$\displaystyle\lim_{x\to\infty} ${CAL_co(b)}x\sin\left(${A}\right)$`, a: String(a * b), kind: 'num' },
+      { q: T`$\displaystyle\lim_{x\to\infty} ${CAL_co(b)}x\left(e^{${a}/x} - 1\right)$`, a: String(a * b), kind: 'num' },
+    ]);
+  }},
+  { id: 'calc-squeeze', name: 'Sandwich theorem limit', par: 7, cat: 'calc', week: 5, weight: 1, gen() {
+    const k = ri(1, 4), a = ri(1, 5), c = ri(-5, 5), f = '\\' + pick(['sin', 'cos']), hint = 'a number, or DNE';
+    const pre = c ? `${c} + ` : '', ax = poly([[a, 'x']]);
+    return pick([
+      { q: T`$\displaystyle\lim_{x\to 0} \left(${pre}${xPow(k)}${f}\left(\frac{${a}}{x}\right)\right)$`, a: String(c), kind: 'num', hint },
+      { q: T`$\displaystyle\lim_{x\to\infty} \left(${pre}\frac{${f}(${ax})}{${xPow(k)}}\right)$`, a: String(c), kind: 'num', hint },
+      { q: T`$\displaystyle\lim_{x\to\infty} ${xPow(k)}${f}(${ax})$`, a: CAL_DNE, kind: 'text', show: T`\text{DNE}`, hint },
+    ]);
+  }},
+  { id: 'calc-bigo', name: 'Big-O: dominant power', par: 7, cat: 'calc', week: 5, weight: 1, gen() {
+    const pw = shuffle([0, 1, 2, 3, 4, 5]).slice(0, ri(2, 3)), toInf = Math.random() < 0.5;
+    const n = toInf ? Math.max(...pw) : Math.min(...pw), f = poly(pw.map(p => [nz(-7, 7), xPow(p)]));
+    return { q: T`As $x\to ${toInf ? T`\infty` : '0'}$: $\ ${f} = O(\,?\,)$, the sharpest power of $x$`, a: n === 0 ? '1' : n === 1 ? 'x' : `x^${n}`,
+             kind: 'expr', pattern: /^(1|x(\^\d+)?)$/, show: n === 0 ? '1' : xPow(n), hint: 'a single power, e.g. x^3 (or 1)' };
+  }},
+  { id: 'calc-quot', name: "Quotient rule: f'(p)", par: 15, cat: 'calc', week: 6, weight: 1, gen() {
+    const [a, b, c, d] = [nz(-5, 5), ri(-6, 6), nz(-4, 4), nz(-6, 6)], p = ri(-3, 3);
+    if (Math.random() < 0.5) {   // (ax + b)/(cx + d): f' = (ad - bc)/(cx + d)^2
+      if (c * p + d === 0 || a * d === b * c) return null;
+      const f = frac(a * d - b * c, (c * p + d) ** 2);
+      return { q: T`$f(x) = \dfrac{${poly([[a, 'x'], [b, '']])}}{${poly([[c, 'x'], [d, '']])}}$. $\ f'(${p}) = ?$`, a: f.s, show: f.tex, kind: 'num' };
+    }
+    const k = ri(-5, 5), r = nz(-4, 4);   // (x^2 + k)/(x - r): f' = (x^2 - 2rx - k)/(x - r)^2
+    if (p === r) return null;
+    const f = frac(p * p - 2 * r * p - k, (p - r) ** 2);
+    return { q: T`$f(x) = \dfrac{${poly([[1, 'x^2'], [k, '']])}}{${poly([[1, 'x'], [-r, '']])}}$. $\ f'(${p}) = ?$`, a: f.s, show: f.tex, kind: 'num' };
+  }},
+  { id: 'calc-chain2', name: 'Chain rule (harder)', par: 12, cat: 'calc', week: 6, weight: 1, gen() {
+    const f = pick(CAL_OUTER), g = CAL_inner();
+    if (CAL_CHAIN_SKIP.includes(`${f.id}-${g.id}`)) return null;
+    return { q: T`$\dfrac{d}{dx}\,${f.tex(g.tex)}$`, a: `(${g.ds})*${f.ds(g.s)}`, kind: 'expr', dom: [0.2, 1.4],
+             show: f.sh(g.k * (f.sign || 1), g.rest, g.tex) };
+  }},
+  { id: 'calc-logdiff', name: 'Logarithmic differentiation', par: 15, cat: 'calc', week: 6, weight: 1, gen() {
+    const k = ri(1, 3), c = ri(1, 5), n = ri(2, 3), kx = poly([[k, 'x']]);
+    const [tex, a, show] = pick([
+      [`x^{${kx}}`, `x^(${k}x)*${k}*(ln(x)+1)`, T`${CAL_co(k)}x^{${kx}}(\ln x + 1)`],
+      [T`x^{\sin ${kx}}`, `x^(sin(${k}x))*(${k}*cos(${k}x)*ln(x) + sin(${k}x)/x)`,
+       T`x^{\sin ${kx}}\left(${CAL_co(k)}\cos(${kx})\ln x + \frac{\sin(${kx})}{x}\right)`],
+      [`(x^2 + ${c})^{x}`, `(x^2+${c})^x*(ln(x^2+${c}) + 2x^2/(x^2+${c}))`, T`(x^2 + ${c})^{x}\left(\ln(x^2 + ${c}) + \frac{2x^2}{x^2 + ${c}}\right)`],
+      [`x^{x^{${n}}}`, `x^(x^${n})*x^${n - 1}*(${n}*ln(x)+1)`, T`x^{x^{${n}}}\,${xPow(n - 1)}(${n}\ln x + 1)`],
+    ]);
+    return { q: T`$\dfrac{d}{dx}\,${tex}\quad (x > 0)$`, a, show, kind: 'expr' };
+  }},
+  { id: 'calc-dval', name: "Derivative at a point", par: 15, cat: 'calc', week: 6, weight: 1, gen() {
+    const n = ri(1, 4), m = ri(2, 3), a = nz(-3, 3), b = nz(-4, 4), ea = a === 1 ? 'e' : `e^{${a}}`;
+    const [tex, pt, ans, show] = pick([
+      [`${xPow(n)}${CAL_eTex(a)}`, '1', `${n + a}*e^(${a})`, `${CAL_co(n + a)}${ea}`],
+      [T`${xPow(n)}\ln x`, 'e', `${n + 1}*e^(${n - 1})`, n === 1 ? '2' : `${n + 1}e${n === 2 ? '' : `^{${n - 1}}`}`],
+      [T`${xPow(n)}\sin x`, T`\pi`, `-pi^${n}`, T`-\pi${n === 1 ? '' : `^{${n}}`}`],
+      [T`${CAL_eTex(a)}\sin(${poly([[b, 'x']])})`, '0', String(b), String(b)],
+      [`(${poly([[a, 'x'], [b, '']])})^{${m}}e^{x}`, '0', String(m * a * b ** (m - 1) + b ** m), String(m * a * b ** (m - 1) + b ** m)],
+    ]);
+    if (ans.startsWith('0*')) return null;
+    return { q: T`$f(x) = ${tex}$. $\ f'(${pt}) = ?$`, a: ans, show, kind: 'num' };
+  }},
+  { id: 'calc-dstd2', name: 'More standard derivatives', par: 5, cat: 'calc', week: 6, weight: 1, gen() {
+    const [tex, a, show, dom] = pick([
+      [T`\operatorname{arcsinh} x`, '1/sqrt(1+x^2)', T`\frac{1}{\sqrt{1+x^2}}`],
+      [T`\operatorname{arccosh} x`, '1/sqrt(x^2-1)', T`\frac{1}{\sqrt{x^2-1}}`, [1.2, 3]],
+      [T`\operatorname{arctanh} x`, '1/(1-x^2)', T`\frac{1}{1-x^2}`, [0.1, 0.9]],
+      [T`\sec x`, 'sec(x)*tan(x)', T`\sec x\tan x`, [0.1, 1.2]],
+      [T`\csc x`, '-csc(x)*cot(x)', T`-\csc x\cot x`],
+      [T`\cot x`, '-csc(x)^2', T`-\csc^2 x`],
+      [T`\tanh x`, '1/cosh(x)^2', T`\frac{1}{\cosh^2 x}`],
+    ]);
+    return { q: T`$\dfrac{d}{dx}\,${tex}$`, a, show, kind: 'expr', ...(dom && { dom }) };
+  }},
+  { id: 'calc-invder', name: 'Inverse function derivative', par: 12, cat: 'calc', week: 7, weight: 1, gen() {
+    const k = ri(1, 4), b = ri(-2, 2), n = pick([3, 5]), c = ri(-3, 3), K = k + 1, onPi = Math.random() < 0.5;
+    const [tex, at, d] = pick([
+      [poly([[1, xPow(n)], [k, 'x']]), String(b ** n + k * b), n * b ** (n - 1) + k],
+      [poly([[k, 'x'], [1, 'e^{x}'], [c, '']]), String(1 + c), k + 1],
+      [poly([[K, 'x'], [1, T`\sin x`]]), onPi ? T`${K}\pi` : '0', onPi ? K - 1 : K + 1],
+    ]);
+    const f = frac(1, d);
+    return { q: T`$f(x) = ${tex}$, $\ g = f^{-1}$. $\ g'(${at}) = ?$`, a: f.s, show: f.tex, kind: 'num' };
+  }},
+  { id: 'calc-implicit', name: 'Implicit dy/dx', par: 15, cat: 'calc', week: 7, weight: 1, gen() {
+    const a = nz(-5, 5), m = ri(1, 3), b = ri(1, 5), c = ri(-5, 5), n = ri(2, 3);
+    const [h, hx, hy, hxT, hyT] = pick([   // extra term h(x, y) with its partial derivatives
+      [`y^{${n}}`, '0', `${n}*y^${n - 1}`, [0, ''], [n, n === 2 ? 'y' : `y^{${n - 1}}`]],
+      [T`\sin y`, '0', 'cos(y)', [0, ''], [1, T`\cos y`]],
+      ['e^{y}', '0', 'e^y', [0, ''], [1, 'e^{y}']],
+      ['xy', 'y', 'x', [1, 'y'], [1, 'x']],
+    ]);
+    const num = [[a * m, xPow(m - 1)], hxT].filter(t => t[0] !== 0);
+    return { q: T`$${poly([[a, xPow(m)], [b, 'y'], [1, h]])} = ${c}$. $\ \dfrac{dy}{dx} = ?$`,
+             a: `-(${a * m}*x^${m - 1} + ${hx})/(${b} + ${hy})`, kind: 'expr', show: CAL_negFrac(num, poly([[b, ''], hyT])),
+             hint: 'in terms of x and y', keys: ['x', 'y', '^', '*', '/', '(', ')', '+', '-', 'e', 'sin(', 'cos('] };
+  }},
+  { id: 'calc-param', name: 'Parametric dy/dx', par: 12, cat: 'calc', week: 7, weight: 1, gen() {
+    const [i, j] = shuffle([0, 1, 2, 3]).slice(0, 2), x = CAL_paramFamily(i), y = CAL_paramFamily(j);
+    return { q: T`$x(t) = ${x.tex},\ y(t) = ${y.tex}$. $\ \dfrac{dy}{dx} = ?$`, a: `(${y.ds})/(${x.ds})`, kind: 'expr', dom: [0.1, 0.5],
+             show: CAL_signedFrac(y.dt, x.dt), hint: 'in terms of t', keys: ['t', '^', '*', '/', '(', ')', '-', 'e', 'sin(', 'cos('] };
+  }},
+  { id: 'calc-stat', name: 'Stationary points of a cubic', par: 15, cat: 'calc', week: 7, weight: 1, gen() {
+    const C = CAL_cubic();
+    if (!C) return null;
+    return { q: T`$f(x) = ${C.tex}$. $\ x$-values of the stationary points?`, a: [C.r1, C.r2], kind: 'vec', unordered: true,
+             show: T`x = ${Math.min(C.r1, C.r2)},\ ${Math.max(C.r1, C.r2)}`, hint: 'both x-values, e.g. -1, 2' };
+  }},
+  { id: 'calc-maxmin', name: 'Local max or min? (f″ test)', par: 12, cat: 'calc', week: 7, weight: 1, gen() {
+    return balanced(() => {
+      const C = CAL_cubic();
+      if (!C) return null;
+      const [r, other] = shuffle([C.r1, C.r2]);
+      return { q: T`$f(x) = ${C.tex}$ has a stationary point at $x = ${r}$. Local max or local min?`, a: C.k * (r - other) < 0,
+               kind: 'bool', labels: ['Local max', 'Local min'] };
+    }, q => q.a);
+  }},
+  { id: 'calc-ftc', name: 'FTC part 1: d/dx of ∫', par: 10, cat: 'calc', week: 8, weight: 1, gen() {
+    const f = pick(CAL_FTC), u = CAL_ftcUpper(), lo = ri(0, 1), flip = Math.random() < 0.3;
+    const lims = flip ? `_{${u.tex}}^{${lo}}` : `_{${lo}}^{${u.tex}}`, sh = T`${u.dt}\,${f.tex(u.p)}`;
+    return { q: T`$\dfrac{d}{dx}\displaystyle\int${lims} ${f.tex('t')}\,dt$`, a: `${flip ? '-' : ''}(${u.ds})*${f.s(u.s)}`, kind: 'expr', dom: [0.2, 1.2],
+             show: (flip ? '-' : '') + sh };
+  }},
+  { id: 'calc-anti', name: 'Standard antiderivatives', par: 8, cat: 'calc', week: 8, weight: 1, gen() {
+    const [tex, a, sh, dom] = CAL_antiForm();
+    return { q: T`$\displaystyle\int ${tex}\,dx$`, a, kind: 'expr', upToConstant: true, show: sh + ' + c', hint: 'any antiderivative; + c optional', ...(dom && { dom }) };
+  }},
+  { id: 'calc-defint', name: 'Definite integral', par: 12, cat: 'calc', week: 8, weight: 1, gen() {
+    const k = ri(1, 4), m = ri(2, 6), n = ri(1, 3), c = nz(-4, 4), d = ri(-3, 3), p = ri(-2, 1), q = p + ri(1, 3);
+    const poly1 = frac(c * (q ** (n + 1) - p ** (n + 1)) + d * (n + 1) * (q - p), n + 1), ek = k === 1 ? 'e' : `e^{${k}}`;
+    const [tex, lo, hi, ans, show] = pick([
+      [poly([[c, xPow(n)], [d, '']]), p, q, poly1.s, poly1.tex],
+      [T`\cos(${poly([[k, 'x']])})`, 0, piFrac(1, 2 * k).tex, frac(1, k).s, frac(1, k).tex],
+      [T`\sin(${poly([[k, 'x']])})`, 0, piFrac(1, k).tex, frac(2, k).s, frac(2, k).tex],
+      [T`${c < 0 ? '-' : ''}\frac{${Math.abs(c)}}{x}`, 1, `e^{${m}}`, String(c * m), String(c * m)],
+      [`${CAL_co(c)}e^{x}`, 0, T`\ln ${m}`, String(c * (m - 1)), String(c * (m - 1))],
+      [CAL_eTex(k), 0, 1, `(e^${k}-1)/${k}`, k === 1 ? 'e - 1' : T`\frac{${ek} - 1}{${k}}`],
+    ]);
+    return { q: T`$\displaystyle\int_{${lo}}^{${hi}} ${tex}\,dx$`, a: ans, show, kind: 'num' };
+  }},
+  { id: 'calc-subst', name: 'Integration by substitution', par: 15, cat: 'calc', week: 9, weight: 1, gen() {
+    const f = CAL_substOuter(), g = CAL_substInner(f.power), K = nz(-4, 4), co = frac(K, g.m * f.d);
+    return { q: T`$\displaystyle\int ${CAL_co(K)}${g.dt}\,${f.tex(g.tex)}\,dx$`, a: `(${co.s})*${f.Fs(g.s)}`, kind: 'expr', upToConstant: true,
+             show: `${CAL_fco(K, g.m * f.d)}${f.F(g.tex)} + c`, hint: 'any antiderivative; + c optional' };
+  }},
+  { id: 'calc-csq', name: 'Complete the square', par: 10, cat: 'calc', week: 9, weight: 1, gen() {
+    const h = nz(-6, 6), k = ri(-9, 9), sg = (v) => v < 0 ? `-${-v}` : `+${v}`;
+    return { q: T`Complete the square: $\ ${poly([[1, 'x^2'], [2 * h, 'x'], [h * h + k, '']])}$`, a: `(x${sg(h)})^2${k ? sg(k) : ''}`, kind: 'expr',
+             pattern: /^\(x[+-]\d+\)\^2([+-]\d+)?$/, show: `(${poly([[1, 'x'], [h, '']])})^2${k ? (k < 0 ? ` - ${-k}` : ` + ${k}`) : ''}`, hint: 'the form (x-3)^2+2' };
+  }},
+  { id: 'calc-parts', name: 'Integration by parts', par: 18, cat: 'calc', week: 9, weight: 1, gen() {
+    const a = nz(-3, 3), A = ri(1, 3), n = ri(0, 3), ax = poly([[A, 'x']]), N = n + 1;
+    const [tex, ans, show] = pick([
+      [`x${CAL_eTex(a)}`, `e^(${a}x)*(x/(${a}) - 1/${a * a})`, T`${CAL_eTex(a)}\left(${CAL_fco(1, a)}x - ${frac(1, a * a).tex}\right)`],
+      [T`x\sin(${ax})`, `-x*cos(${A}x)/${A} + sin(${A}x)/${A * A}`, T`${CAL_fco(-1, A)}x\cos(${ax}) + ${CAL_fco(1, A * A)}\sin(${ax})`],
+      [T`x\cos(${ax})`, `x*sin(${A}x)/${A} + cos(${A}x)/${A * A}`, T`${CAL_fco(1, A)}x\sin(${ax}) + ${CAL_fco(1, A * A)}\cos(${ax})`],
+      [T`${xPow(n)}\ln x`, `x^${N}*ln(x)/${N} - x^${N}/${N * N}`, T`${CAL_fco(1, N)}${xPow(N)}\ln x - ${CAL_fco(1, N * N)}${xPow(N)}`],
+    ]);
+    return { q: T`$\displaystyle\int ${tex}\,dx$`, a: ans, kind: 'expr', upToConstant: true, show: show + ' + c', hint: 'any antiderivative; + c optional' };
+  }},
+  { id: 'calc-pf', name: 'Partial fractions', par: 15, cat: 'calc', week: 9, weight: 1, gen() {
+    const A = nz(-5, 5), B = nz(-5, 5), r1 = ri(-4, 4), r2 = ri(-4, 4), lin = r => poly([[1, 'x'], [-r, '']]);
+    const show = T`A = ${A},\ B = ${B}`, hint = 'A, B  e.g. 2, -3';
+    if (Math.random() < 0.4) {   // (ax + b)/(x - r)^2 = A/(x - r) + B/(x - r)^2
+      if (r1 === 0) return null;
+      const L = lin(r1);
+      return { q: T`$\dfrac{${poly([[A, 'x'], [B - A * r1, '']])}}{(${L})^2} = \dfrac{A}{${L}} + \dfrac{B}{(${L})^2}$. $\ A, B = ?$`, a: [A, B], kind: 'vec', show, hint };
+    }
+    if (r1 === r2) return null;
+    const par = r => r === 0 ? 'x' : `(${lin(r)})`;
+    return { q: T`$\dfrac{${poly([[A + B, 'x'], [-(A * r2 + B * r1), '']])}}{${par(r1)}${par(r2)}} = \dfrac{A}{${lin(r1)}} + \dfrac{B}{${lin(r2)}}$. $\ A, B = ?$`,
+             a: [A, B], kind: 'vec', show, hint };
+  }},
+  { id: 'calc-improper', name: 'Improper integral', par: 10, cat: 'calc', week: 10, weight: 1, gen() {
+    const a = ri(1, 6), c = ri(1, 5), d = pick([1, 2, 3]), m = ri(1, 3 * d), hint = 'a number, or diverges';
+    if (gcd(m, d) !== 1) return null;
+    const pw = d === 1 ? xPow(m) : d === 2 && m === 1 ? T`\sqrt{x}` : `x^{${frac(m, d).tex}}`, inv = T`\frac{1}{${pw}}`;
+    const [tex, lo, hi, val] = pick([
+      [`${CAL_co(c)}e^{-${poly([[a, 'x']])}}`, '0', T`\infty`, frac(c, a)],
+      [CAL_eTex(a), '0', T`\infty`, null],
+      [inv, '1', T`\infty`, m > d ? frac(d, m - d) : null],
+      [inv, '0', '1', m < d ? frac(d, d - m) : null],
+    ]);
+    const q = T`$\displaystyle\int_{${lo}}^{${hi}} ${tex}\,dx$`;
+    return val ? { q, a: val.s, show: val.tex, kind: 'num', hint } : { q, a: CAL_DIV, kind: 'text', show: T`\text{diverges}`, hint };
+  }},
+  { id: 'calc-ratio', name: 'Ratio test limit L', par: 10, cat: 'calc', week: 10, weight: 1, gen() {
+    const c = ri(1, 5), d = ri(2, 6), k = ri(0, 3), s = pick([1, -1]), nk = k === 0 ? '' : k === 1 ? 'n' : `n^{${k}}`;
+    const cn = c === 1 ? (s < 0 ? '(-1)^{n}' : '') : `${s < 0 ? `(-${c})` : c}^{n}`;
+    if (c === d || !(cn + nk)) return null;
+    const [an, L] = pick([
+      [T`\frac{${cn}${nk}}{${d}^{n}}`, frac(c, d)],
+      [T`\frac{${d}^{n}}{n!}`, frac(0, 1)],
+      [T`\frac{n!}{${d}^{n}}`, null],
+    ]);
+    const q = T`$\displaystyle\sum_{n=1}^{\infty} ${an}$: $\ L = \lim_{n\to\infty}\left|\frac{a_{n+1}}{a_n}\right| = ?$`, hint = 'a number, or inf';
+    return L ? { q, a: L.s, show: L.tex, kind: 'num', hint } : { q, a: INF_ALIASES, kind: 'text', show: T`\infty`, hint };
+  }},
+  { id: 'calc-radius', name: 'Radius of convergence', par: 10, cat: 'calc', week: 10, weight: 1, gen() {
+    const c = ri(2, 6), k = ri(0, 3), nk = k === 0 ? '' : k === 1 ? 'n' : `n^{${k}}`;
+    const [term, R] = pick([
+      [T`\frac{${nk || '1'}}{${c}^{n}}`, frac(c, 1)],
+      [k ? T`\frac{${c}^{n}}{${nk}}` : `${c}^{n}`, frac(1, c)],
+      [T`\frac{${c}^{n}}{n!}`, null],
+      [nk ? T`${nk}\cdot n!` : 'n!', frac(0, 1)],
+    ]);
+    const q = T`Radius of convergence $R$ of $\displaystyle\sum_{n=1}^{\infty} ${term}\,x^{n}$`, hint = 'a number, or inf';
+    return R ? { q, a: R.s, show: R.tex, kind: 'num', hint } : { q, a: INF_ALIASES, kind: 'text', show: T`\infty`, hint };
+  }},
+  { id: 'calc-taylor', name: 'Taylor coefficient by substitution', par: 10, cat: 'calc', week: 11, weight: 1, gen() {
+    const name = pick(Object.keys(CAL_TAYLOR)), k = pick([1, -1, 2, -2, 3, -3]), m = pick([1, 2]), n = ri(1, 6);
+    if (n % m && Math.random() < 0.85) return null;
+    if (['exp', 'sin', 'cos'].includes(name) && m === 1 && (name === 'exp' ? Math.abs(k) <= 2 : k === 1)) return null;   // calc-series has these
+    const [texOf, coef] = CAL_TAYLOR[name], j = n / m, [p, q] = n % m ? [0, 1] : coef(j), f = frac(p * k ** j, q);
+    if (f.s === '0' && Math.random() < 0.6) return null;
+    return { q: T`Coefficient of $${xPow(n)}$ in the Taylor series of $${texOf(poly([[k, xPow(m)]]))}$ at $x = 0$`, a: f.s, show: f.tex, kind: 'num' };
+  }},
+  { id: 'calc-taylora', name: 'Taylor coefficient at x = a', par: 10, cat: 'calc', week: 11, weight: 1, gen() {
+    const a = ri(1, 3), n = ri(1, 5), b = pick([1, 2, -1]), sh = c => poly([[1, 'x'], [-c, '']]), pw = c => `(${sh(c)})${n === 1 ? '' : `^{${n}}`}`;
+    const ln = frac((-1) ** (n + 1), n * a ** n), inv = frac((-1) ** n, a ** (n + 1)), eb = b === 1 ? 'e' : `e^{${b}}`;
+    const [f, at, ans, show] = pick([
+      ['e^{x}', b, `e^(${b})/${fact(n)}`, n === 1 ? eb : T`\frac{${eb}}{${fact(n)}}`],
+      [T`\ln x`, a, ln.s, ln.tex],
+      [T`\frac{1}{x}`, a, inv.s, inv.tex],
+    ]);
+    return { q: T`Coefficient of $${pw(at)}$ in the Taylor series of $${f}$ at $x = ${at}$`, a: ans, show, kind: 'num' };
+  }},
+  { id: 'calc-lhopform', name: "0/0 or ∞/∞? (l'Hôpital)", par: 6, cat: 'calc', week: 11, weight: 1, gen() {
+    return balanced(() => {
+      const at0 = Math.random() < 0.5, [nt, nc] = CAL_formTerm(at0), [dt, dc] = CAL_formTerm(at0);
+      if (nt === dt) return null;
+      return { q: T`Is $\displaystyle\lim_{x\to ${at0 ? '0^+' : T`\infty`}} \frac{${nt}}{${dt}}$ of the form $\frac{0}{0}$ or $\frac{\infty}{\infty}$?`,
+               a: nc === dc && nc !== 'f', kind: 'bool', labels: ['Yes', 'No'] };
+    }, q => q.a);
+  }},
+  { id: 'calc-lhop', name: "l'Hôpital limit", par: 15, cat: 'calc', week: 11, weight: 1, gen() {
+    const a = nz(-4, 4), b = nz(-4, 4), A = ri(1, 3), n = ri(2, 5), m = ri(2, 5), ax = poly([[a, 'x']]);
+    const [tex, at, f] = pick([
+      [T`\frac{${CAL_eTex(a)} - 1}{${poly([[b, 'x']])}}`, '0', frac(a, b)],
+      [T`\frac{\ln(${poly([[1, ''], [a, 'x']])})}{${poly([[b, 'x']])}}`, '0', frac(a, b)],
+      [T`\frac{${CAL_eTex(a)} - ${CAL_eTex(b)}}{x}`, '0', a === b ? null : frac(a - b, 1)],
+      [T`\frac{${poly([[1, `e^{${ax}}`], [-1, ''], [-a, 'x']])}}{x^2}`, '0', frac(a * a, 2)],
+      [T`\frac{${poly([[A, 'x']])} - \sin(${poly([[A, 'x']])})}{x^3}`, '0', frac(A ** 3, 6)],
+      [T`\frac{\cosh(${poly([[A, 'x']])}) - 1}{x^2}`, '0', frac(A * A, 2)],
+      [T`\frac{x^{${n}} - 1}{x^{${m}} - 1}`, '1', n === m ? null : frac(n, m)],
+    ]);
+    if (!f) return null;
+    return { q: T`$\displaystyle\lim_{x\to ${at}} ${tex}$`, a: f.s, show: f.tex, kind: 'num' };
+  }},
+  // ---------- Elementary Logic: predicate logic, natural deduction, sets (LG_ helpers) ----------
+  { id: 'logic-ndrule', name: 'Name the ND rule', par: 8, cat: 'logic', week: 5, weight: 1, gen() {
+    const [op, kind, nums, step] = LG_propStep();
+    return { q: `Which rule? ${step}`, ...LG_ruleAnswer(op, kind, nums), kind: 'text', keys: LG_RULE_KEYS, noKeyboard: true, hint: 'rule name, e.g. ∧Elim1 or →Intro' };
+  }},
+  { id: 'logic-goalrule', name: 'Rule for the goal', par: 4, cat: 'logic', week: 5, weight: 1, gen() {
+    const f = rf(2, ['P', 'Q', 'R']);
+    if (typeof f === 'string' || depth(f) < 2) return null;
+    return { q: `Which introduction rule gives ${LG_f(show(f))} as its last step?`, ...LG_ruleAnswer(f.op, 'Intro', f.op === '∨' ? ['', '1', '2'] : ['']),
+             kind: 'text', keys: LG_RULE_KEYS, noKeyboard: true, hint: 'rule name, e.g. ∧Intro' };
+  }},
+  { id: 'logic-ndassume', name: 'What to assume', par: 7, cat: 'logic', week: 6, weight: 1, gen() {
+    const [text, ans] = LG_assumeStep(), forms = [...new Set([show(ans), official(ans)])];
+    return { q: `${text} what?`, a: forms, show: LG_tex(forms[0]), kind: 'syntax', keys: LOGIC_KEYS, noKeyboard: true, hint: 'the assumption, e.g. ¬(P ∧ Q)' };
+  }},
+  { id: 'logic-setop', name: 'Set operation', par: 10, cat: 'logic', week: 5, weight: 1, gen() {
+    const A = LG_randSet(1, 6, ri(2, 4)), B = LG_randSet(1, 6, ri(2, 4)), [op, keep] = pick([
+      [T`\cup`, x => A.includes(x) || B.includes(x)], [T`\cap`, x => A.includes(x) && B.includes(x)], [T`\setminus`, x => A.includes(x) && !B.includes(x)]]);
+    const res = [1, 2, 3, 4, 5, 6].filter(keep);
+    return { q: T`$${LG_setTeX(A)} ${op} ${LG_setTeX(B)}$`, a: `{${res.join(',')}}`, show: LG_setTeX(res), kind: 'set', hint: 'a set, e.g. {1,3}, or {} for ∅' };
+  }},
+  { id: 'logic-setmember', name: '∈ or ⊆?', par: 7, cat: 'logic', week: 5, weight: 1, gen() {
+    const make = () => {
+      const S = [LG_randElement(), LG_randElement(), LG_randElement()], sub = Math.random() < 0.5;
+      const X = sub ? pick([[pick(S)], [pick(S), pick(S)], [], [ri(1, 3)]]) : pick([pick(S), pick(S), LG_randElement(), [pick(S)]]);
+      if (LG_card(S) < 3) return null;
+      const yes = sub ? X.every(x => LG_member(x, S)) : LG_member(X, S);
+      return { q: T`True? $\ ${LG_setTeX(X)} ${sub ? T`\subseteq` : T`\in`} ${LG_setTeX(S)}$`, yes };
+    };
+    const r = balanced(make, x => x.yes);
+    return r && { q: r.q, a: r.yes, kind: 'bool', labels: ['True', 'False'] };
+  }},
+  { id: 'logic-setcard', name: 'Cardinality', par: 8, cat: 'logic', week: 5, weight: 1, gen() {
+    if (Math.random() < 0.3) {
+      const A = Array.from({ length: ri(2, 4) }, () => ri(1, 3)), B = Array.from({ length: ri(2, 3) }, () => ri(1, 4));
+      return { q: T`$|A \times B|$ for $A = \{${A.join(', ')}\},\ B = \{${B.join(', ')}\}$`, a: String(LG_card(A) * LG_card(B)), kind: 'num' };
+    }
+    const S = Array.from({ length: ri(3, 5) }, LG_randElement);
+    return { q: T`$\left|\,\{${S.map(LG_setTeX).join(', ')}\}\,\right|$`, a: String(LG_card(S)), kind: 'num', hint: 'how many distinct elements' };
+  }},
+  { id: 'logic-relprop', name: 'Relation property', par: 15, cat: 'logic', week: 6, weight: 1, gen() {
+    const prop = pick(Object.keys(LG_REL)), rel = balanced(LG_randRelation, r => LG_REL[prop](r.R, r.D, r.has));
+    return rel && { q: T`Is $R = ${LG_pairsTeX(rel.R)}$ ${prop} over $\{${rel.D.join(', ')}\}$?`, a: LG_REL[prop](rel.R, rel.D, rel.has), kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'logic-l2formal', name: 'Formalise in L2', par: 15, cat: 'logic', week: 7, weight: 1, gen() {
+    const { english, trees, dict } = LG_formalise(), a = LG_answers(trees, false);
+    return { q: `Formalise in L<sub>2</sub>: ${LG_f(english + '.')}<br><span class="muted">${dict}</span>`, a, show: LG_tex(a[0]), kind: 'syntax',
+             keys: ['∀', '∃', 'x', 'y', 'a', 'P', 'Q', 'R', '¬', '∧', '∨', '→', '(', ')'], noKeyboard: true, hint: 'e.g. ∀x(Px → Qx); use x, then y', check: LG_sameOn(trees) };
+  }},
+  { id: 'logic-freebound', name: 'Free or bound?', par: 6, cat: 'logic', week: 7, weight: 1, gen() {
+    const make = () => {
+      const f = LG_rand(3), occ = LG_occ(f), k = ri(0, occ.length - 1);
+      return LG_okRand(f) && occ.length > 1 ? { f, k, free: occ[k].free } : null;
+    };
+    const r = balanced(make, x => x.free);
+    return r && { q: `Is the underlined occurrence of ${LG_occ(r.f)[r.k].v} free or bound?<br>${LG_f(LG_str(r.f, { conv: true, mark: r.k }))}`, a: r.free, kind: 'bool', labels: ['Free', 'Bound'] };
+  }},
+  { id: 'logic-freevars', name: 'Free variables', par: 10, cat: 'logic', week: 7, weight: 1, gen() {
+    const f = LG_rand(3), free = [...LG_free(f)].sort();
+    if (!LG_okRand(f) || LG_occ(f).length < 2) return null;
+    return { q: `Set of variables that occur freely in ${LG_f(LG_str(f))}`, a: `{${free.join(',')}}`, show: free.length ? T`\{${free.join(', ')}\}` : T`\varnothing`,
+             kind: 'set', keys: ['{', '}', ',', 'x', 'y', 'z'], noKeyboard: true, hint: 'e.g. {x,y}, or {} if none' };
+  }},
+  { id: 'logic-l2sentence', name: 'Sentence of L2?', par: 8, cat: 'logic', week: 7, weight: 1, gen() {
+    const f = balanced(() => { const g = LG_rand(3); return LG_okRand(g) && LG_size(g) >= 4 ? g : null; }, g => LG_free(g).size === 0);
+    return f && { q: `Is this a sentence of L<sub>2</sub> (no variable occurs freely)?<br>${LG_f(LG_str(f))}`, a: LG_free(f).size === 0, kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'logic-l2true', name: 'True in the structure?', par: 25, cat: 'logic', week: 8, weight: 1, gen() {
+    const r = balanced(() => { const f = LG_structSentence(); return f && { f, M: LG_structModel() }; }, ({ f, M }) => LG_ev(f, M));
+    return r && { q: T`$${LG_modelTeX(r.M, r.f)}$<br>True? ${LG_f(LG_str(r.f))}`, a: LG_ev(r.f, r.M), kind: 'bool', labels: ['True', 'False'] };
+  }},
+  { id: 'logic-quantneg', name: 'Quantifier negation', par: 15, cat: 'logic', week: 8, weight: 1, gen() {
+    const f = LG_negSentence();
+    if (!f) return null;
+    const a = LG_answers([LG_nnf(f)], true);
+    return { q: `Equivalent sentence with ¬ only directly before atomic formulas:<br>${LG_f(LG_str(f))}`, a, show: LG_tex(a[0]), kind: 'syntax',
+             keys: ['∀', '∃', 'x', 'y', 'P', 'Q', 'R', '¬', '∧', '∨', '→', '(', ')'], noKeyboard: true, check: LG_sameOn([f, LG_nnf(f)]) };
+  }},
+  { id: 'logic-subst', name: 'Substitution φ[a/x]', par: 15, cat: 'logic', week: 9, weight: 1, gen() {
+    const f = LG_substFormula(), t = pick(['a', 'b']);
+    if (!f) return null;
+    const a = [...new Set(LG_forms(LG_sub(f, t, 'x')))];
+    return { q: `φ = ${LG_f(LG_str(f))}<br>Write φ[${t}/x]`, a, show: LG_tex(a[0]), kind: 'syntax',
+             keys: ['∀', '∃', 'x', 'y', 'z', t, 'P', 'Q', 'R', '¬', '∧', '∨', '→', '↔', '(', ')'], noKeyboard: true, hint: 'replace only the free occurrences of x' };
+  }},
+  { id: 'logic-ndrule2', name: 'Name the quantifier rule', par: 8, cat: 'logic', week: 9, weight: 1, gen() {
+    const [op, kind, nums, step] = LG_predStep();
+    return { q: `Which rule? ${step}`, ...LG_ruleAnswer(op, kind, nums), kind: 'text', keys: ['∀', '∃', '=', 'Intro', 'Elim'], noKeyboard: true, hint: 'rule name, e.g. ∀Elim' };
+  }},
+  { id: 'logic-quantlegal', name: '∀Intro / ∃Elim legal?', par: 15, cat: 'logic', week: 9, weight: 1, gen() {
+    const r = balanced(LG_quantStep, x => x.legal);
+    return r && { q: `${r.q}<br>Is this step legal?`, a: r.legal, kind: 'bool', labels: ['Legal', 'Illegal'] };
+  }},
+  { id: 'logic-eqelim', name: '=Elim result', par: 15, cat: 'logic', week: 10, weight: 1, gen() {
+    const phi = LG_rqf([LG_at('P', 'x'), LG_at('Q', 'x'), LG_at('R', 'x', 'a'), LG_at('R', 'a', 'x'), LG_at('R', 'x', 'x'), LG_at('P', 'a')], 1);
+    if (!LG_free(phi).has('x') || !LG_consts(phi).includes('a')) return null;
+    const id = pick(['a = b', 'b = a']), a = [...new Set(LG_forms(LG_sub(phi, 'b', 'x')))];
+    return { q: `φ = ${LG_f(LG_str(phi))}<br>From ${LG_f(LG_str(LG_sub(phi, 'a', 'x')))} and ${LG_f(id)}, =Elim gives φ[b/x] = ?`, a, show: LG_tex(a[0]), kind: 'syntax',
+             keys: ['P', 'Q', 'R', 'a', 'b', '¬', '∧', '∨', '→', '(', ')'], noKeyboard: true };
+  }},
+  { id: 'logic-mindomain', name: 'Smallest domain', par: 15, cat: 'logic', week: 10, weight: 1, gen() {
+    const f = Math.random() < 0.25 ? LG_countClaim() : and(LG_countClaim(), LG_countClaim()), n = LG_minDomain(f);
+    if (!n || LG_size(f) > 16) return null;
+    return { q: `Smallest domain size in which ${LG_f(LG_str(f))} is true?`, a: String(n), kind: 'num' };
+  }},
 ];
 </script>
 <!-- ============================ END CONFIG ============================ -->
@@ -1684,6 +2057,511 @@ const SS_ALT_ANS = {
   div: { a: SS_DIV, show: T`\text{diverges}` },
 };
 
+// ---------- Calculus II helpers (CAL_) ----------
+const CAL_DNE = ['dne', 'does not exist', 'doesnt exist', "doesn't exist", 'none'];
+const CAL_DIV = ['diverges', 'divergent', 'diverge', 'div', 'inf', '∞', 'infinity', 'dne'];
+// Integer coefficient in front of a TeX term: 1 -> '', -1 -> '-'
+const CAL_co = c => c === 1 ? '' : c === -1 ? '-' : String(c);
+// Fraction p/q in front of a TeX term: 1 -> '', -1 -> '-', -1/3 -> '-\frac{1}{3}'
+const CAL_fco = (p, q) => { const f = frac(p, q); return f.s === '1' ? '' : f.s === '-1' ? '-' : f.tex; };
+// e^{ax} in TeX: e^{x}, e^{-x}, e^{3x}
+const CAL_eTex = a => `e^{${poly([[a, 'x']])}}`;
+// -(terms)/den with the sign pulled into a single-term numerator
+const CAL_negFrac = (terms, den) => terms.length === 1 && terms[0][0] < 0
+  ? T`\frac{${poly([[-terms[0][0], terms[0][1]]])}}{${den}}` : T`-\frac{${poly(terms)}}{${den}}`;
+// \frac{num}{den} with leading minus signs collected in front
+function CAL_signedFrac(num, den) {
+  const neg = (num[0] === '-') !== (den[0] === '-');
+  return T`${neg ? '-' : ''}\frac{${num.replace(/^-/, '')}}{${den.replace(/^-/, '')}}`;
+}
+
+// Growth classes for x -> infinity: 0 = (ln x)^a, 1 = x^p, 2 = exponential
+function CAL_growthTerm(rank) {
+  if (rank === 0) { const a = ri(1, 3); return a === 1 ? T`\ln x` : T`(\ln x)^{${a}}`; }
+  if (rank === 1) return pick([xPow(ri(1, 7)), T`\sqrt{x}`]);
+  return pick([CAL_eTex(ri(1, 4)), `${pick([2, 3, 5])}^{x}`]);
+}
+
+// Harder chain rule. Outer f(U): s/ds = math.js strings of f and f'; sh(K, rest, U) = TeX of K·rest·f'(U)
+const CAL_coTerm = (K, rest) => rest ? CAL_co(K) + rest + T`\,` : String(K);
+const CAL_fracTerm = (K, rest, den) => T`${K < 0 ? '-' : ''}\frac{${rest ? CAL_co(Math.abs(K)) + rest : Math.abs(K)}}{${den}}`;
+const CAL_OUTER = [
+  { id: 'sin', tex: U => T`\sin(${U})`, ds: u => `cos(${u})`, sh: (K, r, U) => T`${CAL_coTerm(K, r)}\cos(${U})` },
+  { id: 'cos', tex: U => T`\cos(${U})`, ds: u => `-sin(${u})`, sign: -1, sh: (K, r, U) => T`${CAL_coTerm(K, r)}\sin(${U})` },
+  { id: 'exp', tex: U => `e^{${U}}`, ds: u => `e^(${u})`, sh: (K, r, U) => `${CAL_coTerm(K, r)}e^{${U}}` },
+  { id: 'ln', tex: U => T`\ln(${U})`, ds: u => `1/(${u})`, sh: (K, r, U) => CAL_fracTerm(K, r, U) },
+  { id: 'cosh', tex: U => T`\cosh(${U})`, ds: u => `sinh(${u})`, sh: (K, r, U) => T`${CAL_coTerm(K, r)}\sinh(${U})` },
+  { id: 'tanh', tex: U => T`\tanh(${U})`, ds: u => `1/cosh(${u})^2`, sh: (K, r, U) => CAL_fracTerm(K, r, T`\cosh^2(${U})`) },
+  { id: 'sq', tex: U => `(${U})^2`, ds: u => `2*(${u})`, sign: 2, sh: (K, r, U) => `${CAL_coTerm(K, r)}${U}` },
+];
+// Inner u(x): k·rest = u'(x) in TeX, ds = u'(x) as a string
+function CAL_inner() {
+  const a = nz(-4, 4), b = nz(-5, 5);
+  return pick([
+    { id: 'x2', tex: 'x^2', s: 'x^2', ds: '2x', k: 2, rest: 'x' },
+    { id: 'lin', tex: poly([[a, 'x'], [b, '']]), s: `(${a}x+(${b}))`, ds: String(a), k: a, rest: '' },
+    { id: 'sin', tex: T`\sin x`, s: 'sin(x)', ds: 'cos(x)', k: 1, rest: T`\cos x` },
+    { id: 'cos', tex: T`\cos x`, s: 'cos(x)', ds: '-sin(x)', k: -1, rest: T`\sin x` },
+    { id: 'exp', tex: 'e^{x}', s: 'e^x', ds: 'e^x', k: 1, rest: 'e^{x}' },
+  ]);
+}
+// Pairs already drilled by calc-dchain, trivial, or with ugly answers
+const CAL_CHAIN_SKIP = ['exp-lin', 'sin-lin', 'ln-lin', 'sq-lin', 'sq-x2', 'sq-exp', 'ln-exp'];
+
+// Parametric curve coordinates: tex, derivative string ds and TeX dt
+function CAL_paramFamily(i) {
+  const n = ri(2, 4), a = nz(-3, 3), b = ri(1, 3), at = poly([[a, 't']]), bt = poly([[b, 't']]);
+  return [
+    { tex: `t^{${n}}`, ds: `${n}*t^${n - 1}`, dt: `${n}${n === 2 ? 't' : `t^{${n - 1}}`}` },
+    { tex: `e^{${at}}`, ds: `${a}*e^(${a}t)`, dt: `${CAL_co(a)}e^{${at}}` },
+    { tex: T`\sin(${bt})`, ds: `${b}*cos(${b}t)`, dt: T`${CAL_co(b)}\cos(${bt})` },
+    { tex: T`\cos(${bt})`, ds: `-${b}*sin(${b}t)`, dt: T`-${CAL_co(b)}\sin(${bt})` },
+  ][i];
+}
+
+// Cubic with stationary points r1 != r2: f'(x) = (6k/h)(x - r1)(x - r2), integer coefficients
+function CAL_cubic() {
+  const r1 = ri(-3, 3), r2 = ri(-3, 3), k = pick([1, -1]), d = ri(-6, 6);
+  if (r1 === r2) return null;
+  const s = r1 + r2, p = r1 * r2, h = s % 2 === 0 && Math.random() < 0.5 ? 2 : 1;
+  const c = [2 / h, -3 * s / h, 6 * p / h].map(x => k * x);
+  return { r1, r2, k, tex: poly([[c[0], 'x^3'], [c[1], 'x^2'], [c[2], 'x'], [d, '']]) };
+}
+
+// FTC integrands f(t): tex(V) with V the TeX of the argument, s(v) the math.js string
+const CAL_FTC = [
+  { tex: V => `e^{${V}^2}`, s: v => `e^((${v})^2)` },
+  { tex: V => T`\sin\left(${V}^2\right)`, s: v => `sin((${v})^2)` },
+  { tex: V => T`\sqrt{1 + ${V}^3}`, s: v => `sqrt(1+(${v})^3)` },
+  { tex: V => T`\ln\left(1 + ${V}^2\right)`, s: v => `ln(1+(${v})^2)` },
+  { tex: V => T`\frac{1}{1 + ${V}^4}`, s: v => `1/(1+(${v})^4)` },
+  { tex: V => T`\cos\left(${V}^3\right)`, s: v => `cos((${v})^3)` },
+];
+function CAL_ftcUpper() {
+  const k = ri(2, 4);
+  return pick([
+    { tex: 'x^2', p: '(x^2)', s: 'x^2', ds: '2x', dt: '2x' },
+    { tex: 'x^3', p: '(x^3)', s: 'x^3', ds: '3x^2', dt: '3x^{2}' },
+    { tex: T`\sin x`, p: T`(\sin x)`, s: 'sin(x)', ds: 'cos(x)', dt: T`\cos x` },
+    { tex: 'e^{x}', p: '(e^{x})', s: 'e^x', ds: 'e^x', dt: 'e^{x}' },
+    { tex: `${k}x`, p: `(${k}x)`, s: `${k}x`, ds: String(k), dt: String(k) },
+  ]);
+}
+
+// Standard antiderivatives of f(ax + b): [integrand TeX, answer, show, dom]
+function CAL_antiForm() {
+  const a = nz(-4, 4), b = ri(-5, 5), A = ri(1, 4), B = ri(0, 5), n = ri(2, 5);
+  const u = poly([[a, 'x'], [b, '']]), us = `(${a}x+(${b}))`, pu = poly([[A, 'x'], [B, '']]), ax = poly([[A, 'x']]);
+  return pick([
+    [`(${u})^{${n}}`, `${us}^${n + 1}/(${a * (n + 1)})`, overA(`(${u})^{${n + 1}}`, a * (n + 1))],
+    [T`\frac{1}{${pu}}`, `ln(${A}x+${B})/${A}`, T`${CAL_fco(1, A)}\ln|${pu}|`],
+    [`e^{${u}}`, `e^${us}/(${a})`, `${CAL_fco(1, a)}e^{${u}}`],
+    [T`\sin(${u})`, `-cos${us}/(${a})`, T`${CAL_fco(-1, a)}\cos(${u})`],
+    [T`\cos(${u})`, `sin${us}/(${a})`, T`${CAL_fco(1, a)}\sin(${u})`],
+    [T`\sinh(${u})`, `cosh${us}/(${a})`, T`${CAL_fco(1, a)}\cosh(${u})`],
+    [T`\cosh(${u})`, `sinh${us}/(${a})`, T`${CAL_fco(1, a)}\sinh(${u})`],
+    [T`\frac{1}{1 + ${A * A}x^2}`, `atan(${A}x)/${A}`, T`${CAL_fco(1, A)}\arctan(${ax})`],
+    [T`\frac{1}{\sqrt{1 - ${A * A}x^2}}`, `asin(${A}x)/${A}`, T`${CAL_fco(1, A)}\arcsin(${ax})`, [0.05, 0.9 / A]],
+    [T`\sec^2(${ax})`, `tan(${A}x)/${A}`, T`${CAL_fco(1, A)}\tan(${ax})`, [0.05, 1.2 / A]],
+  ]);
+}
+
+// Integration by substitution: inner g(x) and outer f(u) with antiderivative F
+function CAL_substInner(power) {
+  const m = ri(2, 3), c = ri(power ? 1 : 0, 5);
+  return pick([
+    { tex: poly([[1, xPow(m)], [c, '']]), s: `(x^${m}+${c})`, dt: xPow(m - 1), m },
+    { tex: T`\sin x`, s: 'sin(x)', dt: T`\cos x`, m: 1 },
+    { tex: poly([[1, 'e^{x}'], [power ? c : 0, '']]), s: `(e^x+${power ? c : 0})`, dt: 'e^{x}', m: 1 },
+  ]);
+}
+function CAL_substOuter() {
+  const n = ri(2, 4);
+  return pick([
+    { tex: U => `(${U})^{${n}}`, F: U => `(${U})^{${n + 1}}`, Fs: u => `${u}^${n + 1}`, d: n + 1, power: true },
+    { tex: U => `e^{${U}}`, F: U => `e^{${U}}`, Fs: u => `e^(${u})`, d: 1 },
+    { tex: U => T`\cos(${U})`, F: U => T`\sin(${U})`, Fs: u => `sin(${u})`, d: 1 },
+    { tex: U => T`\sin(${U})`, F: U => T`\cos(${U})`, Fs: u => `cos(${u})`, d: -1 },
+  ]);
+}
+
+// Taylor coefficient of u^j at 0: [num, den]
+const CAL_TAYLOR = {
+  exp: [U => `e^{${U}}`, j => [1, fact(j)]],
+  sin: [U => T`\sin(${U})`, j => j % 2 ? [(-1) ** ((j - 1) / 2), fact(j)] : [0, 1]],
+  cos: [U => T`\cos(${U})`, j => j % 2 ? [0, 1] : [(-1) ** (j / 2), fact(j)]],
+  ln: [U => T`\ln(1 ${U[0] === '-' ? '-' : '+'} ${U.replace(/^-/, '')})`, j => [(-1) ** (j + 1), j]],
+  geo: [U => T`\frac{1}{1 ${U[0] === '-' ? '+' : '-'} ${U.replace(/^-/, '')}}`, () => [1, 1]],
+};
+
+// Term for "0/0 or inf/inf?": [TeX, value class] with class z (-> 0), i (-> inf), f (finite nonzero)
+function CAL_formTerm(at0) {
+  const a = ri(2, 5), k = ri(1, 3), c = nz(-4, 4);
+  return pick(at0
+    ? [[T`\sin(${a}x)`, 'z'], [`e^{${a}x} - 1`, 'z'], [T`1 - \cos(${a}x)`, 'z'], [T`\ln(1 + ${a}x)`, 'z'], [xPow(k), 'z'],
+       [T`\cos(${a}x)`, 'f'], [`e^{${a}x}`, 'f'], [poly([[1, 'x'], [c, '']]), 'f'], [T`\cosh(${a}x)`, 'f']]
+    : [[`e^{${a}x}`, 'i'], [xPow(k), 'i'], [T`\ln x`, 'i'], [T`\sinh x`, 'i'],
+       [`e^{-${a}x}`, 'z'], [`x^{-${k}}`, 'z'], [T`\arctan x`, 'f'], [T`\tanh x`, 'f']]);
+}
+
+// ---------- LG_: predicate logic L2 / L= (PredLogic_Syntax.pdf, PredLogic_NatDedRules.pdf), sets and relations ----------
+// Formula trees: atom { p: 'P' | 'R' | '=', t: ['x', 'a'] }; quantifier { q: '∀' | '∃', v, a }; ¬ and binary nodes reuse neg/bin
+const LG_at = (p, ...t) => ({ p, t });
+const LG_q = (q, v, a) => ({ q, v, a });
+const LG_all = (v, a) => LG_q('∀', v, a), LG_ex = (v, a) => LG_q('∃', v, a);
+const LG_VARS = ['x', 'y', 'z'];
+const LG_isVar = t => LG_VARS.includes(t);
+const LG_f = s => `<span class="f">${s}</span>`;
+
+// Halbach conventions when o.conv: outer brackets dropped, ∧/∨ inside →/↔ unbracketed, left ∧/∨ chains unbracketed.
+// o.conv false: every binary formula below the top keeps its brackets; o.outer adds the outer pair too. o.mark underlines that variable occurrence.
+function LG_str(f, o = { conv: true }, parent, side) {
+  if (f.p) return LG_atomStr(f, o);
+  if (f.q) return f.q + f.v + (f.a.p === '=' ? ' ' : '') + LG_str(f.a, o, '¬');
+  if (f.op === '¬') return '¬' + LG_str(f.a, o, '¬');
+  const s = `${LG_str(f.a, o, f.op, 'L')} ${f.op} ${LG_str(f.b, o, f.op, 'R')}`;
+  if (!parent) return o.outer ? `(${s})` : s;
+  return !o.conv || needBrackets(f.op, parent, side) ? `(${s})` : s;
+}
+function LG_atomStr(f, o) {
+  const t = f.t.map(x => LG_isVar(x) ? LG_mark(x, o) : x);
+  return f.p === '=' ? `${t[0]} = ${t[1]}` : f.p + t.join('');
+}
+function LG_mark(x, o) {
+  o.n = (o.n || 0) + 1;
+  return o.n - 1 === o.mark ? `<u><b>${x}</b></u>` : x;
+}
+// Accepted spellings of one tree: conventional, official inside, fully official
+const LG_forms = f => [LG_str(f), LG_str(f, { conv: false }), LG_str(f, { conv: false, outer: true })];
+
+// Equivalent rewrites: ∧/∨ arguments swapped; with arrows also ¬A ∨ B ⇄ A → B for atomic A
+function LG_variants(f, arrows) {
+  if (f.p) return [f];
+  if (f.q) return LG_variants(f.a, arrows).map(a => LG_q(f.q, f.v, a));
+  if (f.op === '¬') return LG_variants(f.a, arrows).map(neg);
+  const out = [];
+  for (const a of LG_variants(f.a, arrows)) for (const b of LG_variants(f.b, arrows)) out.push(...LG_rewrites(bin(f.op, a, b), arrows));
+  return out;
+}
+function LG_rewrites(f, arrows) {
+  const out = '∧∨'.includes(f.op) ? [f, bin(f.op, f.b, f.a)] : [f];
+  if (!arrows) return out;
+  if (f.op === '∨') for (const [x, y] of [[f.a, f.b], [f.b, f.a]]) if (x.op === '¬' && x.a.p) out.push(imp(x.a, y));
+  if (f.op === '→' && f.a.p) out.push(or(neg(f.a), f.b), or(f.b, neg(f.a)));
+  return out;
+}
+const LG_answers = (trees, arrows) => [...new Set(trees.flatMap(t => LG_variants(t, arrows).flatMap(LG_forms)))];
+// Formula string -> TeX for the answer shown after a miss
+const LG_tex = s => s.replace(/<[^>]+>/g, '').replace(/[∀∃¬∧∨→↔]/g, c => ({ '∀': '\\forall ', '∃': '\\exists ', '¬': '\\neg ', '∧': '\\land ', '∨': '\\lor ', '→': '\\to ', '↔': '\\leftrightarrow ' })[c]);
+
+// ---------- semantics: M = { D: [1,2,3], ext: { P: Set('1'), R: Set('1,2') }, c: { a: 1 } } ----------
+function LG_ev(f, M, g = {}) {
+  if (f.p) return LG_atomEv(f, M, g);
+  if (f.q) {
+    const at = d => LG_ev(f.a, M, { ...g, [f.v]: d });
+    return f.q === '∀' ? M.D.every(at) : M.D.some(at);
+  }
+  if (f.op === '¬') return !LG_ev(f.a, M, g);
+  const a = LG_ev(f.a, M, g), b = LG_ev(f.b, M, g);
+  return { '∧': a && b, '∨': a || b, '→': !a || b, '↔': a === b }[f.op];
+}
+function LG_atomEv(f, M, g) {
+  const val = f.t.map(t => LG_isVar(t) ? g[t] : M.c[t]);
+  return f.p === '=' ? val[0] === val[1] : M.ext[f.p].has(val.join(','));
+}
+// Random structure on {1..n}; each letter gets both a unary and a binary extension, so any arity reads it
+function LG_randModel(n) {
+  const D = Array.from({ length: n }, (_, i) => i + 1), sub = xs => new Set(xs.filter(() => Math.random() < 0.5));
+  const cells = [...D.map(String), ...D.flatMap(d => D.map(e => `${d},${e}`))];
+  return { D, ext: { P: sub(cells), Q: sub(cells), R: sub(cells) }, c: { a: pick(D), b: pick(D), c: pick(D) } };
+}
+// Independent check that hand-written equivalent answers really are equivalent (40 random structures, sizes 1-3)
+function LG_sameOn(trees) {
+  for (let i = 0; i < 40; i++) {
+    const M = LG_randModel(ri(1, 3)), v = LG_ev(trees[0], M);
+    if (trees.some(t => LG_ev(t, M) !== v)) return false;
+  }
+  return true;
+}
+function LG_syms(f, out = new Set()) {
+  if (!f.p) { LG_syms(f.a, out); if (f.b) LG_syms(f.b, out); return out; }
+  if (f.p !== '=') out.add(f.p);
+  f.t.filter(t => !LG_isVar(t)).forEach(t => out.add(t));
+  return out;
+}
+
+// ---------- syntax: free variables, occurrences, substitution ----------
+function LG_free(f) {
+  if (f.p) return new Set(f.t.filter(LG_isVar));
+  const s = new Set([...LG_free(f.a), ...(f.b ? LG_free(f.b) : [])]);
+  if (f.q) s.delete(f.v);
+  return s;
+}
+// Variable occurrences in print order (quantifier variables are not occurrences)
+function LG_occ(f, bound = []) {
+  if (f.p) return f.t.filter(LG_isVar).map(v => ({ v, free: !bound.includes(v) }));
+  if (f.q) return LG_occ(f.a, [...bound, f.v]);
+  return [...LG_occ(f.a, bound), ...(f.b ? LG_occ(f.b, bound) : [])];
+}
+// φ[t/v]: t for the free occurrences of v
+function LG_sub(f, t, v) {
+  if (f.p) return LG_at(f.p, ...f.t.map(x => x === v ? t : x));
+  if (f.q) return f.v === v ? f : LG_q(f.q, f.v, LG_sub(f.a, t, v));
+  return f.op === '¬' ? neg(LG_sub(f.a, t, v)) : bin(f.op, LG_sub(f.a, t, v), LG_sub(f.b, t, v));
+}
+// φ for φ[t/x]: one part with x free, one part where a quantifier ∀x/∃x binds x, in random order
+function LG_substFormula() {
+  const Qn = () => pick(['∀', '∃']), U = v => LG_at(pick(['P', 'Q']), v);
+  const free = Math.random() < 0.5 ? LG_lit(pick([U('x'), LG_at('R', 'x', 'b'), LG_at('R', 'a', 'x')]))
+    : LG_q(Qn(), 'y', LG_rqf([LG_at('R', 'x', 'y'), LG_at('R', 'y', 'x'), U('y')], 1));
+  const bound = LG_q(Qn(), 'x', LG_rqf([U('x'), LG_at('R', 'x', 'x'), LG_at('R', 'x', 'y')], ri(0, 1)));
+  const [A, B] = shuffle([free, bound]);
+  return LG_free(free).has('x') ? bin(pick(BIN), A, B) : null;
+}
+const LG_consts = f => [...LG_syms(f)].filter(s => /^[abc]$/.test(s));
+
+// Random L2 formula: terms mostly from the variables bound so far, sometimes another variable or a constant
+function LG_rand(d, scope = []) {
+  const r = Math.random();
+  if (d === 0 || r < 0.15) return LG_randAtom(scope);
+  if (r < 0.25) return neg(LG_rand(d - 1, scope));
+  if (r < 0.6) {
+    const v = pick(LG_VARS);
+    return LG_q(pick(['∀', '∃']), v, LG_rand(d - 1, [...scope, v]));
+  }
+  return bin(pick(BIN), LG_rand(d - 1, scope), LG_rand(d - 1, scope));
+}
+function LG_randAtom(scope) {
+  const term = () => scope.length && Math.random() < 0.75 ? pick(scope) : pick(['x', 'y', 'z', 'a', 'b']);
+  return Math.random() < 0.6 ? LG_at(pick(['P', 'Q']), term()) : LG_at('R', term(), term());
+}
+const LG_quants = f => f.p ? 0 : (f.q ? 1 : 0) + LG_quants(f.a) + (f.b ? LG_quants(f.b) : 0);
+const LG_size = f => f.p ? 1 : 1 + LG_size(f.a) + (f.b ? LG_size(f.b) : 0);
+const LG_vacuous = f => !f.p && ((f.q && !LG_free(f.a).has(f.v)) || LG_vacuous(f.a) || (f.b ? LG_vacuous(f.b) : false));
+// Drill-sized random formula: has a quantifier, at most 9 symbols, no quantifier that binds nothing
+const LG_okRand = f => LG_quants(f) > 0 && LG_size(f) <= 9 && !LG_vacuous(f);
+const LG_lit = (f, p = 0.3) => Math.random() < p ? neg(f) : f;
+// Quantifier-free: one literal, or two distinct literals joined by ∧ ∨ →
+function LG_rqf(atoms, d) {
+  const [A, B] = shuffle(atoms);
+  return d === 0 ? LG_lit(A) : bin(pick(['∧', '∨', '→']), LG_lit(A), LG_lit(B));
+}
+
+// ---------- structures: a sentence over D = {1,2,3} ----------
+function LG_structSentence() {
+  const Qn = () => pick(['∀', '∃']), x = v => LG_at(pick(['P', 'Q']), v);
+  const shape = ri(0, 2);
+  if (shape === 0) return LG_q(Qn(), 'x', LG_rqf([x('x'), LG_at('R', 'x', 'x'), LG_at('R', 'x', 'a'), LG_at('R', 'a', 'x')], ri(0, 1)));
+  if (shape === 1) {
+    const m = LG_rqf([LG_at('R', 'x', 'y'), LG_at('R', 'y', 'x'), x('x'), x('y')], ri(0, 1));
+    return LG_free(m).size === 2 ? LG_q(Qn(), 'x', LG_q(Qn(), 'y', m)) : null;
+  }
+  const inner = LG_q(Qn(), 'y', LG_lit(LG_at('R', ...shuffle(['x', 'y']))));
+  return LG_q(Qn(), 'x', bin(pick(['∧', '→']), LG_lit(x('x')), inner));
+}
+function LG_structModel() {
+  const M = LG_randModel(3), keep = (s, re) => new Set([...s].filter(k => re.test(k)));
+  M.ext = { P: keep(M.ext.P, /^\d$/), Q: keep(M.ext.Q, /^\d$/), R: keep(M.ext.R, /,/) };
+  return M;
+}
+function LG_modelTeX(M, f) {
+  const used = [...LG_syms(f)].sort(), out = [T`D = \{1, 2, 3\}`];
+  for (const s of used) {
+    if (M.c[s] !== undefined) { out.push(T`|${s}| = ${M.c[s]}`); continue; }
+    const els = [...M.ext[s]].sort().map(k => k.includes(',') ? T`\langle ${k}\rangle` : k);
+    out.push(els.length ? T`|${s}| = \{${els.join(', ')}\}` : T`|${s}| = \varnothing`);
+  }
+  return out.join(T`,\ `);
+}
+
+// ---------- formalising English in L2 ----------
+const LG_NOUNS = [['philosopher', 'philosophers'], ['logician', 'logicians'], ['student', 'students'], ['poet', 'poets'], ['dog', 'dogs'], ['painter', 'painters']];
+const LG_ADJS = ['wise', 'happy', 'mortal', 'honest', 'lazy', 'clever', 'famous'];
+const LG_VERBS = [['admires', 'admired'], ['trusts', 'trusted'], ['sees', 'seen'], ['likes', 'liked']];
+const LG_NAMES = ['Ann', 'Ben', 'Cleo', 'Dev'];
+// One-place patterns: c = { F, G, H atoms at x; n noun, ns plural, g, h adjectives; nm name; Fa, Ga at the constant a }
+function LG_unaryPattern(c) {
+  const { F, G, H } = c, all = f => LG_all('x', f), ex = f => LG_ex('x', f);
+  return pick([
+    [`Every ${c.n} is ${c.g}`, [all(imp(F, G))]], [`All ${c.ns} are ${c.g}`, [all(imp(F, G))]],
+    [`Some ${c.n} is ${c.g}`, [ex(and(F, G))]], [`Some ${c.ns} are not ${c.g}`, [ex(and(F, neg(G))), neg(all(imp(F, G)))]],
+    [`No ${c.n} is ${c.g}`, [neg(ex(and(F, G))), all(imp(F, neg(G))), all(imp(G, neg(F))), all(neg(and(F, G)))]],
+    [`Only ${c.ns} are ${c.g}`, [all(imp(G, F)), all(imp(neg(F), neg(G)))]],
+    [`Not every ${c.n} is ${c.g}`, [neg(all(imp(F, G))), ex(and(F, neg(G)))]],
+    [`Every ${c.n} is ${c.g} or ${c.h}`, [all(imp(F, or(G, H)))]],
+    [`Every ${c.n} is ${c.g} and ${c.h}`, [all(imp(F, and(G, H))), and(all(imp(F, G)), all(imp(F, H)))]],
+    [`Every ${c.n} is neither ${c.g} nor ${c.h}`, [all(imp(F, neg(or(G, H)))), all(imp(F, and(neg(G), neg(H))))]],
+    [`Every ${c.g} ${c.n} is ${c.h}`, [all(imp(and(F, G), H)), all(imp(F, imp(G, H))), all(imp(G, imp(F, H)))]],
+    [`Some ${c.g} ${c.n} is not ${c.h}`, [ex(and(and(F, G), neg(H))), ex(and(F, and(G, neg(H))))]],
+    [`Nothing is ${c.g}`, [neg(ex(G)), all(neg(G))]], [`Something is not ${c.g}`, [ex(neg(G)), neg(all(G))]],
+    [`Everything is ${c.g} or ${c.h}`, [all(or(G, H))]],
+    [`${c.nm} is a ${c.n} who is not ${c.g}`, [and(c.Fa, neg(c.Ga))]],
+    [`If ${c.nm} is ${c.g}, then everything is ${c.g}`, [imp(c.Ga, all(G))]],
+  ]);
+}
+// Two-place patterns with R
+function LG_binaryPattern(c) {
+  const { F } = c, R = (s, t) => LG_at('R', s, t), Fy = LG_sub(F, 'y', 'x');
+  return pick([
+    [`Everything ${c.rv} something`, [LG_all('x', LG_ex('y', R('x', 'y')))]],
+    [`Something ${c.rv} everything`, [LG_ex('x', LG_all('y', R('x', 'y')))]],
+    [`Everything is ${c.rp} by something`, [LG_all('x', LG_ex('y', R('y', 'x')))]],
+    [`Nothing ${c.rv} itself`, [neg(LG_ex('x', R('x', 'x'))), LG_all('x', neg(R('x', 'x')))]],
+    [`${c.nm} ${c.rv} every ${c.n}`, [LG_all('x', imp(F, R('a', 'x')))]],
+    [`Some ${c.n} ${c.rv} ${c.nm}`, [LG_ex('x', and(F, R('x', 'a')))]],
+    [`Every ${c.n} ${c.rv} something`, [LG_all('x', imp(F, LG_ex('y', R('x', 'y')))), LG_all('x', LG_ex('y', imp(F, R('x', 'y'))))]],
+    [`Nothing ${c.rv} every ${c.n}`, [neg(LG_ex('x', LG_all('y', imp(Fy, R('x', 'y'))))), LG_all('x', LG_ex('y', and(Fy, neg(R('x', 'y'))))),
+      LG_all('x', neg(LG_all('y', imp(Fy, R('x', 'y')))))]],
+  ]);
+}
+function LG_formalise() {
+  const rel = Math.random() < 0.35, [P1, P2, P3] = rel ? [...shuffle(['P', 'Q']), 'R'] : shuffle(['P', 'Q', 'R']);
+  const [noun, adjs, verb, nm] = [pick(LG_NOUNS), shuffle(LG_ADJS), pick(LG_VERBS), pick(LG_NAMES)];
+  const c = { F: LG_at(P1, 'x'), G: LG_at(P2, 'x'), H: LG_at(P3, 'x'), Fa: LG_at(P1, 'a'), Ga: LG_at(P2, 'a'),
+              n: noun[0], ns: noun[1], g: adjs[0], h: adjs[1], nm, rv: verb[0], rp: verb[1] };
+  const [english, trees] = rel ? LG_binaryPattern(c) : LG_unaryPattern(c);
+  const syms = trees.reduce((s, t) => new Set([...s, ...LG_syms(t)]), new Set());
+  const dict = [[P1, `… is a ${c.n}`], [P2, `… is ${c.g}`], [P3, rel ? `… ${c.rv} …` : `… is ${c.h}`], ['a', nm]]
+    .filter(([s]) => syms.has(s)).map(([s, m]) => `${s}: ${m}`).join('; ');
+  return { english, trees, dict };
+}
+
+// ---------- natural deduction ----------
+const LG_RULE_WORDS = { '∧': ['∧', '&', 'and'], '∨': ['∨', 'or'], '→': ['→', '->', 'imp', 'arrow'], '↔': ['↔', '<->', 'iff'], '¬': ['¬', '~', 'not', 'neg'],
+                        '∀': ['∀', 'all', 'forall'], '∃': ['∃', 'exists', 'some'], '=': ['=', 'id', 'eq'] };
+const LG_RULE_TEX = { '∧': '\\land', '∨': '\\lor', '→': '\\to', '↔': '\\leftrightarrow', '¬': '\\neg', '∀': '\\forall', '∃': '\\exists', '=': '=' };
+// Accepted spellings of a rule name, e.g. ∧Elim1: ∧Elim1, ∧E1, andelim1 (+ ∧Elim when '' is in nums: the sheet allows the bare name)
+function LG_ruleAnswer(op, kind, nums) {
+  const ks = kind === 'Intro' ? ['intro', 'i', 'introduction'] : ['elim', 'e', 'elimination'];
+  return { a: LG_RULE_WORDS[op].flatMap(w => ks.flatMap(k => nums.map(n => w + k + n))),
+           show: T`${LG_RULE_TEX[op]}\text{${kind}${nums[0]}}` };
+}
+const LG_RULE_KEYS = ['∧', '∨', '→', '↔', '¬', 'Intro', 'Elim', '1', '2'];
+function LG_propFormulas(n) {
+  const out = [];
+  while (out.length < n) { const f = rf(1, ['P', 'Q', 'R']); if (!out.some(g => sameTree(f, g))) out.push(f); }
+  return out;
+}
+// One displayed step per rule of PropLogic_NatDedRules.pdf: [connective, Intro|Elim, accepted suffixes, description]
+function LG_propStep() {
+  const [A, B, C] = LG_propFormulas(3), f = x => LG_f(show(x));
+  return pick([
+    ['∧', 'Intro', [''], `from ${f(A)} and ${f(B)} infer ${f(and(A, B))}`],
+    ['∧', 'Elim', ['1', ''], `from ${f(and(A, B))} infer ${f(A)}`],
+    ['∧', 'Elim', ['2', ''], `from ${f(and(A, B))} infer ${f(B)}`],
+    ['∨', 'Intro', ['1', ''], `from ${f(A)} infer ${f(or(A, B))}`],
+    ['∨', 'Intro', ['2', ''], `from ${f(A)} infer ${f(or(B, A))}`],
+    ['∨', 'Elim', [''], `from ${f(or(A, B))}, a proof of ${f(C)} from [${f(A)}] and a proof of ${f(C)} from [${f(B)}], infer ${f(C)}`],
+    ['→', 'Intro', [''], `from a proof of ${f(B)} from [${f(A)}], infer ${f(imp(A, B))}`],
+    ['→', 'Elim', [''], `from ${f(A)} and ${f(imp(A, B))} infer ${f(B)}`],
+    ['↔', 'Intro', [''], `from a proof of ${f(B)} from [${f(A)}] and a proof of ${f(A)} from [${f(B)}], infer ${f(iff(A, B))}`],
+    ['↔', 'Elim', ['1', ''], `from ${f(A)} and ${f(iff(A, B))} infer ${f(B)}`],
+    ['↔', 'Elim', ['2', ''], `from ${f(B)} and ${f(iff(A, B))} infer ${f(A)}`],
+    ['¬', 'Intro', [''], `from proofs of ${f(B)} and of ${f(neg(B))}, both from [${f(A)}], infer ${f(neg(A))}`],
+    ['¬', 'Elim', [''], `from proofs of ${f(B)} and of ${f(neg(B))}, both from [${f(neg(A))}], infer ${f(A)}`],
+  ]);
+}
+// Quantifier and identity rules of PredLogic_NatDedRules.pdf; φ has x free, a and b are new to φ
+function LG_predStep() {
+  const phi = LG_rqf([LG_at('P', 'x'), LG_at('Q', 'x'), LG_at('R', 'x', 'c'), LG_at('R', 'c', 'x'), LG_at('R', 'x', 'x')], ri(0, 1));
+  const f = x => LG_f(LG_str(x)), pa = LG_sub(phi, 'a', 'x'), psi = LG_at(pick(['P', 'Q']), 'c');
+  return pick([
+    ['∀', 'Elim', [''], `from ${f(LG_all('x', phi))} infer ${f(pa)}`],
+    ['∃', 'Intro', [''], `from ${f(pa)} infer ${f(LG_ex('x', phi))}`],
+    ['∀', 'Intro', [''], `from ${f(pa)}, with a in no undischarged assumption, infer ${f(LG_all('x', phi))}`],
+    ['∃', 'Elim', [''], `from ${f(LG_ex('x', phi))} and a proof of ${f(psi)} from [${f(pa)}] (a new), infer ${f(psi)}`],
+    ['=', 'Intro', [''], `with no premises, write ${LG_f('a = a')} (nothing left undischarged)`],
+    ['=', 'Elim', [''], `from ${f(pa)} and ${LG_f('a = b')} infer ${f(LG_sub(phi, 'b', 'x'))}`],
+  ]);
+}
+// ∀Intro / ∃Elim side conditions: the constant a must not occur in φ, ψ, or the other undischarged assumptions
+function LG_quantStep() {
+  const phi = LG_rqf([LG_at('P', 'x'), LG_at('Q', 'x'), LG_at('R', 'x', 'x'), LG_at('R', 'x', 'b'), LG_at('R', 'b', 'x'), LG_at('R', 'x', 'a'), LG_at('R', 'a', 'x')], 1);
+  const side = () => LG_rqf([LG_at('P', 'b'), LG_at('Q', 'b'), LG_at('R', 'b', 'b'), LG_at('P', 'a'), LG_at('Q', 'a'), LG_at('R', 'a', 'b')], ri(0, 1));
+  const gamma = side(), f = x => LG_f(LG_str(x)), pa = LG_sub(phi, 'a', 'x'), noA = x => !LG_consts(x).includes('a');
+  if (Math.random() < 0.5) {
+    return { q: `Undischarged assumptions: ${f(gamma)}<br>From ${f(pa)} infer ${f(LG_all('x', phi))} by ∀Intro.`, legal: noA(phi) && noA(gamma) };
+  }
+  const psi = side();
+  return { q: `From ${f(LG_ex('x', phi))} and a proof of ${f(psi)} from [${f(pa)}] (other undischarged assumption: ${f(gamma)}), infer ${f(psi)} by ∃Elim.`,
+           legal: noA(phi) && noA(psi) && noA(gamma) };
+}
+// Which formula does the rule assume? [description, answer tree]
+function LG_assumeStep() {
+  const [A, B] = LG_propFormulas(2), f = x => LG_f(show(x));
+  return pick([
+    [`To prove ${f(neg(A))} by ¬Intro, assume`, A],
+    [`To prove ${f(A)} by ¬Elim, assume`, neg(A)],
+    [`To prove ${f(imp(A, B))} by →Intro, assume`, A],
+    [`To prove ${f(iff(A, B))} by ↔Intro, the subproof ending in ${f(B)} assumes`, A],
+    [`To use ∨Elim on ${f(or(A, B))}, the second subproof assumes`, B],
+  ]);
+}
+
+// ---------- quantifier negation ----------
+// Push ¬ through quantifiers and connectives down to atomic formulas; positive → is kept (as nnf above)
+function LG_nnf(f, negated = false) {
+  if (f.p) return negated ? neg(f) : f;
+  if (f.q) return LG_q(negated ? (f.q === '∀' ? '∃' : '∀') : f.q, f.v, LG_nnf(f.a, negated));
+  if (f.op === '¬') return LG_nnf(f.a, !negated);
+  if (f.op === '→') return negated ? and(LG_nnf(f.a), LG_nnf(f.b, true)) : imp(LG_nnf(f.a), LG_nnf(f.b));
+  const op = negated ? { '∧': '∨', '∨': '∧' }[f.op] : f.op;
+  return bin(op, LG_nnf(f.a, negated), LG_nnf(f.b, negated));
+}
+function LG_negSentence() {
+  const Qn = () => pick(['∀', '∃']), U = v => LG_at(pick(['P', 'Q']), v);
+  if (Math.random() < 0.6) return neg(LG_q(Qn(), 'x', LG_rqf([LG_at('P', 'x'), LG_at('Q', 'x')], 1)));
+  const m = LG_rqf([LG_at('R', 'x', 'y'), U('x'), U('y')], ri(0, 1));
+  return /R/.test(LG_str(m)) ? neg(LG_q(Qn(), 'x', LG_q(Qn(), 'y', m))) : null;
+}
+
+// ---------- identity: smallest domain in which a sentence of L= can be true ----------
+function LG_countClaim() {
+  const [p, q] = shuffle(['P', 'Q']), U = (v, l = pick([p, q])) => LG_lit(LG_at(l, v), 0.4), ne = (s, t) => neg(LG_at('=', s, t));
+  return pick([
+    () => LG_ex('x', U('x')),
+    () => LG_ex('x', and(U('x', p), U('x', q))),
+    () => LG_ex('x', LG_ex('y', ne('x', 'y'))),
+    () => LG_ex('x', LG_ex('y', and(and(ne('x', 'y'), U('x')), U('y')))),
+    () => LG_all('x', LG_all('y', LG_at('=', 'x', 'y'))),
+    () => LG_ex('x', LG_ex('y', LG_ex('z', and(and(ne('x', 'y'), ne('x', 'z')), ne('y', 'z'))))),
+  ])();
+}
+function LG_models(n) {
+  const D = Array.from({ length: n }, (_, i) => i + 1), ext = m => new Set(D.filter((_, i) => m >> i & 1).map(String));
+  return Array.from({ length: 4 ** n }, (_, m) => ({ D, ext: { P: ext(m), Q: ext(m >> n) }, c: {} }));
+}
+function LG_minDomain(f) {
+  for (let n = 1; n <= 4; n++) if (LG_models(n).some(M => LG_ev(f, M))) return n;
+  return 0;
+}
+
+// ---------- sets (nested sets of small numbers) and relations ----------
+const LG_canon = v => typeof v === 'number' ? String(v) : `{${[...new Set(v.map(LG_canon))].sort().join(',')}}`;
+const LG_setTeX = v => typeof v === 'number' ? String(v) : v.length ? T`\{${v.map(LG_setTeX).join(', ')}\}` : T`\varnothing`;
+const LG_member = (x, S) => S.some(e => LG_canon(e) === LG_canon(x));
+const LG_card = S => new Set(S.map(LG_canon)).size;
+const LG_randSet = (lo, hi, k) => shuffle(Array.from({ length: hi - lo + 1 }, (_, i) => lo + i)).slice(0, k).sort((p, q) => p - q);
+// An element for a small nested set: a number, a singleton, a pair, or ∅
+function LG_randElement() {
+  const r = Math.random();
+  if (r < 0.45) return ri(1, 3);
+  if (r < 0.75) return [ri(1, 3)];
+  return r < 0.9 ? LG_randSet(1, 3, 2) : [];
+}
+const LG_pairsTeX = R => R.length ? T`\{${R.map(([d, e]) => T`\langle ${d},${e}\rangle`).join(', ')}\}` : T`\varnothing`;
+const LG_REL = {
+  reflexive: (R, D, has) => D.every(d => has(d, d)),
+  symmetric: (R, D, has) => R.every(([d, e]) => has(e, d)),
+  asymmetric: (R, D, has) => R.every(([d, e]) => !has(e, d)),
+  antisymmetric: (R, D, has) => R.every(([d, e]) => d === e || !has(e, d)),
+  transitive: (R, D, has) => R.every(([d, e]) => R.every(([e2, g]) => e2 !== e || has(d, g))),
+};
+function LG_randRelation() {
+  const D = Math.random() < 0.75 ? [1, 2, 3] : [1, 2], R = D.flatMap(d => D.map(e => [d, e])).filter(() => Math.random() < 0.4);
+  return R.length ? { D, R, has: (d, e) => R.some(p => p[0] === d && p[1] === e) } : null;
+}
+
 // ---------- propositional logic ----------
 const BIN = ['∧', '∨', '→', '↔'];
 const neg = a => ({ op: '¬', a });
@@ -2026,7 +2904,7 @@ function check(q, input, strict = STRICT_STACK) {
     if (q.kind === 'interval') return normSet(input) === normSet(q.a);
     if (q.kind === 'text') return [].concat(q.a).some(a => normText(a) === normText(input));
     if (q.kind === 'logic') return checkLogic(q, input);
-    if (q.kind === 'syntax') return normLogic(input) === normLogic(q.a);
+    if (q.kind === 'syntax') return [].concat(q.a).some(a => normLogic(a) === normLogic(input));
     if (q.kind === 'set') return [].concat(q.a).some(a => normSetList(a) === normSetList(input));
   } catch (e) { /* incomplete input */ }
   return false;
