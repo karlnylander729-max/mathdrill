@@ -2249,7 +2249,7 @@ const CONCEPTS = [
     picture: { template: 'truthGrid', params: { tree: ['→', ['∧', ['P'], ['Q']], ['∨', ['¬', ['R']], ['P']]] },
       caption: 'P ∧ Q → ¬R ∨ P as a tree. The root is the main connective. Tap a node to light its scope.',
       alt: 'Formula tree of P ∧ Q → ¬R ∨ P: root →, children ∧ (P, Q) and ∨ (¬R, P). Tapping a node lights its subtree.' },
-    algebra: String.raw`Official: one bracket pair per binary connective, none for ¬.<br>$((P \land Q) \to (\neg R \lor P))$<br>Conventions drop (1) outer brackets and (2) inner pairs in $P \land Q \land R$, grouped left. (3) $\land, \lor$ bind more strongly than $\to, \leftrightarrow$:<br>$P \land Q \to \neg R \lor P$<br>Nothing ranks $\to$ against $\leftrightarrow$, or $\land$ against $\lor$. Main connective: outside all brackets, $\to$ or $\leftrightarrow$, else the rightmost $\land$ or $\lor$, else $\neg$.`,
+    algebra: String.raw`Official: one pair per binary connective, none for ¬.<br>$((P \land Q) \to (\neg R \lor P))$<br>Conventions drop (1) outer brackets, (2) inner pairs in $P \land Q \land R$ (grouped left). (3) $\land, \lor$ bind tighter than $\to, \leftrightarrow$:<br>$P \land Q \to \neg R \lor P$<br>Nothing ranks $\to$ against $\leftrightarrow$, or $\land$ against $\lor$. Main connective: outside all brackets (after dropping an outer pair), $\to$ or $\leftrightarrow$, else rightmost $\land$ or $\lor$, else $\neg$.`,
     originText: String.raw`Built from the definition of a sentence of L₁ (§2.1): sentence letters, then ¬φ and (φ ∧ ψ) and so on. Feeds: truth tables, where the main connective is evaluated last.` },
 ];
 const CONCEPT_OF = {};
@@ -3619,10 +3619,10 @@ function svgEl(parent, tag, attrs = {}, text) {
   return e;
 }
 const svgText = (p, [x, y], s, a = {}) => svgEl(p, 'text', { x, y, fill: PC.ink, 'font-size': 13, ...a }, s);
-const svgLine = (p, [x1, y1], [x2, y2], stroke = PC.base, w = 1.5) => svgEl(p, 'line', { x1, y1, x2, y2, stroke, 'stroke-width': w });
+const svgLine = (p, [x1, y1], [x2, y2], { stroke = PC.base, w = 1.5 } = {}) => svgEl(p, 'line', { x1, y1, x2, y2, stroke, 'stroke-width': w });
 const svgDot = (p, [cx, cy], fill, r = 8) => svgEl(p, 'circle', { cx, cy, r, fill });
 function svgArrow(p, a, b, color) {
-  svgLine(p, a, b, color, 2.5);
+  svgLine(p, a, b, { stroke: color, w: 2.5 });
   const t = Math.atan2(b[1] - a[1], b[0] - a[0]), h = s => [b[0] - 10 * Math.cos(t + s), b[1] - 10 * Math.sin(t + s)];
   svgEl(p, 'polygon', { points: [b, h(0.4), h(-0.4)].map(q => q.join(',')).join(' '), fill: color });
 }
@@ -3705,8 +3705,8 @@ const PICTURES = {
       g.replaceChildren();
       const u = unitCirclePoint(m), P = scr(u.x, u.y), F = scr(u.x, 0);
       if (p.mirror) { svgEl(g, 'line', { x1: C[0], y1: C[1], x2: P[0], y2: 2 * C[1] - P[1], stroke: PC.muted, 'stroke-dasharray': '4 3' }); svgDot(g, [P[0], 2 * C[1] - P[1]], PC.muted, 5); }
-      if (p.showTriangle) { svgLine(g, C, F, PC.bad, 3); svgLine(g, F, P, PC.good, 3); }
-      svgLine(g, C, P, PC.acc, 2);
+      if (p.showTriangle) { svgLine(g, C, F, { stroke: PC.bad, w: 3 }); svgLine(g, F, P, { stroke: PC.good, w: 3 }); }
+      svgLine(g, C, P, { stroke: PC.acc, w: 2 });
       svgDot(g, P, PC.acc, 9);
       if (p.window) svgReadout(g, unitCircleWindow(g, m, p.window, scr));
       else svgReadout(g, [[`θ = ${piText(m)}   `, PC.ink], [`cos θ = ${u.exactCos}   `, PC.bad], [`sin θ = ${u.exactSin}`, PC.good]]);
@@ -3722,11 +3722,11 @@ const PICTURES = {
   //              centre: a (marks a; with one point the readout adds |x − a|) }
   numberLine(svg, p) {
     const [a, b] = p.range || [-5, 5], Y = 100, X = x => 20 + 280 * (clamp(x, a, b) - a) / (b - a);
-    svgLine(svg, [10, Y], [310, Y], PC.muted);
-    for (let k = Math.ceil(a); k <= b; k++) { svgLine(svg, [X(k), Y - 5], [X(k), Y + 5], PC.muted); svgText(svg, [X(k), Y + 24], k, { 'text-anchor': 'middle', fill: PC.muted, 'font-size': 11 }); }
+    svgLine(svg, [10, Y], [310, Y], { stroke: PC.muted });
+    for (let k = Math.ceil(a); k <= b; k++) { svgLine(svg, [X(k), Y - 5], [X(k), Y + 5], { stroke: PC.muted }); svgText(svg, [X(k), Y + 24], k, { 'text-anchor': 'middle', fill: PC.muted, 'font-size': 11 }); }
     const ivs = (p.intervals || []).map(numberLineInterval);
     for (const iv of ivs) {
-      svgLine(svg, [X(iv.lo), Y], [X(iv.hi), Y], PC.acc, 5);
+      svgLine(svg, [X(iv.lo), Y], [X(iv.hi), Y], { stroke: PC.acc, w: 5 });
       for (const [v, closed, end] of [[iv.lo, iv.lc, 6], [iv.hi, iv.hc, 314]]) {
         if (isFinite(v)) svgEl(svg, 'circle', { cx: X(v), cy: Y, r: 6, fill: closed ? PC.acc : '#1d2026', stroke: PC.acc, 'stroke-width': 2.5 });
         else svgArrow(svg, [X(v), Y], [end, Y], PC.acc);
@@ -3738,7 +3738,7 @@ const PICTURES = {
     const draw = () => {
       g.replaceChildren();
       const col = x => !ivs.length || inside(x) ? PC.good : PC.bad;
-      pts.forEach(x => { svgLine(g, [X(x), Y - 22], [X(x), Y], col(x)); svgDot(g, [X(x), Y - 30], col(x)); });
+      pts.forEach(x => { svgLine(g, [X(x), Y - 22], [X(x), Y], { stroke: col(x) }); svgDot(g, [X(x), Y - 30], col(x)); });
       if (ivs.length && pts.length > 2) svgReadout(g, [[`${pts.filter(inside).length} of ${pts.length} points in the set`, PC.ink]]);
       else if (ivs.length) svgReadout(g, [...(p.centre === undefined ? [] : [[`|x − ${fmt1(p.centre)}| = ${fmt1(Math.abs(pts[0] - p.centre))}   `, PC.ink]]),
         ...pts.map(x => [`x = ${fmt1(x)} ${inside(x) ? '∈' : '∉'} set   `, col(x)])]);
@@ -3779,8 +3779,8 @@ const PICTURES = {
   // vectors2d { vecs: [[x, y], ...] (integer tips, drag each tip), dot: bool (show a·b of the first two) }
   vectors2d(svg, p) {
     const O = [160, 105], s = 25, scr = v => [O[0] + s * v[0], O[1] - s * v[1]];
-    for (let i = -6; i <= 6; i++) svgLine(svg, scr([i, -3.6]), scr([i, 3.6]), i ? PC.key : PC.base);
-    for (let j = -3; j <= 3; j++) svgLine(svg, scr([-6.2, j]), scr([6.2, j]), j ? PC.key : PC.base);
+    for (let i = -6; i <= 6; i++) svgLine(svg, scr([i, -3.6]), scr([i, 3.6]), { stroke: i ? PC.key : PC.base });
+    for (let j = -3; j <= 3; j++) svgLine(svg, scr([-6.2, j]), scr([6.2, j]), { stroke: j ? PC.key : PC.base });
     const vs = p.vecs.map(v => [...v]), g = svgEl(svg, 'g'), cols = [PC.acc, PC.good, PC.bad], names = 'abc';
     const draw = () => {
       g.replaceChildren();
@@ -3897,13 +3897,15 @@ const PICTURES = {
     });
   },
   // ndStepper { lines: [{ n: 3, formula: 'P \\land Q', rule: '∧I', deps: [1, 2] }, ...] (at most 6 lines; formula is TeX, rule is plain Unicode text such as '∧I', '→E') }; Next / Back reveal one line at a time
-  ndStepper(svg, p) {
-    const box = svgEl(svg, 'foreignObject', { x: 0, y: 0, width: 320, height: 160 }), g = svgEl(svg, 'g'), st = { k: 1 };
+  ndStepper(svg, p, top) {
+    const g = svgEl(svg, 'g'), st = { k: 1 };
+    svg.setAttribute('viewBox', '0 0 320 60');
+    svg.style.borderRadius = '0 0 10px 10px';
     const draw = () => {
       g.replaceChildren();
-      box.replaceChildren(ndRows(p.lines, st.k));
+      top.replaceChildren(ndRows(p.lines, st.k));
       svgButtons(g, ndButtons(p.lines, st));
-      svgReadout(g, [[ndReadout(p.lines, st.k), PC.muted]]);
+      svgReadout(g, [[ndReadout(p.lines, st.k), PC.muted]], 54);
     };
     draw();
     onButtons(svg, () => ndButtons(p.lines, st), draw);
@@ -3911,8 +3913,8 @@ const PICTURES = {
   // unitSquare { M: [[a, b], [c, d]] (integers; columns = images of e₁, e₂) }; drag the two arrow tips
   unitSquare(svg, p) {
     const O = [160, 95], s = 25, scr = v => [O[0] + s * v[0], O[1] - s * v[1]];
-    for (let i = -6; i <= 6; i++) svgLine(svg, scr([i, -3.2]), scr([i, 3.2]), i ? PC.key : PC.base);
-    for (let j = -3; j <= 3; j++) svgLine(svg, scr([-6.2, j]), scr([6.2, j]), j ? PC.key : PC.base);
+    for (let i = -6; i <= 6; i++) svgLine(svg, scr([i, -3.2]), scr([i, 3.2]), { stroke: i ? PC.key : PC.base });
+    for (let j = -3; j <= 3; j++) svgLine(svg, scr([-6.2, j]), scr([6.2, j]), { stroke: j ? PC.key : PC.base });
     const cv = [[p.M[0][0], p.M[1][0]], [p.M[0][1], p.M[1][1]]], g = svgEl(svg, 'g'), draw = () => { g.replaceChildren(); unitSquareDraw(g, cv, scr); };
     draw();
     onDrag(svg, pt => nearest(cv.map(scr), pt), (i, pt) => {
@@ -3963,10 +3965,10 @@ function matrixHighlightText(p) {
 }
 function matrixCells(g, M, p, y0) {
   const n = M[0].length, cw = Math.min(56, 220 / n), rh = 30, x0 = (320 - cw * n) / 2, W = cw * n, H = rh * M.length;
-  const hl = (x, y, w, h, o) => svgEl(g, 'rect', { x, y, width: w, height: h, rx: 5, fill: PC.acc, 'fill-opacity': o });
-  if (p.row !== undefined) hl(x0, y0 + rh * p.row, W, rh, 0.2);
-  if (p.col !== undefined) hl(x0 + cw * p.col, y0, cw, H, 0.2);
-  if (p.row !== undefined && p.col !== undefined) hl(x0 + cw * p.col, y0 + rh * p.row, cw, rh, 0.35);
+  const hl = ([x, y, w, h], o) => svgEl(g, 'rect', { x, y, width: w, height: h, rx: 5, fill: PC.acc, 'fill-opacity': o });
+  if (p.row !== undefined) hl([x0, y0 + rh * p.row, W, rh], 0.2);
+  if (p.col !== undefined) hl([x0 + cw * p.col, y0, cw, H], 0.2);
+  if (p.row !== undefined && p.col !== undefined) hl([x0 + cw * p.col, y0 + rh * p.row, cw, rh], 0.35);
   M.forEach((row, r) => row.forEach((v, c) => svgText(g, [x0 + cw * (c + 0.5), y0 + rh * (r + 0.5) + 6], ratText(v), { 'text-anchor': 'middle', 'font-size': 17 })));
   for (const [x, d] of [[x0 - 4, 1], [x0 + W + 4, -1]]) svgEl(g, 'path', { d: `M${x + 6 * d} ${y0} H${x} V${y0 + H} H${x + 6 * d}`, fill: 'none', stroke: PC.muted, 'stroke-width': 2 });
 }
@@ -4017,8 +4019,8 @@ function argandArc(g, th, R, col) {
 }
 function argandPoint(g, scr, it) {
   const P = scr(it.z), O = scr([0, 0]);
-  if (it.legs) { svgLine(g, O, scr([it.z[0], 0]), PC.bad, 3); svgLine(g, scr([it.z[0], 0]), P, PC.good, 3); }
-  svgLine(g, O, P, it.col, 2);
+  if (it.legs) { svgLine(g, O, scr([it.z[0], 0]), { stroke: PC.bad, w: 3 }); svgLine(g, scr([it.z[0], 0]), P, { stroke: PC.good, w: 3 }); }
+  svgLine(g, O, P, { stroke: it.col, w: 2 });
   if (it.info.th !== null) argandArc(svgEl(g, 'g', { transform: `translate(${O})` }), it.info.th, it.R, it.col);
   svgDot(g, P, it.col, it.drag ? 8 : 5);
   svgText(g, [P[0] + 9, P[1] - 7], it.name, { fill: it.col, 'font-weight': 600 });
@@ -4039,7 +4041,7 @@ function argandDraw(g, pts, scr) {
 const ndView = (lines, k) => ({ shown: lines.slice(0, k), cited: k > 0 ? lines[k - 1].deps || [] : [] });
 function ndRows(lines, k) {
   const { shown, cited } = ndView(lines, k), box = document.createElement('div');
-  box.style.cssText = `padding:4px 8px;height:152px;overflow:hidden;color:${PC.ink};font-size:13px;line-height:1.4`;
+  box.style.cssText = `padding:4px 8px;height:152px;overflow:hidden;background:#1d2026;border-radius:10px 10px 0 0;color:${PC.ink};font-size:13px;line-height:1.4`;
   shown.forEach((l, i) => {
     const row = Object.assign(document.createElement('div'), { className: 'nd-row' });
     row.style.cssText = `display:flex;gap:8px;align-items:center;padding:0 6px;border-radius:6px;min-height:22px;`
@@ -4052,8 +4054,8 @@ function ndRows(lines, k) {
 }
 function ndButtons(lines, st) {
   return [
-    { x: 8, y: 164, w: 96, h: 32, label: '← Back', off: st.k <= 1, act: () => { st.k--; } },
-    { x: 216, y: 164, w: 96, h: 32, label: 'Next →', off: st.k >= lines.length, act: () => { st.k++; } },
+    { x: 8, y: 4, w: 96, h: 32, label: '← Back', off: st.k <= 1, act: () => { st.k--; } },
+    { x: 216, y: 4, w: 96, h: 32, label: 'Next →', off: st.k >= lines.length, act: () => { st.k++; } },
   ];
 }
 function ndReadout(lines, k) {
@@ -4102,7 +4104,7 @@ function treeNode(g, node, [x0, x1], ctx) {
   const at = [(x0 + x1) / 2, 28 + ctx.depth * 46], kids = node.slice(1), w = (x1 - x0) / (kids.length || 1);
   kids.forEach((kid, i) => {
     const span = [x0 + i * w, x0 + (i + 1) * w];
-    svgLine(g, at, [(span[0] + span[1]) / 2, at[1] + 46], ctx.lit ? PC.acc : PC.base, 2);
+    svgLine(g, at, [(span[0] + span[1]) / 2, at[1] + 46], { stroke: ctx.lit ? PC.acc : PC.base, w: 2 });
     treeNode(g, kid, span, { ...ctx, depth: ctx.depth + 1, lit: ctx.lit || kid === ctx.hl });
   });
   const bw = 16 + 8 * node[0].length;
@@ -4132,8 +4134,9 @@ function renderPicture(container, pic) {
   const svg = svgEl(null, 'svg', { viewBox: '0 0 320 220', role: 'img', 'aria-label': pic.alt || pic.caption || '' });
   Object.assign(svg.style, { display: 'block', width: '100%', maxWidth: '100%', touchAction: 'none', userSelect: 'none', webkitUserSelect: 'none',
     background: '#1d2026', borderRadius: '10px', fontFamily: '-apple-system, system-ui, sans-serif' });
-  PICTURES[pic.template](svg, pic.params || {});
-  container.append(svg);
+  const top = document.createElement('div');
+  PICTURES[pic.template](svg, pic.params || {}, top);
+  container.append(top, svg);
   if (pic.caption) container.append(Object.assign(document.createElement('div'), { className: 'muted', textContent: pic.caption }));
 }
 </script>
@@ -4492,8 +4495,8 @@ function nextQuestion() {
   setKeys(isBool ? null : q);
   input.value = '';
   tick();
-  if (!isBool) focusInput(q.noKeyboard ? 'none' : q.mode || KEYSETS[q.kind].mode);
   if (S?.drill) conceptFirst(q.type);   // tick() may have ended the round (S = null)
+  if (!isBool && !CV) focusInput(q.noKeyboard ? 'none' : q.mode || KEYSETS[q.kind].mode);
 }
 // Focus drills only: a type whose concept was never opened shows the concept first (opening marks it seen, so once per concept)
 function conceptFirst(typeId) {
@@ -4965,6 +4968,7 @@ function openConcept(id, context = {}) {
   if (!CV) pauseRound();
   CV = { c, prev, context };
   markSeen(id);
+  $('askBtn').textContent = 'Ask Claude about this';
   $('cName').textContent = c.name;
   $('cMeta').textContent = `${CONFIG.categories[c.cat].label} · week ${c.week} · ${c.types.length} drill type${c.types.length === 1 ? '' : 's'}`;
   showScreen('concept');
@@ -4973,7 +4977,7 @@ function openConcept(id, context = {}) {
 function closeConcept() {
   const prev = CV.prev;
   CV = null;
-  showScreen(prev);
+  if (prev === 'home') showHome(); else showScreen(prev);
   resumeRound();
 }
 function pauseRound() {
@@ -5265,7 +5269,7 @@ function fixtureConcept(id, types, origin = []) {
 }
 // Run fn with fixture concepts appended to CONCEPTS and app state restored afterwards
 function withFixtures(list, fn) {
-  const saved = CS_KEYS.map(k => localStorage.getItem(k)), savedRS = RS, realNow = Date.now, n = CONCEPTS.length, savedOf = { ...CONCEPT_OF };
+  const saved = CS_KEYS.map(k => localStorage.getItem(k)), savedRS = JSON.parse(JSON.stringify(RS)), realNow = Date.now, n = CONCEPTS.length, savedOf = { ...CONCEPT_OF };
   CONCEPTS.push(...list);
   for (const c of list) for (const t of c.types) CONCEPT_OF[t] = c.id;
   try { return fn(); } catch (e) { return [`concept screen threw: ${e.message}`]; } finally {
@@ -5376,6 +5380,11 @@ function spyOpen(fn) {
 }
 function conceptFirstOnceTest(drill, c) {
   localStorage.removeItem(SEEN_KEY);
+  const realFocus = focusInput, focusedOpen = [];
+  focusInput = (...a) => { focusedOpen.push(!!CV); return realFocus(...a); };
+  try { return conceptFirstOnceRun(drill, c, focusedOpen); } finally { focusInput = realFocus; }
+}
+function conceptFirstOnceRun(drill, c, focusedOpen) {
   const calls = spyOpen(() => {
     startRound(drill.id);
     if (CV) closeConcept();
@@ -5384,10 +5393,16 @@ function conceptFirstOnceTest(drill, c) {
     nextQuestion(); if (CV) closeConcept();
   });
   const shared = calls.filter(id => id === 'fxS').length;   // the drill's other types may open real concepts
-  return shared === 1 ? [] : [`focus drill opened the shared concept ${shared} times, want 1`];
+  const f = shared === 1 ? [] : [`focus drill opened the shared concept ${shared} times, want 1`];
+  if (focusedOpen.some(Boolean)) f.push('answer input focused while a concept is open');
+  return f;
 }
 // The last answer lands after S.end: tick() inside nextQuestion ends the round, so concept-first must not read S
 function lastAnswerDrillTest(drill) {
+  const pb = localStorage.getItem(pbKey(drill));
+  try { return lastAnswerDrillRun(drill); } finally { pb === null ? localStorage.removeItem(pbKey(drill)) : localStorage.setItem(pbKey(drill), pb); }
+}
+function lastAnswerDrillRun(drill) {
   startRound(drill.id);
   if (CV) closeConcept();
   localStorage.removeItem(SEEN_KEY);
@@ -5417,7 +5432,15 @@ function accuracyTest() {
 function unopenedTest() {
   localStorage.setItem(SEEN_KEY, JSON.stringify(['fxA']));
   const want = CONCEPTS.filter(c => c.id !== 'fxA' && c.types.some(id => activeTypes().some(x => x.id === id))).length;
-  return unopenedCount() === want ? [] : [`unopenedCount ${unopenedCount()}, want ${want}`];
+  const f = unopenedCount() === want ? [] : [`unopenedCount ${unopenedCount()}, want ${want}`];
+  showHome();
+  const before = $('homeHead').innerHTML;
+  $('askBtn').textContent = 'Copied ✓';
+  openConcept('fxB');
+  if ($('askBtn').textContent !== 'Ask Claude about this') f.push('openConcept keeps the Copied ✓ button text');
+  closeConcept();
+  if ($('homeHead').innerHTML === before) f.push('closeConcept to home does not refresh the unopened count');
+  return f;
 }
 function tryOne(kind, id) {
   openConcept('fxT');
