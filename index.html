@@ -34,6 +34,7 @@
 <script>
 const CONFIG = {
   roundSeconds: 120,
+  conceptCoverage: 'pilot',   // 'pilot': only some types have a concept; 'full': every TYPES id must (self-test enforced)
   currentWeek: { la: 4, calc: 4, seq: 4, logic: 4, basics: 4 },   // per course: courses move at different speeds
   categories: {
     la:    { label: 'Linear algebra',       weight: 1 },
@@ -1408,6 +1409,21 @@ const TYPES = [
 ];
 </script>
 <!-- ============================ END CONFIG ============================ -->
+
+<!-- ============================ CONCEPTS ============================
+  Concept = { id, name, cat, week, source, types: [typeId], origin: [conceptId], feeds: [conceptId],
+              picture: { template, params, caption, alt }, algebra (text with $TeX$), originText }
+  Budgets (self-test enforced): algebra <= 50 words of prose + <= 2 display formulas; originText <= 40 words; caption <= 25 words.
+  A display formula is a $...$ span alone on its own line (bounded by <br>, newline or string ends).
+======================================================================= -->
+<script>
+const CONCEPTS = [];
+const CONCEPT_OF = {};
+for (const c of CONCEPTS) for (const t of c.types) CONCEPT_OF[t] = c.id;
+
+const stripTeX = s => s.replace(/\$\$[\s\S]*?\$\$|\$[^$]*\$/g, ' ');
+const wordCount = s => s.split(/\s+/).filter(Boolean).length;
+</script>
 
 <style>
   :root { --bg: #14161a; --panel: #1d2026; --ink: #e8e8ea; --muted: #8a8f98; --accent: #6ea8fe; --good: #4cc38a; --bad: #f2555a; }
@@ -3531,11 +3547,59 @@ function init() {
 ===================================================================== -->
 <script>
 function runSelfTest() {
-  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests() };
-  out.ok = out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests() };
+  out.ok = out.concepts.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
   const pre = $('selftest');
   pre.style.display = 'block';
   pre.textContent = JSON.stringify(out, null, 1);
+}
+
+// ---- concept registry checks ----
+const displayFormulaCount = s => s.split(/<br\s*\/?>|\n/).filter(l => /^\s*(\$\$[^$]+\$\$|\$[^$]+\$)\s*$/.test(l)).length;
+
+function conceptBudgetFailures(c) {
+  const f = [], bad = msg => f.push(`${c.id}: ${msg}`);
+  if (!c.source) bad('empty source');
+  if (wordCount(stripTeX(c.algebra || '')) > 50) bad('algebra over 50 words');
+  if (displayFormulaCount(c.algebra || '') > 2) bad('algebra has more than 2 display formulas');
+  if (wordCount(c.originText || '') > 40) bad('originText over 40 words');
+  if (wordCount((c.picture && c.picture.caption) || '') > 25) bad('caption over 25 words');
+  return f;
+}
+
+function validateConcepts(concepts, typeIds, coverage) {
+  const f = [], ids = new Set(concepts.map(c => c.id)), owner = {};
+  for (const c of concepts) {
+    f.push(...conceptBudgetFailures(c));
+    for (const t of c.types) {
+      if (owner[t]) f.push(`${t}: in two concepts (${owner[t]}, ${c.id})`);
+      owner[t] = c.id;
+    }
+    for (const k of [...c.origin, ...c.feeds]) if (!ids.has(k)) f.push(`${c.id}: link to unknown concept ${k}`);
+  }
+  if (coverage === 'full') for (const t of typeIds) if (!owner[t]) f.push(`${t}: type without a concept`);
+  return f;
+}
+
+function conceptTests() {
+  const ok = { id: 'a', source: 'x p.1', algebra: 'Short text.<br>$x^2$', originText: 'Short.', picture: { caption: 'Short.' }, types: ['t1'], origin: [], feeds: [] };
+  const long = { ...ok, id: 'b', types: ['t2'], algebra: Array(60).fill('word').join(' ') };
+  const fixtures = [
+    [[ok], [], 'pilot'],
+    [[ok, long], ['b: algebra over 50 words'], 'pilot'],
+    [[ok, { ...ok, id: 'c' }], ['t1: in two concepts (a, c)'], 'pilot'],
+    [[{ ...ok, feeds: ['zz'] }], ['a: link to unknown concept zz'], 'pilot'],
+    [[{ ...ok, algebra: '$a$<br>$b$<br>$c$' }], ['a: algebra has more than 2 display formulas'], 'pilot'],
+    [[{ ...ok, algebra: 'Inline $a$ and $b$ and $c$ in prose.' }], [], 'pilot'],
+    [[{ ...ok, source: '' }], ['a: empty source'], 'pilot'],
+    [[ok], ['t9: type without a concept'], 'full', ['t1', 't9']],
+  ];
+  const failed = [];
+  for (const [list, want, cov, typeIds = []] of fixtures) {
+    const got = validateConcepts(list, typeIds, cov);
+    if (JSON.stringify(got) !== JSON.stringify(want)) failed.push(`fixture expected ${JSON.stringify(want)} got ${JSON.stringify(got)}`);
+  }
+  return [...failed, ...validateConcepts(CONCEPTS, TYPES.map(t => t.id), CONFIG.conceptCoverage)];
 }
 
 // [canonical, kind, inputs that must pass, inputs that must fail, extra options]
