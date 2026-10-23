@@ -1470,6 +1470,10 @@ const wordCount = s => s.split(/\s+/).filter(Boolean).length;
   details.cat summary::-webkit-details-marker { display: none; }
   details.cat summary b { font-size: 20px; font-variant-numeric: tabular-nums; }
   .miss code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; }
+  button.why { background: none; border: 0; padding: 0 2px; color: var(--accent); font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap; }
+  .unopened { color: var(--accent); font-size: 14px; margin-top: 4px; }
+  tr.crow { cursor: pointer; }
+  .slip { color: var(--bad); border: 1px solid var(--bad); border-radius: 6px; padding: 0 5px; font-size: 12px; white-space: nowrap; }
   .stk code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; white-space: nowrap; }
   .stk th { padding-top: 12px; } .stk .katex { white-space: nowrap; }
   .drills { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-bottom: 8px; }
@@ -3284,6 +3288,7 @@ function applyAnswer(type, ok, ms) {
   const r = decayed(st), delta = ratingDelta(r, ok, ms, type.par);
   Object.assign(st, { r: r + delta, last: Date.now(), log: [...st.log, { d: dayKey(), ok, ms }].slice(-CONFIG.mastery.window) });
   const met = masteryStatus(st.log, type.par).met, change = met === st.mastered ? null : met ? 'mastered' : 'lost';
+  st.lost = change === 'lost' || (!met && !!st.lost);   // lost mastery and not yet regained: the concept is slipping
   st.mastered = met;
   localStorage.setItem(RATINGS_KEY, JSON.stringify(RS));
   return { delta, change };
@@ -3403,6 +3408,12 @@ function nextQuestion() {
   input.value = '';
   tick();
   if (!isBool) focusInput(q.noKeyboard ? 'none' : q.mode || KEYSETS[q.kind].mode);
+  if (S.drill) conceptFirst(q.type);
+}
+// Focus drills only: a type whose concept was never opened shows the concept first (opening marks it seen, so once per concept)
+function conceptFirst(typeId) {
+  const cid = CONCEPT_OF[typeId];
+  if (cid && !seenConcepts().has(cid)) openConcept(cid);
 }
 // Swap keyboard type: blur then refocus inside the same user gesture so mobile keyboards update
 function focusInput(mode) {
@@ -3435,7 +3446,8 @@ function onInput() {
   const v = $('answer').value;
   if (check(S.cur, v)) return record(true, false, v);
   const stackOnly = STRICT_STACK && (S.cur.kind === 'num' || S.cur.kind === 'expr') && check(S.cur, v, false);
-  $('prev').textContent = stackOnly ? STACK_HINT : $('prev').dataset.miss || '';
+  if (stackOnly) $('prev').textContent = STACK_HINT;
+  else $('prev').innerHTML = $('prev').dataset.miss || '';
 }
 function record(ok, skipped = false, attempt = '') {
   const q = S.cur, type = TYPE_BY_ID[q.type], ms = Date.now() - S.start;
@@ -3450,14 +3462,17 @@ function record(ok, skipped = false, attempt = '') {
   feedback(ok, ctx, delta, q);
   nextQuestion();
 }
+let WHY_PREV = null;   // Why? context for the in-round ✗ line
 function feedback(ok, ctx, delta, q) {
   $('score').textContent = S.points;
   $('combo').textContent = S.streak >= 2 ? `×${ctx.combo.toFixed(1)}` : '';
   $('delta').textContent = `${delta >= 0 ? '+' : ''}${Math.round(delta)}`;
   $('delta').className = delta >= 0 ? 'up' : 'down';
-  const miss = ok ? '' : '✗ ' + renderMath(`$${answerTeX(q)}$`);
-  $('prev').innerHTML = miss;
-  $('prev').dataset.miss = $('prev').textContent;
+  const cid = !ok && CONCEPT_OF[q.type], last = S.log.at(-1);
+  WHY_PREV = { q: last, attempt: last.attempt };
+  const why = cid ? ` <button class="why" onclick="openConcept('${cid}', WHY_PREV)">Why? →</button>` : '';
+  $('prev').innerHTML = ok ? '' : '✗ ' + renderMath(`$${answerTeX(q)}$`) + why;
+  $('prev').dataset.miss = $('prev').innerHTML;
   juice(ok, S.streak, q.golden);
 }
 // What to type, for answers that are not a plain number
@@ -3663,13 +3678,16 @@ function trendBlock(hist) {
   return `<h2>Trend · accuracy, last ${recent.length} rounds</h2><table>${scoreRow}${rows.join('')}</table>`;
 }
 // Misses and the unfinished last question, with your attempt next to the answer (skips the one shown at 0 s)
+let WHY = [];   // Why? context per Review item: the missed question and the attempt
 function reviewList(log) {
   const items = log.filter(e => !e.ok && !(e.unanswered && e.ms < 2000 && !e.attempt));
+  WHY = items.map(e => ({ q: e, attempt: e.attempt }));
   if (!items.length) return '';
-  return '<h2>Review</h2>' + items.map(e => {
-    const status = e.unanswered ? 'unfinished' : e.skipped ? 'skipped' : 'wrong';
+  return '<h2>Review</h2>' + items.map((e, i) => {
+    const status = e.unanswered ? 'unfinished' : e.skipped ? 'skipped' : 'wrong', cid = CONCEPT_OF[e.type];
     const you = e.attempt ? `<code class="down">${esc(e.attempt)}</code>` : '<span class="muted">nothing typed</span>';
-    return `<div class="miss">${renderMath(e.q)}<div class="muted">${status} · you: ${you} · answer: ${renderMath(`$${e.ans}$`)}</div></div>`;
+    const why = cid ? ` <button class="why" onclick="openConcept('${cid}', WHY[${i}])">Why? →</button>` : '';
+    return `<div class="miss">${renderMath(e.q)}<div class="muted">${status} · you: ${you} · answer: ${renderMath(`$${e.ans}$`)}${why}</div></div>`;
   }).join('');
 }
 
@@ -3719,9 +3737,13 @@ function showHome() {
   const streak = dayStreak(hist.map(r => dayKey(r.t)));
   $('poolInfo').textContent = `Week ${Math.max(...Object.values(CONFIG.currentWeek))} · ${types.length} types`;
   $('homeHead').innerHTML = `<div class="score">${Math.round(headline())}</div>
-    <div class="muted center">rating · ${mastered}/${types.length} mastered · streak ${streak} day${streak === 1 ? '' : 's'} · today: ${todaysModifier().name}</div>`;
-  $('homeStats').innerHTML = drillsBlock() + statsSection(hist) + dashboard(types, hist) + stackGuide() + weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
+    <div class="muted center">rating · ${mastered}/${types.length} mastered · streak ${streak} day${streak === 1 ? '' : 's'} · today: ${todaysModifier().name}</div>${unopenedLine()}`;
+  $('homeStats').innerHTML = drillsBlock() + conceptsList() + statsSection(hist) + dashboard(types, hist) + stackGuide() + weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
   showScreen('home');
+}
+function unopenedLine() {
+  const n = unopenedCount();
+  return n ? `<div class="center unopened">${n} concept${n === 1 ? '' : 's'} you haven't opened yet</div>` : '';
 }
 function dashboard(types, hist) {
   return '<h2>Categories · tap for types</h2>' + [...new Set(types.map(t => t.cat))].map(cat => {
@@ -3738,6 +3760,34 @@ function typeRow(t, hist) {
   const trend = hist.filter(r => r.ratings?.[t.id] !== undefined).slice(-20).map(r => ({ y: ratingY(r.ratings[t.id]), r }));
   const prog = st?.mastered ? '<span class="up">✓</span>' : `<span class="prog" title="${tip}"><i style="width:${Math.round(100 * m.progress)}%"></i></span>`;
   return `<tr title="${tip}"><td>${t.name}</td><td>${prog}</td><td>${trend.length > 1 ? sparkline(trend, v => `${shortDate(v.r.t)}: ${v.r.ratings[t.id]}`, 60) : ''}</td><td class="n">${Math.round(ratingOf(t.id))}</td></tr>`;
+}
+// ---------- concepts on home: accuracy per concept (its worst type), slipping flag, unopened count ----------
+function conceptAccuracy(id) {
+  let worstType = null, acc = null, slipping = false;
+  for (const t of conceptById(id).types) {
+    const st = RS[t], last = (st?.log || []).slice(-10), a = last.filter(e => e.ok).length / last.length;
+    if (st?.lost || (last.length === 10 && a < 0.7)) slipping = true;
+    if (last.length && (acc === null || a < acc)) { acc = a; worstType = t; }
+  }
+  return { worstType, acc, slipping };
+}
+function unopenedCount() {
+  const active = new Set(activeTypes().map(t => t.id)), seen = seenConcepts();
+  return CONCEPTS.filter(c => !seen.has(c.id) && c.types.some(t => active.has(t))).length;
+}
+function conceptRow(c) {
+  const { acc, slipping } = conceptAccuracy(c.id);
+  return `<tr class="crow" onclick="openConcept('${c.id}')"><td>${c.name}</td><td>${slipping ? '<span class="slip">slipping</span>' : ''}</td>
+    <td class="n">${acc === null ? '–' : Math.round(100 * acc) + '%'}</td></tr>`;
+}
+function conceptsList() {
+  const groups = Object.keys(CONFIG.categories).map(cat => [cat, CONCEPTS.filter(c => c.cat === cat)]).filter(([, cs]) => cs.length);
+  if (!groups.length) return '';
+  return '<h2>Concepts · tap to open · weakest type, last 10</h2>' + groups.map(([cat, cs]) => {
+    const slipping = cs.filter(c => conceptAccuracy(c.id).slipping).length;
+    return `<details class="cat"><summary><span>${CONFIG.categories[cat].label}<br><span class="muted">${cs.length} concept${cs.length === 1 ? '' : 's'}${slipping ? ` · ${slipping} slipping` : ''}</span></span></summary>
+      <table>${cs.map(conceptRow).join('')}</table></details>`;
+  }).join('');
 }
 
 // ---------- STACK syntax reference (course guide "STACK answer input for students") ----------
@@ -3810,6 +3860,7 @@ function openConcept(id, context = {}) {
   const c = conceptById(id), prev = CV ? CV.prev : document.querySelector('.screen.on').id;
   if (!CV) pauseRound();
   CV = { c, prev, context };
+  markSeen(id);
   $('cName').textContent = c.name;
   $('cMeta').textContent = `${CONFIG.categories[c.cat].label} · week ${c.week} · ${c.types.length} drill type${c.types.length === 1 ? '' : 's'}`;
   showScreen('concept');
@@ -3938,8 +3989,8 @@ function init() {
 ===================================================================== -->
 <script>
 function runSelfTest() {
-  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests() };
-  out.ok = out.concepts.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests() };
+  out.ok = out.concepts.length === 0 && out.entry.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
   const pre = $('selftest');
   pre.style.display = 'block';
   pre.textContent = JSON.stringify(out, null, 1);
@@ -4041,10 +4092,13 @@ function fixtureConcept(id, types, origin = []) {
 }
 // Run fn with fixture concepts appended to CONCEPTS and app state restored afterwards
 function withFixtures(list, fn) {
-  const saved = CS_KEYS.map(k => localStorage.getItem(k)), savedRS = RS, realNow = Date.now, n = CONCEPTS.length;
+  const saved = CS_KEYS.map(k => localStorage.getItem(k)), savedRS = RS, realNow = Date.now, n = CONCEPTS.length, savedOf = { ...CONCEPT_OF };
   CONCEPTS.push(...list);
+  for (const c of list) for (const t of c.types) CONCEPT_OF[t] = c.id;
   try { return fn(); } catch (e) { return [`concept screen threw: ${e.message}`]; } finally {
     CONCEPTS.splice(n);
+    for (const k in CONCEPT_OF) delete CONCEPT_OF[k];
+    Object.assign(CONCEPT_OF, savedOf);
     if (typeof CV !== 'undefined' && CV) closeConcept();
     if (S) clearInterval(S.timer);
     S = null; RS = savedRS; Date.now = realNow;
@@ -4104,9 +4158,72 @@ function tryKindsTest() {
 // Strict Try (laptop) rejects lenient syntax and shows the STACK hint, as the play screen does
 function tryStrictOne() {
   openConcept('fxT');
+  localStorage.removeItem(SEEN_KEY);   // opening marks seen; this checks that a rejected answer does not
   conceptTab('try');
   tryInput({ a: '3x^2', kind: 'expr' }, '3x^2');
   return $('tryMsg').textContent === STACK_HINT && !seenConcepts().has('fxT') ? [] : ['strict Try accepts 3x^2 or shows no STACK hint'];
+}
+
+// ---- entry point checks: Why? links, concept-first in focus drills, concept accuracy, unopened count ----
+function entryTests() {
+  const t = activeTypes().map(x => x.id), drill = CONFIG.drills.find(d => drillTypes(d).length >= 2);
+  const shared = fixtureConcept('fxS', drillTypes(drill).slice(0, 2).map(x => x.id)), list = [fixtureConcept('fxA', [t[0]]), fixtureConcept('fxB', [t[1], t[2]])];
+  return [...withFixtures(list, whyLinkTest), ...withFixtures([shared], () => conceptFirstOnceTest(drill, shared)),
+    ...withFixtures([fixtureConcept('fxM', [t[0]])], conceptFirstMainTest), ...withFixtures(list, accuracyTest), ...withFixtures(list, unopenedTest)];
+}
+function whyLinkTest() {
+  const f = [], noConcept = TYPES.find(x => !CONCEPT_OF[x.id]).id;
+  const miss = type => ({ type, ok: false, q: 'Q', ans: '1', attempt: '2', skipped: false });
+  if (!reviewList([miss(CONCEPTS.at(-2).types[0])]).includes("openConcept('fxA'")) f.push('Review miss with a concept has no Why? link');
+  if (reviewList([miss(noConcept)]).includes('Why?')) f.push('Review miss without a concept shows a Why? link');
+  startRound();
+  queueTypes([CONCEPTS.at(-2).types[0]]); nextQuestion(); record(false);
+  if (!$('prev').innerHTML.includes("openConcept('fxA', WHY_PREV)") || WHY_PREV.q.type !== CONCEPTS.at(-2).types[0]) f.push('in-round ✗ line has no Why? link');
+  return f;
+}
+// Queue one question of each given type so the next nextQuestion() calls show them
+function queueTypes(ids) {
+  S.queue = ids.map(id => ({ q: { ...tryDraw([id]), golden: false }, at: 0 }));
+}
+function spyOpen(fn) {
+  const real = openConcept, calls = [];
+  openConcept = (...a) => { calls.push(a[0]); return real(...a); };
+  try { fn(); } finally { openConcept = real; }
+  return calls;
+}
+function conceptFirstOnceTest(drill, c) {
+  localStorage.removeItem(SEEN_KEY);
+  const calls = spyOpen(() => {
+    startRound(drill.id);
+    if (CV) closeConcept();
+    queueTypes(c.types);
+    nextQuestion(); if (CV) closeConcept();
+    nextQuestion(); if (CV) closeConcept();
+  });
+  return calls.length === 1 && calls[0] === 'fxS' ? [] : [`focus drill opened the shared concept ${calls.length} times, want 1`];
+}
+function conceptFirstMainTest() {
+  localStorage.removeItem(SEEN_KEY);
+  const calls = spyOpen(() => { startRound(); queueTypes(CONCEPTS.at(-1).types); nextQuestion(); });
+  return calls.length ? ['main round opened a concept unprompted'] : [];
+}
+function accuracyTest() {
+  const f = [], [a, b] = [CONCEPTS.at(-2), CONCEPTS.at(-1)], ans = (n, ok) => Array.from({ length: n }, (_, i) => ({ d: `2026-10-0${1 + i % 3}`, ok: i < ok, ms: 1000 }));
+  RS = { [b.types[0]]: { r: 1000, last: 0, log: ans(10, 6), mastered: false }, [b.types[1]]: { r: 1000, last: 0, log: ans(10, 9), mastered: false } };
+  const got = conceptAccuracy(b.id);
+  if (got.acc !== 0.6 || !got.slipping || got.worstType !== b.types[0]) f.push(`6/10 gives ${JSON.stringify(got)}`);
+  if (conceptAccuracy(a.id).acc !== null || conceptAccuracy(a.id).slipping) f.push('concept with no answers is not acc null, not slipping');
+  const type = TYPE_BY_ID[a.types[0]], log = ans(30, 30).map((e, i) => ({ ...e, ok: i !== 29, ms: 100 }));
+  RS[type.id] = { r: 1000, last: Date.now(), log, mastered: true };
+  applyAnswer(type, false, 100);
+  if (RS[type.id].mastered) f.push('fixture: the miss did not drop mastery');
+  if (!conceptAccuracy(a.id).slipping) f.push('lost mastery is not slipping');
+  return f;
+}
+function unopenedTest() {
+  localStorage.setItem(SEEN_KEY, JSON.stringify(['fxA']));
+  const want = CONCEPTS.filter(c => c.id !== 'fxA' && c.types.some(id => activeTypes().some(x => x.id === id))).length;
+  return unopenedCount() === want ? [] : [`unopenedCount ${unopenedCount()}, want ${want}`];
 }
 function tryOne(kind, id) {
   openConcept('fxT');
