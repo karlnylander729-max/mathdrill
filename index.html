@@ -42,7 +42,7 @@ const CONFIG = {
     logic: { label: 'Elementary logic',     weight: 1 },
     basics: { label: 'Basics',              weight: 1 },   // drill-only skills, never in the main round
   },
-  // Focus drills: 120 s rounds on a few types. Own best score and history; ratings and mastery are shared.
+  // Focus drills: 120 s rounds on a few types, always available (ahead of lectures too). Own best score and history; ratings and mastery are shared.
   // Types marked hub: false appear only here (not in the main round, not in the overall rating).
   drills: [
     { id: 'matmul',      name: 'Matrix multiplication', types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'] },
@@ -55,7 +55,7 @@ const CONFIG = {
     { id: 'complex',     name: 'Complex numbers',       types: ['calc-cx-mul', 'calc-cx-mod', 'calc-cx-arg', 'calc-cx-div', 'calc-ipow', 'calc-cx-euler'] },
     { id: 'limits',      name: 'Limits',                types: ['calc-lim-std', 'calc-lim-inf', 'calc-lim-cancel', 'calc-onesided', 'calc-liminfty', 'calc-xalpha'] },
     { id: 'continuity',  name: 'Continuity & IVT',      types: ['calc-contcheck', 'calc-onesided', 'calc-piecewise', 'calc-ivt'] },
-    { id: 'diff',        name: 'Differentiation',       types: ['calc-dstd', 'calc-dchain', 'calc-dprod', 'calc-deriv'] },   // week 6: appears when currentWeek reaches it
+    { id: 'diff',        name: 'Differentiation',       types: ['calc-dstd', 'calc-dchain', 'calc-dprod', 'calc-deriv'] },
     { id: 'counting',    name: 'Counting integers',     types: ['seq-terms', 'seq-const', 'seq-count'] },
     { id: 'bounds',      name: 'Inequalities',          types: ['seq-modulus', 'seq-modeq', 'seq-interval', 'seq-findN'] },
     { id: 'boundedsets', name: 'Bounded sets',          types: ['seq-bounded', 'seq-isbound', 'seq-boundset', 'seq-maxmin', 'seq-supinf'] },
@@ -1435,7 +1435,8 @@ const weekNow = cat => CONFIG.currentWeek[cat] ?? 0;
 const weekLabel = () => Object.entries(CONFIG.currentWeek).filter(([c]) => c !== 'basics').map(([c, w]) => `${c} ${w}`).join(' · ');
 const activeTypes = () => TYPES.filter(t => t.hub !== false && t.weight > 0 && t.week <= weekNow(t.cat) && CONFIG.categories[t.cat]?.weight > 0);
 const DRILL_BY_ID = Object.fromEntries(CONFIG.drills.map(d => [d.id, d]));
-const drillTypes = d => d.types.map(id => TYPE_BY_ID[id]).filter(t => t && t.weight > 0 && t.week <= weekNow(t.cat));
+// Focus drills are always fully available (practice ahead of lectures); only the main round follows currentWeek
+const drillTypes = d => d.types.map(id => TYPE_BY_ID[id]).filter(t => t && t.weight > 0);
 const pbKey = drill => drill ? `${PB_KEY}:${drill.id}` : PB_KEY;
 
 // Speed vs the fixed par: 0.5 at par, 0.95 at about half par or faster, 0 at 1.5 × par or slower
