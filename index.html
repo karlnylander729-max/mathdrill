@@ -3877,7 +3877,13 @@ function renderTry(body, q) {
   if (isBool) [['tryTrue', true], ['tryFalse', false]].forEach(([id, v], i) => { $(id).textContent = q.labels[i]; $(id).onclick = () => tryBool(v); });
   setKeys(isBool ? null : q, $('tryKeys'), input);
   if (!isBool) input.inputMode = q.noKeyboard ? 'none' : q.mode || KEYSETS[q.kind].mode;
-  input.addEventListener('input', () => { if (check(q, input.value, false)) trySolved(); });
+  input.addEventListener('input', () => tryInput(q, input.value));
+}
+let tryStrict = STRICT_STACK;   // same strictness as the play screen; the self-test sets it to false
+function tryInput(q, v) {
+  if (check(q, v, tryStrict)) return trySolved();
+  const stackOnly = tryStrict && (q.kind === 'num' || q.kind === 'expr') && check(q, v, false);
+  $('tryMsg').textContent = stackOnly ? STACK_HINT : '';
 }
 function tryBool(choice) {
   if (choice === CV.q.a) trySolved();
@@ -4088,8 +4094,19 @@ function pauseResumeTest() {
 function tryKindsTest() {
   const f = [], byKind = {};
   for (const t of TYPES) for (let i = 0; i < 5; i++) { const q = t.gen(); if (q && !byKind[q.kind]) byKind[q.kind] = t.id; }
+  tryStrict = false;
   for (const [kind, id] of Object.entries(byKind)) f.push(...withFixtures([fixtureConcept('fxT', [id])], () => tryOne(kind, id)));
+  tryStrict = true;
+  f.push(...withFixtures([fixtureConcept('fxT', [TYPES[0].id])], tryStrictOne));
+  tryStrict = STRICT_STACK;
   return f;
+}
+// Strict Try (laptop) rejects lenient syntax and shows the STACK hint, as the play screen does
+function tryStrictOne() {
+  openConcept('fxT');
+  conceptTab('try');
+  tryInput({ a: '3x^2', kind: 'expr' }, '3x^2');
+  return $('tryMsg').textContent === STACK_HINT && !seenConcepts().has('fxT') ? [] : ['strict Try accepts 3x^2 or shows no STACK hint'];
 }
 function tryOne(kind, id) {
   openConcept('fxT');
