@@ -1456,8 +1456,8 @@ const TYPES = [
   .miss code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; }
   .stk code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; white-space: nowrap; }
   .stk th { padding-top: 12px; } .stk .katex { white-space: nowrap; }
-  .drills { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .drills button { text-align: left; padding: 10px 12px; }
+  .drills { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-bottom: 8px; }
+  .drills button { text-align: left; padding: 10px 12px; background: #262a32; }
   .prog { display: inline-block; width: 60px; height: 6px; background: #2c313a; border-radius: 3px; overflow: hidden; vertical-align: middle; }
   .prog i { display: block; height: 100%; background: var(--accent); }
   svg .pt { fill: var(--accent); } svg .ln { stroke: var(--accent); stroke-width: 2; fill: none; } svg .base { stroke: #2c313a; }
@@ -3390,11 +3390,16 @@ function statsSection(hist) {
   const blocks = [statsBlock(hist, null, 'Main round'), ...CONFIG.drills.map(d => statsBlock(hist, d.id, d.name))].join('');
   return blocks ? `<h2>Stats · tap for best rounds and trends</h2>${blocks}` : '';
 }
+// Drills grouped by course (the course most of the drill's types belong to)
+const drillCourse = d => { const c = {}; drillTypes(d).forEach(t => { c[t.cat] = (c[t.cat] || 0) + 1; }); return Object.keys(c).sort((a, b) => c[b] - c[a])[0]; };
+function drillButton(d) {
+  const pb = loadJSON(pbKey(d), null), r = Math.round(mean(drillTypes(d).map(t => ratingOf(t.id))));
+  return `<button onclick="startRound('${d.id}')"><b>${d.name}</b><br><span class="muted">rating ${r}${pb ? ` · best ${pb.points}` : ''}</span></button>`;
+}
 function drillsBlock() {
-  return '<h2>Focus drills · 120 s on one skill</h2><div class="drills">' + CONFIG.drills.filter(d => drillTypes(d).length).map(d => {
-    const pb = loadJSON(pbKey(d), null), r = Math.round(mean(drillTypes(d).map(t => ratingOf(t.id))));
-    return `<button onclick="startRound('${d.id}')"><b>${d.name}</b><br><span class="muted">rating ${r}${pb ? ` · best ${pb.points}` : ''}</span></button>`;
-  }).join('') + '</div>';
+  const groups = Object.keys(CONFIG.categories).map(cat => [cat, CONFIG.drills.filter(d => drillTypes(d).length && drillCourse(d) === cat)]).filter(([, ds]) => ds.length);
+  return '<h2>Focus drills · 120 s on one skill</h2>' + groups.map(([cat, ds]) =>
+    `<details class="cat"><summary><span>${CONFIG.categories[cat].label}<br><span class="muted">${ds.length} drills</span></span></summary><div class="drills">${ds.map(drillButton).join('')}</div></details>`).join('');
 }
 function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id)); }
 function showHome() {
