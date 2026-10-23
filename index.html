@@ -17,7 +17,7 @@
   Weekly edit:
     - Retire a pool: set its weight to 0.
     - Reweight: change a category weight or a type weight.
-    - Unlock future pools: raise currentWeek. Types with week > currentWeek stay off.
+    - Unlock future pools: raise that course's entry in currentWeek. Types with week > it stay off.
     - Add a pool: copy a type line, give it a new id, name and par, edit gen(). It enters at rating.start.
     - par = seconds a fast, fluent person needs, typing included. Fixed; it never adapts to you.
     - Tune the rating, mastery and scoring constants below.
@@ -34,7 +34,7 @@
 <script>
 const CONFIG = {
   roundSeconds: 120,
-  currentWeek: 4,
+  currentWeek: { la: 4, calc: 4, seq: 4, logic: 4, basics: 4 },   // per course: courses move at different speeds
   categories: {
     la:    { label: 'Linear algebra',       weight: 1 },
     calc:  { label: 'Calculus',             weight: 1.2 },
@@ -46,15 +46,19 @@ const CONFIG = {
   // Types marked hub: false appear only here (not in the main round, not in the overall rating).
   drills: [
     { id: 'matmul',      name: 'Matrix multiplication', types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'] },
-    { id: 'rowred',      name: 'Row reduction',         types: ['la-rowop', 'la-elimk', 'la-soltype'] },
+    { id: 'rowred',      name: 'Row reduction',         types: ['la-rowop', 'la-elimk', 'la-elementary', 'la-soltype'] },
+    { id: 'subspaces',   name: 'Subspaces & span',      types: ['la-subspace', 'la-inspan', 'la-indep', 'la-basis'] },
+    { id: 'dimension',   name: 'Pivots & dimension',    types: ['la-freevars', 'la-soltype', 'la-dimnamed', 'la-dimcond'] },
     { id: 'signed',      name: 'Signed arithmetic',     types: ['arith-signed', 'arith-vecsub'] },
     { id: 'logs',        name: 'Logs & exponents',      types: ['calc-log', 'calc-ln', 'calc-loglaw', 'calc-exp', 'calc-logcombine', 'calc-expsolve', 'calc-explaw'] },
     { id: 'trig',        name: 'Exact trig',            types: ['calc-trig', 'calc-arc', 'calc-arc-branch'] },
     { id: 'complex',     name: 'Complex numbers',       types: ['calc-cx-mul', 'calc-cx-mod', 'calc-cx-arg', 'calc-cx-div', 'calc-ipow', 'calc-cx-euler'] },
-    { id: 'limits',      name: 'Limits',                types: ['calc-lim-std', 'calc-lim-inf', 'calc-piecewise', 'calc-lim-cancel'] },
+    { id: 'limits',      name: 'Limits',                types: ['calc-lim-std', 'calc-lim-inf', 'calc-lim-cancel', 'calc-onesided', 'calc-liminfty', 'calc-xalpha'] },
+    { id: 'continuity',  name: 'Continuity & IVT',      types: ['calc-contcheck', 'calc-onesided', 'calc-piecewise', 'calc-ivt'] },
     { id: 'diff',        name: 'Differentiation',       types: ['calc-dstd', 'calc-dchain', 'calc-dprod', 'calc-deriv'] },   // week 6: appears when currentWeek reaches it
     { id: 'counting',    name: 'Counting integers',     types: ['seq-terms', 'seq-const', 'seq-count'] },
-    { id: 'bounds',      name: 'Inequalities & bounds', types: ['seq-modulus', 'seq-interval', 'seq-findN', 'seq-maxmin', 'seq-supinf'] },
+    { id: 'bounds',      name: 'Inequalities',          types: ['seq-modulus', 'seq-modeq', 'seq-interval', 'seq-findN'] },
+    { id: 'boundedsets', name: 'Bounded sets',          types: ['seq-bounded', 'seq-isbound', 'seq-boundset', 'seq-maxmin', 'seq-supinf'] },
     { id: 'negation',    name: 'Negating statements',   types: ['seq-negation', 'logic-negin'] },
     { id: 'syntax',      name: 'Syntax',                types: ['logic-main', 'logic-restore', 'logic-drop', 'logic-official', 'logic-sentence'] },
     { id: 'tables',      name: 'Truth tables',          types: ['logic-connective', 'logic-forced', 'logic-value', 'logic-column', 'logic-counter'] },
@@ -192,7 +196,7 @@ const TYPES = [
     const p = pick([1, 2, 3, -1, -2]), e = nz(-9, 9), r1 = [p, ri(-4, 4), ri(-5, 5)], r2 = [e, ri(-5, 5), ri(-5, 5)], k = frac(e, p);
     return { q: T`$${matTeX([r1, r2])}$: $\ R_2 \to R_2 - kR_1$ makes the $(2,1)$ entry $0$. $\ k = ?$`, a: k.s, show: k.tex, kind: 'num' };
   }},
-  { id: 'la-soltype', name: 'Solutions from echelon form', par: 6, cat: 'la', week: 2, weight: 1, gen() {
+  { id: 'la-soltype', name: 'Solutions from echelon form', par: 6, cat: 'la', week: 3, weight: 1, gen() {
     const kind = pick(['unique', 'none', 'infinite']), r1 = [nz(-3, 3), ri(-3, 3), ri(-3, 3), ri(-5, 5)];
     const r2 = [0, nz(-3, 3), ri(-3, 3), ri(-5, 5)], r3 = { unique: [0, 0, nz(-3, 3), ri(-5, 5)], none: [0, 0, 0, nz(-5, 5)], infinite: [0, 0, 0, 0] }[kind];
     const rows = [r1, Math.random() < 0.3 && kind === 'infinite' ? [0, 0, nz(-3, 3), ri(-5, 5)] : r2, r3];
@@ -200,6 +204,64 @@ const TYPES = [
     const alias = { unique: ['unique', 'one', '1', 'exactly one'], none: ['none', 'no solution', 'no solutions', '0'], infinite: ['infinite', 'infinitely many', 'inf', 'infinity', '∞'] };
     return { q: T`Augmented matrix in echelon form (unknowns $x_1, x_2, x_3$): $${tex}$. Solutions?`, a: alias[kind], show: T`\text{${kind}}`,
              kind: 'text', keys: ['none', 'unique', 'infinite'], hint: 'none, unique or infinite' };
+  }},
+  { id: 'la-subspace', name: 'Subspace?', par: 6, cat: 'la', week: 4, weight: 1, gen() {
+    const q = balanced(() => pick(SUBSPACE_FAMILIES)(), x => x.a);
+    return q && { ...q, kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'la-inspan', name: 'In the span?', par: 12, cat: 'la', week: 4, weight: 1, gen() {
+    const u = vec(3, -3, 3), v = vec(3, -3, 3), n = cross(u, v), yes = Math.random() < 0.5, a = nz(-2, 2), b = nz(-2, 2);
+    if (isZero(n)) return null;
+    const w = u.map((x, i) => a * x + b * v[i]);
+    if (!yes) w[n.findIndex(x => x !== 0)] += pick([1, -1]);   // off the plane: w·n ≠ 0
+    if (w.some(x => Math.abs(x) > 12)) return null;
+    return { q: T`Is $${colv(w)}$ in $\operatorname{span}\left\{${colv(u)}, ${colv(v)}\right\}$?`, a: yes, kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'la-elementary', name: 'Elementary matrix', par: 8, cat: 'la', week: 3, weight: 1, gen() {
+    const E = [[1, 0, 0], [0, 1, 0], [0, 0, 1]], [i, j] = shuffle([0, 1, 2]).slice(0, 2), al = nz(-5, 5), kind = pick(['swap', 'scale', 'add']);
+    let op;
+    if (kind === 'swap') { [E[i], E[j]] = [E[j], E[i]]; op = T`R_${i + 1} \leftrightarrow R_${j + 1}`; }
+    else if (kind === 'scale') { if (al === 1) return null; E[i][i] = al; op = T`R_${i + 1} \to ${poly([[al, `R_${i + 1}`]])}`; }
+    else { E[i][j] = al; op = T`R_${i + 1} \to ${poly([[1, `R_${i + 1}`], [al, `R_${j + 1}`]])}`; }
+    return { q: T`The $3\times3$ elementary matrix for $${op}$`, a: E, kind: 'mat', show: matTeX(E) };
+  }},
+  { id: 'la-freevars', name: 'Free variables', par: 6, cat: 'la', week: 3, weight: 1, gen() {
+    const n = ri(3, 5), piv = shuffle(Array.from({ length: n }, (_, c) => c)).slice(0, ri(1, 3)).sort((a, b) => a - b);
+    const M = [0, 1, 2].map(r => Array.from({ length: n }, (_, c) => r >= piv.length || c < piv[r] ? 0 : c === piv[r] ? nz(-3, 3) : ri(-3, 3)));
+    return { q: T`$A = ${matTeX(M)}$ is in echelon form. Number of free variables in $A\mathbf x = \mathbf 0$?`, a: String(n - piv.length), kind: 'num' };
+  }},
+  { id: 'la-dimnamed', name: 'Dimension of a named space', par: 4, cat: 'la', week: 5, weight: 1, gen() {
+    const n = ri(1, 6), m = ri(2, 4);
+    const [tex, d] = pick([[T`\mathbb R^{${n}}`, n], [T`P_{${n}}(\mathbb R)`, n + 1], [T`M_{${m},${n}}(\mathbb R)`, m * n], [T`\mathbb C^{${n}} \text{ over } \mathbb C`, n]]);
+    return { q: T`$\dim ${tex}$`, a: String(d), kind: 'num' };
+  }},
+  { id: 'la-dimcond', name: 'Dimension from conditions', par: 7, cat: 'la', week: 5, weight: 1, gen() {
+    const n = ri(3, 5), k = ri(1, 2), [p, q, r] = shuffle(Array.from({ length: n }, (_, i) => i + 1));
+    const first = pick([T`x_${p} = 0`, T`x_${p} = ${poly([[nz(-3, 3), `x_${q}`]])}`, T`x_${p} + x_${q} = 0`]);
+    const conds = [first, T`x_${r} = 0`].slice(0, k).join(T`,\ `);
+    return { q: T`$\dim\{\mathbf x \in \mathbb R^{${n}} : ${conds}\}$`, a: String(n - k), kind: 'num' };
+  }},
+  { id: 'la-indep', name: 'Linearly independent?', par: 6, cat: 'la', week: 5, weight: 1, gen() {
+    const q = balanced(() => {
+      const dim = pick([2, 3]), u = vec(dim, -4, 4), dep = Math.random() < 0.5, k = nz(-3, 3);
+      const v = dep ? u.map(x => k * x) : vec(dim, -4, 4);
+      if (isZero(u) || isZero(v)) return null;
+      const indep = dim === 2 ? u[0] * v[1] - u[1] * v[0] !== 0 : !isZero(cross(u, v));
+      return { q: T`Linearly independent? $\ ${colv(u)},\ ${colv(v)}$`, a: indep };
+    }, x => x.a);
+    return q && { ...q, kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'la-basis', name: 'Basis of Rⁿ?', par: 10, cat: 'la', week: 5, weight: 1, gen() {
+    const q = balanced(() => {
+      const form = pick(['size', 'r2', 'r3']);
+      if (form === 'size') { const n = pick([2, 3]), m = n === 2 ? 3 : 2, vs = Array.from({ length: m }, () => vec(n, -3, 3));
+        return vs.some(isZero) ? null : { q: T`Basis of $\mathbb R^{${n}}$? $\ ${vs.map(colv).join(',\\ ')}$`, a: false }; }
+      if (form === 'r2') { const u = vec(2, -4, 4), v = Math.random() < 0.4 ? u.map(x => nz(-2, 2) * x) : vec(2, -4, 4);
+        return isZero(u) || isZero(v) ? null : { q: T`Basis of $\mathbb R^2$? $\ ${colv(u)},\ ${colv(v)}$`, a: u[0] * v[1] - u[1] * v[0] !== 0 }; }
+      const u = vec(3, -2, 2), v = vec(3, -2, 2), w = Math.random() < 0.4 ? u.map((x, i) => nz(-2, 2) * x + ri(-1, 1) * v[i]) : vec(3, -2, 2);
+      return [u, v, w].some(isZero) ? null : { q: T`Basis of $\mathbb R^3$? $\ ${[u, v, w].map(colv).join(',\\ ')}$`, a: det3([u, v, w]) !== 0 };
+    }, x => x.a);
+    return q && { ...q, kind: 'bool', labels: ['Yes', 'No'] };
   }},
   { id: 'la-det2', name: '2×2 determinant', par: 5, cat: 'la', week: 6, weight: 1, gen() {
     const A = mat(2, 2, -6, 6), d = A[0][0] * A[1][1] - A[0][1] * A[1][0];
@@ -418,6 +480,49 @@ const TYPES = [
       [T`x\ln x`, 'ln(x) + 1', T`\ln x + 1`], [T`e^x\sin x`, 'e^x*(sin(x) + cos(x))', T`e^x(\sin x + \cos x)`]]);
     return { q: T`$\dfrac{d}{dx}\,${tex}$`, a: ans, kind: 'expr', show: sh.replace(/x\^\{1\}/g, 'x') };
   }},
+  { id: 'calc-onesided', name: 'One-sided limit', par: 7, cat: 'calc', week: 4, weight: 1, gen() {
+    const a = nz(-3, 3), p = [ri(-2, 2), ri(-3, 3), ri(-5, 5)], r = [ri(-2, 2), ri(-3, 3), ri(-5, 5)], side = pick(['-', '+']);
+    const val = (c, x) => c[0] * x * x + c[1] * x + c[2], pl = c => poly([[c[0], 'x^2'], [c[1], 'x'], [c[2], '']]);
+    if (val(p, a) === val(r, a)) return null;
+    const shift = `x ${a < 0 ? '+' : '-'} ${Math.abs(a)}`;
+    return pick([
+      { q: T`$f(x) = \begin{cases} ${pl(p)} & x < ${a} \\ ${pl(r)} & x \ge ${a} \end{cases}$. $\ \displaystyle\lim_{x \to ${a}^{${side}}} f(x) = ?$`, a: String(side === '-' ? val(p, a) : val(r, a)), kind: 'num' },
+      { q: T`$\displaystyle\lim_{x \to ${a}^{${side}}} \frac{|${shift}|}{${shift}}$`, a: side === '-' ? '-1' : '1', kind: 'num' },
+    ]);
+  }},
+  { id: 'calc-contcheck', name: 'Continuous? Limit exists?', par: 8, cat: 'calc', week: 4, weight: 1, gen() {
+    const a = nz(-2, 3), L = ri(-5, 5), kind = pick(['jump', 'removable', 'continuous']), ask = pick(['cont', 'lim']);
+    const R = kind === 'jump' ? L + nz(-3, 3) : L, v = kind === 'removable' ? L + nz(-3, 3) : L;
+    const f = T`$f(x) = \begin{cases} ${poly([[1, 'x'], [L - a, '']])} & x < ${a} \\ ${v} & x = ${a} \\ ${poly([[2, 'x'], [R - 2 * a, '']])} & x > ${a} \end{cases}$`;
+    const question = ask === 'cont' ? T`Continuous at $x = ${a}$?` : T`Does $\lim_{x \to ${a}} f(x)$ exist?`;
+    return { q: `${f}<br>${question}`, a: ask === 'cont' ? kind === 'continuous' : kind !== 'jump', kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'calc-ivt', name: 'IVT: where is the root?', par: 15, cat: 'calc', week: 4, weight: 1, gen() {
+    const c = [pick([1, -1]), ri(-3, 3), ri(-6, 6), ri(-9, 9)], f = x => ((c[0] * x + c[1]) * x + c[2]) * x + c[3];
+    const xs = [-4, -3, -2, -1, 0, 1, 2, 3, 4], vs = xs.map(f);
+    if (vs.some(v => v === 0)) return null;
+    const changes = xs.slice(0, -1).filter((x, i) => vs[i] * vs[i + 1] < 0);
+    if (changes.length !== 1) return null;
+    return { q: T`$f(x) = ${poly([[c[0], 'x^3'], [c[1], 'x^2'], [c[2], 'x'], [c[3], '']])}$ changes sign exactly once on $[-4, 4]$, between $n$ and $n+1$. $\ n = ?$`,
+             a: String(changes[0]), kind: 'num', hint: 'the integer n where f(n) and f(n+1) have opposite signs' };
+  }},
+  { id: 'calc-xalpha', name: 'Limit of x^α as α → ∞', par: 6, cat: 'calc', week: 4, weight: 1, gen() {
+    const kind = pick(['zero', 'one', 'small', 'big']), p = ri(1, 3), q = p + ri(1, 3);
+    const [xt, plain, th] = { zero: ['0', '0', '0'], one: ['1', '1', 'tanh(1)'], small: [frac(p, q).tex, '0', '0'], big: [frac(q, p).tex, 'inf', '1'] }[kind];
+    const useTanh = Math.random() < 0.4, ans = useTanh ? th : plain;
+    const q2 = T`$\displaystyle\lim_{\alpha\to\infty} ${useTanh ? T`\tanh(x^\alpha)` : T`x^\alpha`}$ for $x = ${xt}$`;
+    return ans === 'inf' ? { q: q2, a: INF_ALIASES, kind: 'text', show: T`\infty`, hint: 'a number, or inf' }
+                         : { q: q2, a: ans, kind: 'num', hint: 'a number, or inf' };
+  }},
+  { id: 'calc-liminfty', name: 'Limits at ±∞', par: 5, cat: 'calc', week: 4, weight: 1, gen() {
+    const c = nz(-3, 3), dir = pick([1, -1]), k = ri(1, 4), cx = poly([[c, 'x']]), s = c * dir > 0;
+    const [tex, ans] = pick([[`e^{${cx}}`, s ? 'inf' : '0'], [T`\tanh(${cx})`, s ? '1' : '-1'], [T`\sinh(${cx})`, s ? 'inf' : '-inf'],
+      [T`\cosh(${cx})`, 'inf'], [xPow(k), dir > 0 || k % 2 === 0 ? 'inf' : '-inf'], [T`\frac{1}{${xPow(k)}}`, '0']]);
+    const q = T`$\displaystyle\lim_{x\to ${dir > 0 ? '' : '-'}\infty} ${tex}$`;
+    if (ans === 'inf') return { q, a: INF_ALIASES, kind: 'text', show: T`\infty`, hint: 'a number, inf or -inf' };
+    if (ans === '-inf') return { q, a: INF_ALIASES.map(x => '-' + x), kind: 'text', show: T`-\infty`, hint: 'a number, inf or -inf' };
+    return { q, a: ans, kind: 'num', hint: 'a number, inf or -inf' };
+  }},
 
   // ---------- Sequences and Series ----------
   { id: 'seq-terms', name: 'Number of terms', par: 4, cat: 'seq', week: 1, weight: 1, gen() {
@@ -514,6 +619,26 @@ const TYPES = [
     const st = pick(NEG_TEMPLATES)(), right = Math.random() < 0.5, cand = right ? negateStatement(st) : pick(NEG_DISTRACTORS)(st);
     if (!cand) return null;
     return { q: T`Statement: $${quantTeX(st)}$<br>Negation? $\ ${quantTeX(cand)}$`, a: right, kind: 'bool', labels: ['Correct', 'Wrong'] };
+  }},
+  { id: 'seq-bounded', name: 'Bounded above / below?', par: 6, cat: 'seq', week: 4, weight: 1, gen() {
+    const [tex, ans] = pick(BOUNDED_SETS)();
+    return { q: T`$${tex}$: bounded above, below, both or neither?`, a: BOUND_ALIASES[ans], show: T`\text{${ans}}`, kind: 'text',
+             keys: ['above', 'below', 'both', 'neither'], hint: 'above, below, both or neither' };
+  }},
+  { id: 'seq-isbound', name: 'Is t an upper/lower bound?', par: 5, cat: 'seq', week: 4, weight: 1, gen() {
+    const { tex, sup, inf } = boundedSet(), upper = Math.random() < 0.5, yes = Math.random() < 0.5, out = upper ? 1 : -1;
+    const t = (upper ? sup : inf) + (yes ? out * pick([0, 0, 1]) : -out * pick([1, 2]));   // t = the endpoint itself is the trap: still a bound
+    return { q: T`Is $${t}$ ${upper ? 'an upper' : 'a lower'} bound of $${tex}$?`, a: upper ? t >= sup : t <= inf, kind: 'bool', labels: ['Yes', 'No'] };
+  }},
+  { id: 'seq-boundset', name: 'Set of upper/lower bounds', par: 8, cat: 'seq', week: 4, weight: 1, gen() {
+    const { tex, sup, inf } = boundedSet(), upper = Math.random() < 0.5, a = upper ? `[${sup},inf)` : `(-inf,${inf}]`;
+    return { q: T`$S = ${tex}$. $\ S^{${upper ? '+' : '-'}}$ (the set of all ${upper ? 'upper' : 'lower'} bounds) $= ?$`, a, kind: 'interval', show: setTeX(a),
+             hint: 'an interval, e.g. [2,inf)' };
+  }},
+  { id: 'seq-modeq', name: '|x − a| = r', par: 5, cat: 'seq', week: 4, weight: 1, gen() {
+    const a = ri(-9, 9), r = ri(1, 9);
+    return { q: T`$\{x\in\mathbb R : \lvert ${poly([[1, 'x'], [-a, '']])} \rvert = ${r}\}$`, a: [`{${a - r},${a + r}}`, `{${a + r},${a - r}}`], kind: 'text',
+             show: T`\{${a - r}, ${a + r}\}`, keys: ['{', '}', ',', '-'], hint: 'a set, e.g. {2,4}' };
   }},
 
   // ---------- Elementary Logic ----------
@@ -919,6 +1044,42 @@ const NEG_DISTRACTORS = [
 ];
 const quantTeX = st => st.qs.map(x => `${x.q === '∀' ? T`\forall` : T`\exists`} ${x.v} ${x.dom}`).join(T`\ `) + T`:\ ${st.lhs} ${st.rel} ${st.rhs}`;
 
+const det3 = ([a, b, c]) => a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+const INF_ALIASES = ['inf', '∞', '+inf', 'infinity', '+∞'];
+const BOUND_ALIASES = { above: ['above', 'above only', 'bounded above'], below: ['below', 'below only', 'bounded below'],
+  both: ['both', 'bounded'], neither: ['neither', 'none', 'unbounded'] };
+// Subspace families (Def 4.3: closed under + and scalar multiples; every subspace contains 0)
+const SUBSPACE_FAMILIES = [
+  () => { const [a, b, c] = vec(3, -3, 3), d = Math.random() < 0.5 ? 0 : nz(-5, 5);
+    return !a && !b && !c ? null : { q: T`Is $\{(x, y, z) : ${poly([[a, 'x'], [b, 'y'], [c, 'z']])} = ${d}\}$ a subspace of $\mathbb R^3$?`, a: d === 0 }; },
+  () => { const k = nz(-4, 4), c = Math.random() < 0.5 ? 0 : nz(-3, 3);
+    return { q: T`Is $\{(a,\ ${poly([[k, 'a'], [c, '']])},\ b) : a, b \in \mathbb R\}$ a subspace of $\mathbb R^3$?`, a: c === 0 }; },
+  () => ({ q: T`Is $\{(x, y, z) : z = ${pick(['xy', 'x^2', '\\lvert x\\rvert', 'x^2 + y^2'])}\}$ a subspace of $\mathbb R^3$?`, a: false }),
+  () => ({ q: T`Is $\{(x, y) : ${pick(['x \\ge 0', 'x \\in \\mathbb Z', 'xy = 0', 'x + y \\ge 0'])}\}$ a subspace of $\mathbb R^2$?`, a: false }),
+];
+// Sets for bounded / upper-bound questions: intervals, unions, and {c + d/n}
+function boundedSet() {
+  if (Math.random() < 0.6) {
+    const I = randInterval();
+    if (I.lo === -Infinity || I.hi === Infinity) return boundedSet();
+    if (Math.random() < 0.4) { const J = { lo: I.hi + ri(1, 3), hi: I.hi + ri(4, 6), lc: Math.random() < 0.5, hc: Math.random() < 0.5 };
+      return { tex: T`${ivTeX(I)} \cup ${ivTeX(J)}`, sup: J.hi, inf: I.lo }; }
+    return { tex: ivTeX(I), sup: I.hi, inf: I.lo };
+  }
+  const c = ri(-3, 3), d = nz(-4, 4);
+  return { tex: T`\left\{${c ? c + ' ' : ''}${d < 0 ? '-' : c ? '+' : ''}\frac{${Math.abs(d)}}{n} : n\in\mathbb N\right\}`, sup: d > 0 ? c + d : c, inf: d > 0 ? c : c + d };
+}
+const BOUNDED_SETS = [
+  () => { const c = nz(-4, 4); return [T`\{${poly([[c, 'n']])} : n\in\mathbb N\}`, c > 0 ? 'below' : 'above']; },
+  () => [T`\{(-1)^n n : n\in\mathbb N\}`, 'neither'],
+  () => { const d = nz(-4, 4); return [T`\{${poly([[d, '(-1)^n']])} : n\in\mathbb N\}`, 'both']; },
+  () => { const { tex } = boundedSet(); return [tex, 'both']; },
+  () => { const c = ri(-5, 5); return [T`\{${poly([[1, 'n^2'], [c, '']])} : n\in\mathbb N\}`, 'below']; },
+  () => { const I = randInterval(); const lo = I.lo > -Infinity, hi = I.hi < Infinity;
+    return [ivTeX(I), lo && hi ? 'both' : lo ? 'below' : hi ? 'above' : 'neither']; },
+  () => pick([[T`\mathbb N`, 'below'], [T`\mathbb Z`, 'neither'], [T`\{2^{-n} : n\in\mathbb N\}`, 'both'], [T`\{-n^2 : n\in\mathbb N\}`, 'above']]),
+];
+
 // ---------- propositional logic ----------
 const BIN = ['∧', '∨', '→', '↔'];
 const neg = a => ({ op: '¬', a });
@@ -1270,9 +1431,11 @@ const mean = xs => xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : RC.st
 const dayKey = (t = Date.now()) => new Date(t).toLocaleDateString('en-CA');
 const loadJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const TYPE_BY_ID = Object.fromEntries(TYPES.map(t => [t.id, t]));
-const activeTypes = () => TYPES.filter(t => t.hub !== false && t.weight > 0 && t.week <= CONFIG.currentWeek && CONFIG.categories[t.cat]?.weight > 0);
+const weekNow = cat => CONFIG.currentWeek[cat] ?? 0;
+const weekLabel = () => Object.entries(CONFIG.currentWeek).filter(([c]) => c !== 'basics').map(([c, w]) => `${c} ${w}`).join(' · ');
+const activeTypes = () => TYPES.filter(t => t.hub !== false && t.weight > 0 && t.week <= weekNow(t.cat) && CONFIG.categories[t.cat]?.weight > 0);
 const DRILL_BY_ID = Object.fromEntries(CONFIG.drills.map(d => [d.id, d]));
-const drillTypes = d => d.types.map(id => TYPE_BY_ID[id]).filter(t => t && t.weight > 0 && t.week <= CONFIG.currentWeek);
+const drillTypes = d => d.types.map(id => TYPE_BY_ID[id]).filter(t => t && t.weight > 0 && t.week <= weekNow(t.cat));
 const pbKey = drill => drill ? `${PB_KEY}:${drill.id}` : PB_KEY;
 
 // Speed vs the fixed par: 0.5 at par, 0.95 at about half par or faster, 0 at 1.5 × par or slower
@@ -1594,7 +1757,7 @@ function roundSummary(r) {
   const cats = Object.entries(r.cats).map(([k, c]) => `${CONFIG.categories[k].label} ${c.ok}/${c.n}, avg ${avgS(c)}${r.catR[k] === undefined ? '' : `, rating ${r.catR[k]} (${signedN(r.catR[k] - (r.before[k] ?? RC.start))})`}`);
   const answered = r.log.filter(e => !e.unanswered);
   return [
-    `Mental-math ${r.drillName ? `focus drill "${r.drillName}"` : 'drill round'} · ${new Date(r.t).toLocaleString()} · week ${CONFIG.currentWeek} · ${STRICT_STACK ? 'laptop, STACK syntax enforced' : 'phone'}`,
+    `Mental-math ${r.drillName ? `focus drill "${r.drillName}"` : 'drill round'} · ${new Date(r.t).toLocaleString()} · weeks ${weekLabel()} · ${STRICT_STACK ? 'laptop, STACK syntax enforced' : 'phone'}`,
     `Points ${r.points} · ${r.score} correct · ${answered.filter(e => !e.ok).length} missed · overall rating ${r.headline} (${signedN(r.headline - Math.round(r.beforeHead))})`,
     '',
     'Please review this round. My modules: Linear Algebra and Geometry I, Calculus I, Sequences and Series, Elementary Logic.',
@@ -1746,7 +1909,7 @@ function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.cl
 function showHome() {
   const hist = loadJSON(HISTORY_KEY, []), types = activeTypes(), mastered = types.filter(t => RS[t.id]?.mastered).length;
   const streak = dayStreak(hist.map(r => dayKey(r.t)));
-  $('poolInfo').textContent = `Week ${CONFIG.currentWeek} · ${types.length} types`;
+  $('poolInfo').textContent = `Week ${Math.max(...Object.values(CONFIG.currentWeek))} · ${types.length} types`;
   $('homeHead').innerHTML = `<div class="score">${Math.round(headline())}</div>
     <div class="muted center">rating · ${mastered}/${types.length} mastered · streak ${streak} day${streak === 1 ? '' : 's'} · today: ${todaysModifier().name}</div>`;
   $('homeStats').innerHTML = drillsBlock() + statsSection(hist) + dashboard(types, hist) + stackGuide() + weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
