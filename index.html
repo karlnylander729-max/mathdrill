@@ -1220,11 +1220,11 @@ function normSet(s) {
     .replace(/∪|u/g, 'U').replace(/∅|\{\}|empty/g, '∅').replace(/^(r|ℝ|\(-inf,inf\))$/, 'R');
   return t.split('U').sort().join('U');
 }
-const normLogic = s => s.replace(/\s+/g, '').replace(/<->/g, '↔').replace(/->/g, '→').replace(/[~!\-]/g, '¬').replace(/&/g, '∧').replace(/v/g, '∨').toUpperCase();
+const normLogic = s => s.replace(/\s+/g, '').replace(/<->/g, '↔').replace(/->/g, '→').replace(/[~!\-]/g, '¬').replace(/&/g, '∧').replace(/[vV]/g, '∨').toUpperCase();
 const normText = s => s.toLowerCase().replace(/\s+/g, '').replace(/[×*]/g, 'x').replace(/by/g, 'x');
 
 function parseLogic(src) {
-  const s = src.replace(/<->|<=>/g, '↔').replace(/->|=>/g, '→').replace(/[~!\-]/g, '¬').replace(/&/g, '∧').replace(/[|v]/g, '∨');
+  const s = src.replace(/<->|<=>/g, '↔').replace(/->|=>/g, '→').replace(/[~!\-]/g, '¬').replace(/&/g, '∧').replace(/[|vV]/g, '∨');
   const toks = s.match(/[PQRS][₀-₉\d]*|\S/g) || [];
   let i = 0;
   const binary = (next, ops) => { let l = next(); while (ops.includes(toks[i])) { const op = toks[i++]; l = bin(op, l, next()); } return l; };
@@ -1926,13 +1926,14 @@ const CHECKER_CASES = [
   ['∅', 'interval', ['∅', '{}', 'empty'], ['{0}', '0']],
   ['R', 'interval', ['R', 'ℝ', '(-inf,inf)', 'r'], ['(0,inf)']],
   ['P→Q', 'logic', ['P→Q', 'P->Q', '¬Q→¬P', '(P→Q)', '¬P∨Q', '~P v Q'], ['Q→P', 'P↔Q', 'P', 'P→']],
-  ['P∨Q', 'logic', ['P∨Q', 'Q∨P', '¬P→Q', '¬Q→P'], ['P∧Q', 'P→Q']],
+  ['P∨Q', 'logic', ['P∨Q', 'Q∨P', '¬P→Q', '¬Q→P', 'P V Q', 'PvQ'], ['P∧Q', 'P→Q']],
   ['ln(x^2/y)', 'expr', ['ln(x^2/y)', 'log(x*x/y)', 'ln(x^2*y^(-1))'], ['2ln(x)-ln(y)', 'ln(x^2)-ln(y)', 'ln(x^2/y'], { pattern: /^(ln|log)\((?!.*(ln|log)).*\)$/ }],
   ['x^(3/2)', 'expr', ['x^(3/2)', 'x^(6/4)'], ['x^(1/2)*x', 'sqrt(x)^3', 'x^3/2'], { pattern: /^x(\^(-?\d+|\(-?\d+(\/\d+)?\)))?$/ }],
   ['-i', 'num', ['-i', '-%i'], ['i^3', 'i^39', '-1*i'], { pattern: /^-?(1|%?i)$/ }],
   ['¬P ∨ ¬Q', 'logic', ['¬P∨¬Q', '¬Q ∨ ¬P', 'P→¬Q'], ['¬(P∧Q)', '¬¬¬P∨¬Q', 'P∨¬Q'], { nnf: true }],
   ['((P ∧ Q) → R)', 'syntax', ['((P∧Q)→R)', '((P&Q)->R)', '( ( P ∧ Q ) → R )', '((p&q)->r)'], ['(P∧Q)→R', '((P∧Q)→R', '(P∧(Q→R))']],
   ['P ∧ Q ∧ R', 'syntax', ['P∧Q∧R', 'P & Q & R'], ['((P∧Q)∧R)', 'P∧(Q∧R)']],
+  ['¬(¬P ∨ Q) ∨ (P ∧ ¬P)', 'syntax', ['~(~PVQ)V(P&~P)', '~(~PvQ)v(P&~P)', '¬(¬P∨Q)∨(P∧¬P)'], ['~(~PVQ)VP&~P']],
   [['MP', 'Modus Ponens'], 'text', ['MP', 'mp', 'modus ponens', 'Modus Ponens'], ['MT', 'modus']],
 ];
 const GRID_CASES = [
