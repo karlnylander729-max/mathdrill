@@ -1417,7 +1417,72 @@ const TYPES = [
   A display formula is a $...$ span alone on its own line (bounded by <br>, newline or string ends).
 ======================================================================= -->
 <script>
-const CONCEPTS = [];
+const CONCEPTS = [
+  { id: 'plane-point-normal', name: 'Plane from a point and a normal', cat: 'la', week: 1,
+    source: 'Week1 - Column vectors.pdf §1.4 p. 9 (parametric plane v = v₀ + tp + sq) and Prop 1.15 p. 6 (orthogonal iff u·v = 0); LAG1 - ProblemSet1.pdf Q6, LAG1 - Solutions1.pdf p. 5',
+    types: ['la-plane-d'], origin: [], feeds: [],
+    picture: { template: 'plane3d', params: { n: [1, 2, 2], a: [1, 0, 1] },
+      caption: 'Drag v around the plane. The arrow from v₀ to v stays at 90° to n, so n·v never changes.',
+      alt: 'A plane through v₀ with normal n. A draggable point v; the readout shows n·v staying equal to n·v₀.' },
+    algebra: String.raw`Every point of the plane is $\mathbf v = \mathbf v_0 + t\mathbf p + s\mathbf q$, with $\mathbf n\cdot\mathbf p = \mathbf n\cdot\mathbf q = 0$.<br>Dot with $\mathbf n$. The $t$ and $s$ terms are each zero; they do not cancel each other.<br>$\mathbf n\cdot\mathbf v = \mathbf n\cdot\mathbf v_0$<br>For $\mathbf n = (a, b, c)$ the left side is $ax + by + cz$. So $d = \mathbf n\cdot\mathbf v_0$.`,
+    originText: String.raw`Built from the dot product: $\mathbf u\cdot\mathbf v = 0$ exactly when $\mathbf u \perp \mathbf v$ (Prop 1.15). Feeds: turning a parametric plane into $ax + by + cz = d$ (Problem Set 1, Q6).` },
+  { id: 'matrix-product-entry', name: 'Matrix product: row times column', cat: 'la', week: 2,
+    source: 'Week2 - Linear equations I.pdf §2.1 pp. 2–3 (AB defined when A is m×k and B is k×n; (AB)ᵢⱼ = (i-th row of A)·(j-th column of B))',
+    types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'], origin: [], feeds: [],
+    picture: { template: 'vectors2d', params: { vecs: [[2, 1], [-1, 3]], dot: true },
+      caption: 'Let a be row i of A and b column j of B. Entry (i, j) of AB is just a·b. Drag the tips.',
+      alt: 'Two draggable arrows a (row i of A) and b (column j of B); the readout shows a·b, the entry (AB)ij.' },
+    algebra: String.raw`$A$ is $m\times k$, $B$ is $k\times n$: the inner sizes must match, and $AB$ is $m\times n$. For $A^T$, flip its size first.<br>Each entry is one row dotted with one column:<br>$(AB)_{ij} = a_{i1}b_{1j} + a_{i2}b_{2j} + \dots + a_{ik}b_{kj}$<br>$A\mathbf v$ is the case $n = 1$.`,
+    originText: String.raw`Built from the dot product: multiply matching entries, then add. Feeds: invertible matrices (Def 2.5) and $(AB)^T = B^TA^T$ (p. 3).` },
+  { id: 'exact-trig', name: 'Exact trig values', cat: 'calc', week: 1,
+    source: 'Calculus_1_2026-27.pdf §1.5: Def 1.25 p. 17 (cos θ, sin θ are x, y on the unit circle), symmetries (i)–(iv) pp. 18–19. The two special triangles: standard, not yet checked against course notes',
+    types: ['calc-trig'], origin: [], feeds: ['inverse-trig-range'],
+    picture: { template: 'unitCircle', params: { angleM: 2, showTriangle: true },
+      caption: 'Drag the point. The red leg is cos θ, the green leg sin θ. Other quadrants mirror the first: same lengths, new signs.',
+      alt: 'Unit circle with a draggable point at angle θ; the legs of its triangle are cos θ and sin θ, with exact values shown.' },
+    algebra: String.raw`Half an equilateral triangle, sides $(1, \sqrt3, 2)$, gives $\tfrac\pi6$ and $\tfrac\pi3$. The isosceles right triangle, sides $(1, 1, \sqrt2)$, gives $\tfrac\pi4$. Together:<br>$\begin{array}{c|ccccc}\theta & 0 & \frac\pi6 & \frac\pi4 & \frac\pi3 & \frac\pi2\\ \hline \sin\theta & \frac{\sqrt0}2 & \frac{\sqrt1}2 & \frac{\sqrt2}2 & \frac{\sqrt3}2 & \frac{\sqrt4}2\end{array}$<br>$\cos\theta = \sin(\tfrac\pi2 - \theta)$, so cos is the row backwards. $\tan = \sin/\cos$. Other angles: reference angle, then the quadrant's sign.`,
+    originText: String.raw`Built from the definition: $\cos\theta$ and $\sin\theta$ are the $x$ and $y$ of the point at angle $\theta$ (Def 1.25), plus Pythagoras. Feeds: inverse trig values, which read these backwards.` },
+  { id: 'inverse-trig-range', name: 'Inverse trig: the range window', cat: 'calc', week: 1,
+    source: 'Calculus_1_2026-27.pdf Def 1.36–1.39, pp. 21–22 (arcsin: [−1, 1] → [−π/2, π/2], arccos: [−1, 1] → [0, π], arctan: ℝ → (−π/2, π/2))',
+    types: ['calc-arc', 'calc-arc-branch'], origin: ['exact-trig'], feeds: [],
+    picture: { template: 'unitCircle', params: { angleM: 10, window: 'sin' },
+      caption: 'Drag θ anywhere. arcsin only answers in the green half, [−π/2, π/2]. It returns the point there at the same height.',
+      alt: 'Unit circle with the right half lit (the range of arcsin). A draggable angle θ and the angle in the lit half with the same sine.' },
+    algebra: String.raw`sin is not injective: $\sin\tfrac\pi6 = \sin\tfrac{5\pi}6$. So arcsin inverts sin on $[-\tfrac\pi2, \tfrac\pi2]$ only, and every answer lies there.<br>$\arcsin(\sin x) = x \iff x \in [-\tfrac\pi2, \tfrac\pi2]$<br>Otherwise use $\sin(\pi - x) = \sin x$ or $x \pm 2\pi$ to land in the window. arccos: $[0, \pi]$. arctan: $(-\tfrac\pi2, \tfrac\pi2)$.`,
+    originText: String.raw`Built from exact trig values, read backwards, and from inverting a function on a stretch where it is injective. Feeds: the derivative of arcsin (Example 9.3), where the window makes $\cos(\arcsin x) \ge 0$.` },
+  { id: 'rational-limit-infinity', name: 'Rational function as x → ∞', cat: 'calc', week: 4,
+    source: 'Calculus_1_2026-27.pdf Example 5.4 and the Helpful hint after it, p. 56',
+    types: ['calc-lim-inf'], origin: [], feeds: [],
+    picture: { template: 'graphSlider', params: { expr: '(k*x^2 + 5*x - 3)/(2*x^2 + x + 1)', k: [3, -4, 4], xr: [0, 40], yr: [-3, 3], label: 'k', level: 'k/2' },
+      caption: 'Drag k. Far to the right the curve levels off at k/2: only the x² terms survive. At k = 0 it sinks to 0.',
+      alt: 'Graph of (kx² + 5x − 3)/(2x² + x + 1) for x from 0 to 40, with a slider for k; the curve levels off at k/2.' },
+    algebra: String.raw`Divide top and bottom by the highest power in the denominator (Example 5.4):<br>$\dfrac{x^2 + 7x - 3}{3x^2 - 18x + 24} = \dfrac{1 + \frac7x - \frac3{x^2}}{3 - \frac{18}x + \frac{24}{x^2}} \to \dfrac13$<br>Every $c/x^k$ term goes to 0, so the leading coefficients decide. No $x^2$ on top: the limit is 0.`,
+    originText: String.raw`Built from the algebra of limits (Prop 5.1: a quotient's limit is the quotient of limits, when the bottom one is not 0) and $1/x \to 0$. Feeds: horizontal asymptotes when sketching.` },
+  { id: 'counting-integers', name: 'Counting integers from a to b', cat: 'seq', week: 1,
+    source: '115lecturenotes(2026).pdf §2.1–2.2 pp. 7–8 (ℕ = {1, 2, 3, …}, 0 ∉ ℕ; cardinality #X); Tuesday 29th September 2026.pdf p. 6 (Σ notation, Σ 1 = n)',
+    types: ['seq-terms', 'seq-const', 'seq-count'], origin: [], feeds: [],
+    picture: { template: 'numberLine', params: { range: [-4, 5], intervals: ['(-2,3]'], points: [-2, -1, 0, 1, 2, 3] },
+      caption: 'Six integers from −2 to 3: both ends count, 3 − (−2) + 1 = 6. The open end drops −2, leaving five.',
+      alt: 'Number line with dots at −2, −1, 0, 1, 2, 3 and the interval (−2, 3]; the dot at −2 is outside, so 5 of 6 are in.' },
+    algebra: String.raw`From $a$ to $b$ there are $b - a$ steps, so $b - a + 1$ integers. $\sum_{k=0}^{5}$ has 6 terms, not 5.<br>$\displaystyle\sum_{k=a}^{b} c = (b - a + 1)\,c$<br>A strict $<$ at an end drops that integer. In $\mathbb N$ start at 1: this course has $0 \notin \mathbb N$.`,
+    originText: String.raw`Built from $\Sigma$ notation (one term for each integer value of the index) and the course's $\mathbb N = \{1, 2, 3, \dots\}$. Feeds: arithmetic and geometric sums, which need the number of terms.` },
+  { id: 'modulus-interval', name: '|x − a| is a distance', cat: 'seq', week: 3,
+    source: '115lecturenotes(2026).pdf §7.5, Def 7.5.1 and the rules after Thm 7.5.2, pp. 36–37 (|x| = a, |x| < a, |x| > a; examples |x − 7| = 2, |x − 2| > 5). Reading |x − a| as a distance: standard, not yet checked against course notes',
+    types: ['seq-modulus', 'seq-modeq'], origin: [], feeds: [],
+    picture: { template: 'numberLine', params: { range: [-4, 5], intervals: ['[-1,3]'], points: [2.5], draggable: true, centre: 1 },
+      caption: '|x − 1| ≤ 2: x is within 2 of 1. Drag x. The ends −1 and 3 are exactly 2 away, so they count.',
+      alt: 'Number line with the closed interval [−1, 3], centred on 1, and a draggable point x that reports whether it is in the set.' },
+    algebra: String.raw`$|x - a|$ is the distance from $x$ to $a$. The course rules for $|x|$, shifted by $a$:<br>$|x - a| < r \iff x \in (a - r,\ a + r)$<br>$\le$ closes both ends. $= r$ gives two points, $\{a - r, a + r\}$. $> r$ gives the outside, $(-\infty, a - r) \cup (a + r, \infty)$.`,
+    originText: String.raw`Built from Def 7.5.1 ($|x| = x$ if $x \ge 0$, else $-x$) and interval notation (§2.4). Feeds: limits of sequences, where $|s_n - \ell| < \varepsilon$ says $s_n$ is within $\varepsilon$ of $\ell$ (Def 9.2.1).` },
+  { id: 'bracket-conventions', name: 'Brackets and the main connective', cat: 'logic', week: 3,
+    source: 'Halbach 2010 - The Logic Manual - secs 2.1-2.3.pdf: sentences of L1 (§2.1) and Bracketing Conventions 1–3 (§2.3, PDF pp. 6–7); Book of Problems.pdf Ex 2.1–2.5, pp. 6–8',
+    types: ['logic-main', 'logic-restore', 'logic-drop', 'logic-official', 'logic-sentence'], origin: [], feeds: [],
+    picture: { template: 'truthGrid', params: { tree: ['→', ['∧', ['P'], ['Q']], ['∨', ['¬', ['R']], ['P']]] },
+      caption: 'P ∧ Q → ¬R ∨ P as a tree. The root is the main connective. Tap a node to light its scope.',
+      alt: 'Formula tree of P ∧ Q → ¬R ∨ P: root →, children ∧ (P, Q) and ∨ (¬R, P). Tapping a node lights its subtree.' },
+    algebra: String.raw`Official: one bracket pair per binary connective, none for ¬.<br>$((P \land Q) \to (\neg R \lor P))$<br>Conventions drop (1) the outer pair and (2) inner pairs in $P \land Q \land R$, grouped left. (3) $\land, \lor$ bind more strongly than $\to, \leftrightarrow$:<br>$P \land Q \to \neg R \lor P$<br>Nothing ranks $\to$ against $\leftrightarrow$. Main connective: outside all brackets, $\to$ or $\leftrightarrow$, else the rightmost $\land$ or $\lor$, else $\neg$.`,
+    originText: String.raw`Built from the definition of a sentence of L₁ (§2.1): sentence letters, then ¬φ and (φ ∧ ψ) and so on. Feeds: truth tables, where the main connective is evaluated last.` },
+];
 const CONCEPT_OF = {};
 for (const c of CONCEPTS) for (const t of c.types) CONCEPT_OF[t] = c.id;
 
@@ -2837,8 +2902,30 @@ const PROJ = v => [v[1] - 0.5 * v[0] * Math.SQRT1_2, 0.5 * v[0] * Math.SQRT1_2 -
 const STD_M = [...Array(24).keys()].filter(k => k % 2 === 0 || k % 3 === 0);
 const fmt1 = x => String(+x.toFixed(1)).replace('-', '−');
 
+const piText = m => piFrac(m, 12).s.replace('pi', 'π').replace('-', '−');
+// The angle (in π/12 steps) that arcsin / arccos / arctan returns for f(θ), θ = m·π/12; null where tan is undefined
+function windowAngle(m, f) {
+  let a = ((m % 24) + 24) % 24;
+  if (a > 12) a -= 24;
+  if (f === 'cos') return Math.abs(a);
+  if (f === 'tan') return Math.abs(a) === 6 ? null : a > 6 ? a - 12 : a < -6 ? a + 12 : a;
+  return a > 6 ? 12 - a : a < -6 ? -12 - a : a;
+}
+// Light the range of arc-f on the unit circle, mark the angle it returns; returns the readout parts
+function unitCircleWindow(g, m, f, scr) {
+  const [from, to] = f === 'cos' ? [scr(1, 0), scr(-1, 0)] : [scr(0, -1), scr(0, 1)], w = windowAngle(m, f);
+  svgEl(g, 'path', { d: `M${from} A82 82 0 0 0 ${to}`, fill: 'none', stroke: PC.good, 'stroke-width': 6, 'stroke-opacity': 0.45 });
+  const v = Math[f](m * Math.PI / 12), parts = [[`θ = ${piText(m)}  `, PC.ink]];
+  if (w === null) return [...parts, [`tan θ undefined`, PC.bad]];
+  const P = scr(Math.cos(m * Math.PI / 12), Math.sin(m * Math.PI / 12)), W = scr(Math.cos(w * Math.PI / 12), Math.sin(w * Math.PI / 12));
+  svgEl(g, 'line', { x1: P[0], y1: P[1], x2: W[0], y2: W[1], stroke: PC.muted, 'stroke-dasharray': '4 3' });
+  svgDot(g, W, PC.good, 7);
+  return [...parts, [`${f} θ = ${humanExact(v).replace('-', '−')}  `, PC.muted], [`arc${f}(${f} θ) = ${piText(w)}`, PC.good]];
+}
+
 const PICTURES = {
-  // unitCircle { angleM: m (θ = m·π/12), showTriangle: bool (cos/sin legs), mirror: bool (also show −θ) }; drag the point
+  // unitCircle { angleM: m (θ = m·π/12), showTriangle: bool (cos/sin legs), mirror: bool (also show −θ),
+  //              window: 'sin' | 'cos' | 'tan' (light the inverse's range; mark the angle there it returns) }; drag the point
   unitCircle(svg, p) {
     const C = [160, 100], R = 82, scr = (x, y) => [C[0] + R * x, C[1] - R * y];
     svgLine(svg, [50, C[1]], [270, C[1]]); svgLine(svg, [C[0], 8], [C[0], 192]);
@@ -2852,7 +2939,8 @@ const PICTURES = {
       if (p.showTriangle) { svgLine(g, C, F, PC.bad, 3); svgLine(g, F, P, PC.good, 3); }
       svgLine(g, C, P, PC.acc, 2);
       svgDot(g, P, PC.acc, 9);
-      svgReadout(g, [[`θ = ${piFrac(m, 12).s.replace('pi', 'π')}   `, PC.ink], [`cos θ = ${u.exactCos}   `, PC.bad], [`sin θ = ${u.exactSin}`, PC.good]]);
+      if (p.window) svgReadout(g, unitCircleWindow(g, m, p.window, scr));
+      else svgReadout(g, [[`θ = ${piText(m)}   `, PC.ink], [`cos θ = ${u.exactCos}   `, PC.bad], [`sin θ = ${u.exactSin}`, PC.good]]);
     };
     draw();
     onDrag(svg, pt => Math.hypot(pt[0] - C[0], pt[1] - C[1]) > 25 ? 0 : null, (_, pt) => {
@@ -2861,7 +2949,8 @@ const PICTURES = {
       draw();
     });
   },
-  // numberLine { intervals: ['[-1,2)', '(3,inf)'], points: [x, ...], draggable: bool, range: [lo, hi] (default [-5, 5]) }
+  // numberLine { intervals: ['[-1,2)', '(3,inf)'], points: [x, ...] (red when outside; more than 2: a count), draggable: bool, range: [lo, hi] (default [-5, 5]),
+  //              centre: a (marks a; with one point the readout adds |x − a|) }
   numberLine(svg, p) {
     const [a, b] = p.range || [-5, 5], Y = 100, X = x => 20 + 280 * (clamp(x, a, b) - a) / (b - a);
     svgLine(svg, [10, Y], [310, Y], PC.muted);
@@ -2874,12 +2963,16 @@ const PICTURES = {
         else svgArrow(svg, [X(v), Y], [end, Y], PC.acc);
       }
     }
+    if (p.centre !== undefined) svgDot(svg, [X(p.centre), Y], PC.ink, 4);
     const pts = [...(p.points || [])], g = svgEl(svg, 'g');
     const inside = x => ivs.some(iv => (x > iv.lo || (iv.lc && x === iv.lo)) && (x < iv.hi || (iv.hc && x === iv.hi)));
     const draw = () => {
       g.replaceChildren();
-      pts.forEach(x => { svgLine(g, [X(x), Y - 22], [X(x), Y], PC.good); svgDot(g, [X(x), Y - 30], PC.good); });
-      if (ivs.length) svgReadout(g, pts.map(x => [`x = ${fmt1(x)} ${inside(x) ? '∈' : '∉'} set   `, inside(x) ? PC.good : PC.bad]));
+      const col = x => !ivs.length || inside(x) ? PC.good : PC.bad;
+      pts.forEach(x => { svgLine(g, [X(x), Y - 22], [X(x), Y], col(x)); svgDot(g, [X(x), Y - 30], col(x)); });
+      if (ivs.length && pts.length > 2) svgReadout(g, [[`${pts.filter(inside).length} of ${pts.length} points in the set`, PC.ink]]);
+      else if (ivs.length) svgReadout(g, [...(p.centre === undefined ? [] : [[`|x − ${fmt1(p.centre)}| = ${fmt1(Math.abs(pts[0] - p.centre))}   `, PC.ink]]),
+        ...pts.map(x => [`x = ${fmt1(x)} ${inside(x) ? '∈' : '∉'} set   `, col(x)])]);
     };
     draw();
     if (p.draggable) onDrag(svg, pt => nearest(pts.map(x => [X(x), Y - 30]), pt), (i, pt) => {
@@ -2887,7 +2980,8 @@ const PICTURES = {
       draw();
     });
   },
-  // graphSlider { expr: 'k*x^2' (mathjs, in x and k), k: [start, min, max], xr: [x0, x1], yr: [y0, y1], label: 'k' }; drag the slider
+  // graphSlider { expr: 'k*x^2' (mathjs, in x and k), k: [start, min, max], xr: [x0, x1], yr: [y0, y1], label: 'k',
+  //               level: 'k/2' (optional mathjs in k: dashed horizontal line the curve tends to) }; drag the slider
   graphSlider(svg, p) {
     const f = math.compile(p.expr), [x0, x1] = p.xr || [-5, 5], [y0, y1] = p.yr || [-5, 5];
     const X = x => 280 * (x - x0) / (x1 - x0), Y = y => 160 * (y1 - y) / (y1 - y0);
@@ -2905,6 +2999,7 @@ const PICTURES = {
       svgDot(g, [K(k), 196], PC.acc, 10);
       svgText(g, [234, 201], `${p.label || 'k'} = ${fmt1(k)}`);
       svgText(g, [28, 28], `y = ${p.expr.replace(/\*/g, '·')}`, { fill: PC.muted, stroke: '#1d2026', 'stroke-width': 4, 'paint-order': 'stroke' });
+      if (p.level) graphLevel(g, math.evaluate(p.level, { k }), Y);
     };
     draw();
     onDrag(svg, pt => pt[1] > 176 ? 0 : null, (_, pt) => {
@@ -2931,7 +3026,7 @@ const PICTURES = {
       draw();
     });
   },
-  // plane3d { n: [a, b, c] normal, a: [x, y, z] point A on the plane }; drag X within the plane, arrows A→X and n
+  // plane3d { n: [a, b, c] normal, a: [x, y, z] point v₀ on the plane }; drag v within the plane, arrows v₀→v and n
   plane3d(svg, p) {
     const s = 30, C = [150, 122], scr = v => { const q = PROJ(v); return [C[0] + s * q[0], C[1] + s * q[1]]; };
     ['x', 'y', 'z'].forEach((name, i) => {
@@ -2940,17 +3035,18 @@ const PICTURES = {
     });
     const corners = [[-2, -2], [2, -2], [2, 2], [-2, 2]].map(([u, v]) => scr(planePoint(p, u, v)).join(','));
     svgEl(svg, 'polygon', { points: corners.join(' '), fill: PC.acc, 'fill-opacity': 0.15, stroke: PC.acc, 'stroke-opacity': 0.6 });
-    const A = scr(p.a), g = svgEl(svg, 'g'), nn = unit3(p.n), nA = dot(p.n, p.a);
+    const A = scr(p.a), g = svgEl(svg, 'g'), nn = unit3(p.n);
     const [P1, P2] = planeBasis(p.n).map(PROJ), det = P1[0] * P2[1] - P1[1] * P2[0];
     let uv = [1.6, -1.2];
     const draw = () => {
       g.replaceChildren();
       const X = planePoint(p, ...uv), XS = scr(X);
-      svgArrow(g, A, scr(p.a.map((ai, i) => ai + 1.5 * nn[i])), PC.bad);
+      const N = scr(p.a.map((ai, i) => ai + 1.5 * nn[i]));
+      svgArrow(g, A, N, PC.bad); svgText(g, [N[0] + 6, N[1] - 4], 'n', { fill: PC.bad, 'font-weight': 600 });
       svgArrow(g, A, XS, PC.good);
-      svgDot(g, A, PC.ink, 4); svgText(g, [A[0] - 16, A[1] + 4], 'A');
-      svgDot(g, XS, PC.acc, 9); svgText(g, [XS[0] + 10, XS[1] - 8], 'X');
-      svgReadout(g, [[`X = (${X.map(fmt1).join(', ')})   `, PC.acc], [`n·X = ${fmt1(dot(p.n, X))} = n·A = ${fmt1(nA)}`, PC.ink]]);
+      svgDot(g, A, PC.ink, 4); svgText(g, [A[0] - 20, A[1] + 4], 'v₀');
+      svgDot(g, XS, PC.acc, 9); svgText(g, [XS[0] + 10, XS[1] - 8], 'v');
+      svgReadout(g, [[`v = (${X.map(fmt1).join(', ')})   `, PC.acc], [`n·v = ${fmt1(dot(p.n, X))} = n·v₀`, PC.ink]]);
     };
     draw();
     onDrag(svg, pt => nearest([scr(planePoint(p, ...uv))], pt), (_, pt) => {
@@ -3031,6 +3127,13 @@ function treeNode(g, node, [x0, x1], ctx) {
   svgEl(g, 'rect', { x: at[0] - bw / 2, y: at[1] - 13, width: bw, height: 26, rx: 7, fill: ctx.lit ? PC.acc : PC.key, stroke: PC.acc });
   svgText(g, [at[0], at[1] + 5], node[0], { 'text-anchor': 'middle', fill: ctx.lit ? '#0b0c0f' : PC.ink });
   ctx.boxes.push({ node, at });
+}
+// Dashed line y = L across the plot (plot sits at 20, 10 inside the picture), labelled at the right
+function graphLevel(g, L, Y) {
+  const y = 10 + Y(L);
+  if (y < 10 || y > 170) return;
+  svgEl(g, 'line', { x1: 20, y1: y, x2: 300, y2: y, stroke: PC.good, 'stroke-width': 1.5, 'stroke-dasharray': '5 4' });
+  svgText(g, [296, y - 6], `y = ${fmt1(L)}`, { fill: PC.good, 'text-anchor': 'end', stroke: '#1d2026', 'stroke-width': 4, 'paint-order': 'stroke' });
 }
 function graphPath(fx, X, Y, [x0, x1]) {
   let d = '', pen = false;
@@ -3936,7 +4039,7 @@ function tryDraw(types) {
 }
 function renderTry(body, q) {
   CV.q = q;
-  body.innerHTML = `<div class="prompt">${renderMath(q.q)}</div><div class="muted center" id="tryHint"></div>
+  body.innerHTML = `<div class="prompt"><div>${renderMath(q.q)}</div></div><div class="muted center" id="tryHint"></div>
     <input id="tryAnswer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
     <div class="bools row" id="tryBools"><button id="tryTrue"></button><button id="tryFalse"></button></div>
     <div class="trykeys" id="tryKeys"></div><div class="center" id="tryMsg"></div>`;
@@ -4077,6 +4180,8 @@ function pictureHelperTests() {
   if (p.exactCos !== '√3/2' || p.exactSin !== '1/2') f.push(`unitCirclePoint(2) gave ${p.exactCos}, ${p.exactSin}`);
   const pp = { n: [1, 3, -2], a: [0, 0, 1] }, X = planePoint(pp, 1, 2);
   if (Math.abs(dot(pp.n, X) - dot(pp.n, pp.a)) > 1e-9) f.push(`planePoint off plane: ${X}`);
+  for (const [m, fn, want] of [[10, 'sin', 2], [18, 'sin', -6], [16, 'cos', 8], [8, 'tan', -4], [6, 'tan', null]])
+    if (windowAngle(m, fn) !== want) f.push(`windowAngle(${m}, ${fn}) gave ${windowAngle(m, fn)}`);
   const iv = numberLineInterval('[-1,2)');
   if (JSON.stringify(iv) !== '{"lo":-1,"hi":2,"lc":true,"hc":false}') f.push(`numberLineInterval gave ${JSON.stringify(iv)}`);
   return f;
@@ -4100,7 +4205,17 @@ function conceptTests() {
     const got = validateConcepts(list, typeIds, cov);
     if (JSON.stringify(got) !== JSON.stringify(want)) failed.push(`fixture expected ${JSON.stringify(want)} got ${JSON.stringify(got)}`);
   }
-  return [...failed, ...validateConcepts(CONCEPTS, TYPES.map(t => t.id), CONFIG.conceptCoverage)];
+  return [...failed, ...validateConcepts(CONCEPTS, TYPES.map(t => t.id), CONFIG.conceptCoverage), ...realConceptChecks()];
+}
+// Every real concept: its types exist, its picture renders, its TeX parses
+function realConceptChecks() {
+  const f = [], ids = new Set(TYPES.map(t => t.id));
+  for (const c of CONCEPTS) {
+    for (const t of c.types) if (!ids.has(t)) f.push(`${c.id}: unknown type ${t}`);
+    try { renderPicture(document.createElement('div'), c.picture); } catch (e) { f.push(`${c.id}: picture throws ${e.message}`); }
+    if ((lensHTML(c.algebra) + lensHTML(c.originText)).includes('katex-error')) f.push(`${c.id}: TeX error`);
+  }
+  return f;
 }
 
 // ---- concept screen checks ----
@@ -4229,7 +4344,8 @@ function conceptFirstOnceTest(drill, c) {
     nextQuestion(); if (CV) closeConcept();
     nextQuestion(); if (CV) closeConcept();
   });
-  return calls.length === 1 && calls[0] === 'fxS' ? [] : [`focus drill opened the shared concept ${calls.length} times, want 1`];
+  const shared = calls.filter(id => id === 'fxS').length;   // the drill's other types may open real concepts
+  return shared === 1 ? [] : [`focus drill opened the shared concept ${shared} times, want 1`];
 }
 // The last answer lands after S.end: tick() inside nextQuestion ends the round, so concept-first must not read S
 function lastAnswerDrillTest(drill) {
