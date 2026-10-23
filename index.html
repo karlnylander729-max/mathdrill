@@ -1448,7 +1448,7 @@ const CONCEPTS = [
     picture: { template: 'unitCircle', params: { angleM: 10, window: 'sin' },
       caption: 'Drag θ anywhere. arcsin only answers in the green half, [−π/2, π/2]. It returns the point there at the same height.',
       alt: 'Unit circle with the right half lit (the range of arcsin). A draggable angle θ and the angle in the lit half with the same sine.' },
-    algebra: String.raw`sin is not injective: $\sin\tfrac\pi6 = \sin\tfrac{5\pi}6$. So arcsin inverts sin on $[-\tfrac\pi2, \tfrac\pi2]$ only, and every answer lies there.<br>$\arcsin(\sin x) = x \iff x \in [-\tfrac\pi2, \tfrac\pi2]$<br>Otherwise use $\sin(\pi - x) = \sin x$ or $x \pm 2\pi$ to land in the window. arccos: $[0, \pi]$. arctan: $(-\tfrac\pi2, \tfrac\pi2)$.`,
+    algebra: String.raw`sin is not injective: $\sin\tfrac\pi6 = \sin\tfrac{5\pi}6$. So arcsin inverts sin on $[-\tfrac\pi2, \tfrac\pi2]$ only, and every answer lies there.<br>$\arcsin(\sin x) = x \iff x \in [-\tfrac\pi2, \tfrac\pi2]$<br>Otherwise move to an angle in the window with the same value: $\sin(\pi - x)$, $\cos(-x)$, $\tan(x \pm \pi)$, or $x \pm 2\pi$. Windows: arccos $[0, \pi]$, arctan $(-\tfrac\pi2, \tfrac\pi2)$.`,
     originText: String.raw`Built from exact trig values, read backwards, and from inverting a function on a stretch where it is injective. Feeds: the derivative of arcsin (Example 9.3), where the window makes $\cos(\arcsin x) \ge 0$.` },
   { id: 'rational-limit-infinity', name: 'Rational function as x → ∞', cat: 'calc', week: 4,
     source: 'Calculus_1_2026-27.pdf Example 5.4 and the Helpful hint after it, p. 56',
@@ -1480,7 +1480,7 @@ const CONCEPTS = [
     picture: { template: 'truthGrid', params: { tree: ['→', ['∧', ['P'], ['Q']], ['∨', ['¬', ['R']], ['P']]] },
       caption: 'P ∧ Q → ¬R ∨ P as a tree. The root is the main connective. Tap a node to light its scope.',
       alt: 'Formula tree of P ∧ Q → ¬R ∨ P: root →, children ∧ (P, Q) and ∨ (¬R, P). Tapping a node lights its subtree.' },
-    algebra: String.raw`Official: one bracket pair per binary connective, none for ¬.<br>$((P \land Q) \to (\neg R \lor P))$<br>Conventions drop (1) the outer pair and (2) inner pairs in $P \land Q \land R$, grouped left. (3) $\land, \lor$ bind more strongly than $\to, \leftrightarrow$:<br>$P \land Q \to \neg R \lor P$<br>Nothing ranks $\to$ against $\leftrightarrow$. Main connective: outside all brackets, $\to$ or $\leftrightarrow$, else the rightmost $\land$ or $\lor$, else $\neg$.`,
+    algebra: String.raw`Official: one bracket pair per binary connective, none for ¬.<br>$((P \land Q) \to (\neg R \lor P))$<br>Conventions drop (1) outer brackets and (2) inner pairs in $P \land Q \land R$, grouped left. (3) $\land, \lor$ bind more strongly than $\to, \leftrightarrow$:<br>$P \land Q \to \neg R \lor P$<br>Nothing ranks $\to$ against $\leftrightarrow$, or $\land$ against $\lor$. Main connective: outside all brackets, $\to$ or $\leftrightarrow$, else the rightmost $\land$ or $\lor$, else $\neg$.`,
     originText: String.raw`Built from the definition of a sentence of L₁ (§2.1): sentence letters, then ¬φ and (φ ∧ ψ) and so on. Feeds: truth tables, where the main connective is evaluated last.` },
 ];
 const CONCEPT_OF = {};
