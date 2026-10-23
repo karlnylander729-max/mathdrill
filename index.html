@@ -4586,7 +4586,7 @@ function entryTests() {
     ...withFixtures([fixtureConcept('fxM', [t[0]])], conceptFirstMainTest), ...withFixtures([shared], () => lastAnswerDrillTest(drill)), ...withFixtures(list, accuracyTest), ...withFixtures(list, unopenedTest)];
 }
 function whyLinkTest() {
-  const f = [], noConcept = TYPES.find(x => !CONCEPT_OF[x.id]).id;
+  const f = [], noConcept = 'no-such-type';  // full coverage leaves no real type without a concept
   const miss = type => ({ type, ok: false, q: 'Q', ans: '1', attempt: '2', skipped: false });
   if (!reviewList([miss(CONCEPTS.at(-2).types[0])]).includes("openConcept('fxA'")) f.push('Review miss with a concept has no Why? link');
   if (reviewList([miss(noConcept)]).includes('Why?')) f.push('Review miss without a concept shows a Why? link');
