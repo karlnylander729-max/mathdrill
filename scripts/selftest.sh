@@ -10,6 +10,7 @@ d=json.loads(html.unescape(m.group(1)))
 print('OK' if d['ok'] else 'FAIL', 'checker passed', d['checker']['passed'], 'syntax cases', d['syntax']['cases'], d['syntax']['failed']); print('incentives', json.dumps(d['incentives'])); print('mastery', d['mastery']['failed'])
 for f in d['checker']['failed']: print('  CHK', f)
 for f in d.get('concepts', ['concepts missing']): print('  CONCEPT', f)
+for f in d.get('pictures', ['pictures missing']): print('  PICTURE', f)
 for g in d['generators']:
   flag = '!!' if g['errors'] else '  '
   print(flag, g['id'], 'wk', g['week'], 'distinct', g['distinct'], 'true%', g.get('trueRatio',''), *g['errors'][:3])

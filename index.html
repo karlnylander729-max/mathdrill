@@ -2752,6 +2752,286 @@ const EQUIV_SEEDS = [
 ];
 </script>
 
+<!-- ============================ PICTURES ============================ -->
+<script>
+const PC = { ink: '#e8e8ea', muted: '#8a8f98', acc: '#6ea8fe', good: '#4cc38a', bad: '#f2555a', base: '#3a404b', key: '#262a32' };
+let picUid = 0;
+function svgEl(parent, tag, attrs = {}, text) {
+  const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const svgText = (p, [x, y], s, a = {}) => svgEl(p, 'text', { x, y, fill: PC.ink, 'font-size': 13, ...a }, s);
+const svgLine = (p, [x1, y1], [x2, y2], stroke = PC.base, w = 1.5) => svgEl(p, 'line', { x1, y1, x2, y2, stroke, 'stroke-width': w });
+const svgDot = (p, [cx, cy], fill, r = 8) => svgEl(p, 'circle', { cx, cy, r, fill });
+function svgArrow(p, a, b, color) {
+  svgLine(p, a, b, color, 2.5);
+  const t = Math.atan2(b[1] - a[1], b[0] - a[0]), h = s => [b[0] - 10 * Math.cos(t + s), b[1] - 10 * Math.sin(t + s)];
+  svgEl(p, 'polygon', { points: [b, h(0.4), h(-0.4)].map(q => q.join(',')).join(' '), fill: color });
+}
+// Line of readout text: parts = [[text, colour], ...]
+function svgReadout(p, parts, y = 212) {
+  const t = svgText(p, [8, y], undefined, { style: 'white-space: pre' });
+  for (const [s, fill] of parts) svgEl(t, 'tspan', { fill }, s);
+}
+function nearest(pts, p, r = 32) {
+  let best = null, bd = r;
+  pts.forEach((q, i) => { const d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < bd) { bd = d; best = i; } });
+  return best;
+}
+// Pointer dragging for mouse and touch: pick(pt) -> handle index or null; move(index, pt) while dragging
+function onDrag(svg, pick, move) {
+  let id = null;
+  const at = e => { const m = svg.getScreenCTM().inverse(); return [m.a * e.clientX + m.c * e.clientY + m.e, m.b * e.clientX + m.d * e.clientY + m.f]; };
+  svg.addEventListener('pointerdown', e => { id = pick(at(e)); if (id !== null) { svg.setPointerCapture(e.pointerId); move(id, at(e)); } });
+  svg.addEventListener('pointermove', e => { if (id !== null) move(id, at(e)); });
+  for (const ev of ['pointerup', 'pointercancel']) svg.addEventListener(ev, () => { id = null; });
+}
+
+// ---- pure geometry ----
+const humanExact = v => { try { return exact(v).s.replace(/sqrt\((\d+)\)/g, '√$1'); } catch (e) { return String(+v.toFixed(3)); } };
+function unitCirclePoint(m) {
+  const x = Math.cos(m * Math.PI / 12), y = Math.sin(m * Math.PI / 12);
+  return { x, y, exactCos: humanExact(x), exactSin: humanExact(y) };
+}
+function numberLineInterval(spec) {
+  const [, l, lo, hi, r] = spec.replace(/\s/g, '').match(/^([[(])(.+),(.+)([\])])$/);
+  const num = s => /^\+?(inf|∞)$/.test(s) ? Infinity : /^-(inf|∞)$/.test(s) ? -Infinity : Number(s);
+  return { lo: num(lo), hi: num(hi), lc: l === '[', hc: r === ']' };
+}
+const unit3 = v => { const L = Math.hypot(...v); return v.map(x => x / L); };
+function planeBasis(n) {
+  const i = [0, 1, 2].reduce((m, j) => Math.abs(n[j]) < Math.abs(n[m]) ? j : m, 0), h = [0, 0, 0];
+  h[i] = 1;
+  const e1 = unit3(cross(n, h));
+  return [e1, unit3(cross(n, e1))];
+}
+function planePoint(p, u, v) {
+  const [e1, e2] = planeBasis(p.n);
+  return p.a.map((ai, i) => ai + u * e1[i] + v * e2[i]);
+}
+const PROJ = v => [v[1] - 0.5 * v[0] * Math.SQRT1_2, 0.5 * v[0] * Math.SQRT1_2 - v[2]];  // oblique, screen units per 1
+const STD_M = [...Array(24).keys()].filter(k => k % 2 === 0 || k % 3 === 0);
+const fmt1 = x => String(+x.toFixed(1)).replace('-', '−');
+
+const PICTURES = {
+  // unitCircle { angleM: m (θ = m·π/12), showTriangle: bool (cos/sin legs), mirror: bool (also show −θ) }; drag the point
+  unitCircle(svg, p) {
+    const C = [160, 100], R = 82, scr = (x, y) => [C[0] + R * x, C[1] - R * y];
+    svgLine(svg, [50, C[1]], [270, C[1]]); svgLine(svg, [C[0], 8], [C[0], 192]);
+    svgEl(svg, 'circle', { cx: C[0], cy: C[1], r: R, fill: 'none', stroke: PC.muted });
+    const g = svgEl(svg, 'g');
+    let m = p.angleM || 0;
+    const draw = () => {
+      g.replaceChildren();
+      const u = unitCirclePoint(m), P = scr(u.x, u.y), F = scr(u.x, 0);
+      if (p.mirror) { svgEl(g, 'line', { x1: C[0], y1: C[1], x2: P[0], y2: 2 * C[1] - P[1], stroke: PC.muted, 'stroke-dasharray': '4 3' }); svgDot(g, [P[0], 2 * C[1] - P[1]], PC.muted, 5); }
+      if (p.showTriangle) { svgLine(g, C, F, PC.bad, 3); svgLine(g, F, P, PC.good, 3); }
+      svgLine(g, C, P, PC.acc, 2);
+      svgDot(g, P, PC.acc, 9);
+      svgReadout(g, [[`θ = ${piFrac(m, 12).s.replace('pi', 'π')}   `, PC.ink], [`cos θ = ${u.exactCos}   `, PC.bad], [`sin θ = ${u.exactSin}`, PC.good]]);
+    };
+    draw();
+    onDrag(svg, pt => Math.hypot(pt[0] - C[0], pt[1] - C[1]) > 25 ? 0 : null, (_, pt) => {
+      const a = (Math.atan2(C[1] - pt[1], pt[0] - C[0]) / (Math.PI / 12) + 24) % 24, d = k => Math.min(Math.abs(k - a), 24 - Math.abs(k - a));
+      m = STD_M.reduce((b, k) => d(k) < d(b) ? k : b, 0);
+      draw();
+    });
+  },
+  // numberLine { intervals: ['[-1,2)', '(3,inf)'], points: [x, ...], draggable: bool, range: [lo, hi] (default [-5, 5]) }
+  numberLine(svg, p) {
+    const [a, b] = p.range || [-5, 5], Y = 100, X = x => 20 + 280 * (clamp(x, a, b) - a) / (b - a);
+    svgLine(svg, [10, Y], [310, Y], PC.muted);
+    for (let k = Math.ceil(a); k <= b; k++) { svgLine(svg, [X(k), Y - 5], [X(k), Y + 5], PC.muted); svgText(svg, [X(k), Y + 24], k, { 'text-anchor': 'middle', fill: PC.muted, 'font-size': 11 }); }
+    const ivs = (p.intervals || []).map(numberLineInterval);
+    for (const iv of ivs) {
+      svgLine(svg, [X(iv.lo), Y], [X(iv.hi), Y], PC.acc, 5);
+      for (const [v, closed, end] of [[iv.lo, iv.lc, 6], [iv.hi, iv.hc, 314]]) {
+        if (isFinite(v)) svgEl(svg, 'circle', { cx: X(v), cy: Y, r: 6, fill: closed ? PC.acc : '#1d2026', stroke: PC.acc, 'stroke-width': 2.5 });
+        else svgArrow(svg, [X(v), Y], [end, Y], PC.acc);
+      }
+    }
+    const pts = [...(p.points || [])], g = svgEl(svg, 'g');
+    const inside = x => ivs.some(iv => (x > iv.lo || (iv.lc && x === iv.lo)) && (x < iv.hi || (iv.hc && x === iv.hi)));
+    const draw = () => {
+      g.replaceChildren();
+      pts.forEach(x => { svgLine(g, [X(x), Y - 22], [X(x), Y], PC.good); svgDot(g, [X(x), Y - 30], PC.good); });
+      if (ivs.length) svgReadout(g, pts.map(x => [`x = ${fmt1(x)} ${inside(x) ? '∈' : '∉'} set   `, inside(x) ? PC.good : PC.bad]));
+    };
+    draw();
+    if (p.draggable) onDrag(svg, pt => nearest(pts.map(x => [X(x), Y - 30]), pt), (i, pt) => {
+      pts[i] = clamp(Math.round(2 * (a + (pt[0] - 20) * (b - a) / 280)) / 2, a, b);
+      draw();
+    });
+  },
+  // graphSlider { expr: 'k*x^2' (mathjs, in x and k), k: [start, min, max], xr: [x0, x1], yr: [y0, y1], label: 'k' }; drag the slider
+  graphSlider(svg, p) {
+    const f = math.compile(p.expr), [x0, x1] = p.xr || [-5, 5], [y0, y1] = p.yr || [-5, 5];
+    const X = x => 280 * (x - x0) / (x1 - x0), Y = y => 160 * (y1 - y) / (y1 - y0);
+    const plot = svgEl(svg, 'svg', { x: 20, y: 10, width: 280, height: 160 });
+    svgEl(plot, 'rect', { width: 280, height: 160, fill: 'none', stroke: PC.key });
+    if (y0 < 0 && y1 > 0) svgLine(plot, [0, Y(0)], [280, Y(0)]);
+    if (x0 < 0 && x1 > 0) svgLine(plot, [X(0), 0], [X(0), 160]);
+    svgEl(svg, 'line', { x1: 30, y1: 196, x2: 220, y2: 196, stroke: PC.base, 'stroke-width': 4, 'stroke-linecap': 'round' });
+    let [k, kmin, kmax] = p.k;
+    const g = svgEl(svg, 'g'), curve = svgEl(plot, 'path', { fill: 'none', stroke: PC.acc, 'stroke-width': 2.5 });
+    const K = v => 30 + 190 * (v - kmin) / (kmax - kmin), step = (kmax - kmin) / 40;
+    const draw = () => {
+      g.replaceChildren();
+      curve.setAttribute('d', graphPath(x => f.evaluate({ x, k }), X, Y, [x0, x1]));
+      svgDot(g, [K(k), 196], PC.acc, 10);
+      svgText(g, [234, 201], `${p.label || 'k'} = ${fmt1(k)}`);
+      svgText(g, [28, 28], `y = ${p.expr.replace(/\*/g, '·')}`, { fill: PC.muted, stroke: '#1d2026', 'stroke-width': 4, 'paint-order': 'stroke' });
+    };
+    draw();
+    onDrag(svg, pt => pt[1] > 176 ? 0 : null, (_, pt) => {
+      k = clamp(+(Math.round((kmin + (pt[0] - 30) * (kmax - kmin) / 190) / step) * step).toFixed(4), kmin, kmax);
+      draw();
+    });
+  },
+  // vectors2d { vecs: [[x, y], ...] (integer tips, drag each tip), dot: bool (show a·b of the first two) }
+  vectors2d(svg, p) {
+    const O = [160, 105], s = 25, scr = v => [O[0] + s * v[0], O[1] - s * v[1]];
+    for (let i = -6; i <= 6; i++) svgLine(svg, scr([i, -3.6]), scr([i, 3.6]), i ? PC.key : PC.base);
+    for (let j = -3; j <= 3; j++) svgLine(svg, scr([-6.2, j]), scr([6.2, j]), j ? PC.key : PC.base);
+    const vs = p.vecs.map(v => [...v]), g = svgEl(svg, 'g'), cols = [PC.acc, PC.good, PC.bad], names = 'abc';
+    const draw = () => {
+      g.replaceChildren();
+      vs.forEach((v, i) => { const T = scr(v); svgArrow(g, O, T, cols[i % 3]); svgText(g, [T[0] + 7, T[1] - 7], names[i], { fill: cols[i % 3], 'font-weight': 600 }); });
+      const parts = vs.map((v, i) => [`${names[i]} = (${v.join(', ')})   `, cols[i % 3]]);
+      if (p.dot && vs.length > 1) parts.push([`a·b = ${dot(vs[0], vs[1])}`, PC.ink]);
+      svgReadout(g, parts);
+    };
+    draw();
+    onDrag(svg, pt => nearest(vs.map(scr), pt), (i, pt) => {
+      vs[i] = [clamp(Math.round((pt[0] - O[0]) / s), -6, 6), clamp(Math.round((O[1] - pt[1]) / s), -3, 3)];
+      draw();
+    });
+  },
+  // plane3d { n: [a, b, c] normal, a: [x, y, z] point A on the plane }; drag X within the plane, arrows A→X and n
+  plane3d(svg, p) {
+    const s = 30, C = [150, 122], scr = v => { const q = PROJ(v); return [C[0] + s * q[0], C[1] + s * q[1]]; };
+    ['x', 'y', 'z'].forEach((name, i) => {
+      const e = [0, 0, 0]; e[i] = 2.8;
+      svgArrow(svg, C, scr(e), PC.base); svgText(svg, scr(e.map(x => x * 1.15)), name, { fill: PC.muted, 'text-anchor': 'middle' });
+    });
+    const corners = [[-2, -2], [2, -2], [2, 2], [-2, 2]].map(([u, v]) => scr(planePoint(p, u, v)).join(','));
+    svgEl(svg, 'polygon', { points: corners.join(' '), fill: PC.acc, 'fill-opacity': 0.15, stroke: PC.acc, 'stroke-opacity': 0.6 });
+    const A = scr(p.a), g = svgEl(svg, 'g'), nn = unit3(p.n), nA = dot(p.n, p.a);
+    const [P1, P2] = planeBasis(p.n).map(PROJ), det = P1[0] * P2[1] - P1[1] * P2[0];
+    let uv = [1.6, -1.2];
+    const draw = () => {
+      g.replaceChildren();
+      const X = planePoint(p, ...uv), XS = scr(X);
+      svgArrow(g, A, scr(p.a.map((ai, i) => ai + 1.5 * nn[i])), PC.bad);
+      svgArrow(g, A, XS, PC.good);
+      svgDot(g, A, PC.ink, 4); svgText(g, [A[0] - 16, A[1] + 4], 'A');
+      svgDot(g, XS, PC.acc, 9); svgText(g, [XS[0] + 10, XS[1] - 8], 'X');
+      svgReadout(g, [[`X = (${X.map(fmt1).join(', ')})   `, PC.acc], [`n·X = ${fmt1(dot(p.n, X))} = n·A = ${fmt1(nA)}`, PC.ink]]);
+    };
+    draw();
+    onDrag(svg, pt => nearest([scr(planePoint(p, ...uv))], pt), (_, pt) => {
+      if (Math.abs(det) < 1e-6) return;
+      const dx = (pt[0] - A[0]) / s, dy = (pt[1] - A[1]) / s;
+      uv = [clamp((dx * P2[1] - dy * P2[0]) / det, -2, 2), clamp((P1[0] * dy - P1[1] * dx) / det, -2, 2)];
+      draw();
+    });
+  },
+  // truthGrid { head: ['P', 'Q', 'P→Q'], rows: [['T', 'T', 'T'], ...] } truth table (tap a row)
+  //        or { tree: ['∀x', ['→', ['Px'], ['Qx']]] } formula tree (tap a node to light its scope)
+  truthGrid(svg, p) {
+    if (p.tree) return truthTree(svg, p.tree);
+    const n = p.head.length, cw = Math.min(300 / n, 80), x0 = (320 - cw * n) / 2, rh = Math.min(28, 200 / (p.rows.length + 1));
+    const cell = (r, c) => [x0 + cw * (c + 0.5), 10 + rh * (r + 0.5) + 5];
+    const hl = svgEl(svg, 'rect', { x: x0, width: cw * n, height: rh, rx: 6, fill: PC.key, visibility: 'hidden' });
+    p.head.forEach((h, c) => svgText(svg, cell(0, c), h, { 'text-anchor': 'middle', fill: PC.muted, 'font-weight': 600 }));
+    svgLine(svg, [x0, 10 + rh], [x0 + cw * n, 10 + rh]);
+    p.rows.forEach((row, r) => row.forEach((v, c) =>
+      svgText(svg, cell(r + 1, c), v, { 'text-anchor': 'middle', fill: v === 'T' ? PC.good : v === 'F' ? PC.bad : PC.ink })));
+    onDrag(svg, pt => {
+      const r = Math.floor((pt[1] - 10) / rh) - 1;
+      if (r >= 0 && r < p.rows.length) { hl.setAttribute('y', 10 + rh * (r + 1)); hl.setAttribute('visibility', 'visible'); }
+      return null;
+    }, () => {});
+  },
+  // setDiagram { sets: ['A', 'B'(, 'C')] single letters, shade: region codes: 'AB' = in A and B only, 'A' = A only, '' = outside all }; tap a region to toggle
+  setDiagram(svg, p) {
+    const sets = p.sets, uid = 'pic' + (++picUid), three = sets.length === 3, R = three ? 56 : 66;
+    const circ = three ? [[128, 78], [192, 78], [160, 136]] : [[124, 105], [196, 105]];
+    const mid = [160, three ? 97 : 105], defs = svgEl(svg, 'defs'), norm = code => sets.filter(s => code.includes(s)).join('');
+    circ.forEach(([cx, cy], i) => {
+      svgEl(svgEl(defs, 'clipPath', { id: `${uid}c${i}` }), 'circle', { cx, cy, r: R });
+      const m = svgEl(defs, 'mask', { id: `${uid}m${i}` });
+      svgEl(m, 'rect', { width: 320, height: 220, fill: '#fff' }); svgEl(m, 'circle', { cx, cy, r: R, fill: '#000' });
+    });
+    const shade = new Set((p.shade || []).map(norm)), g = svgEl(svg, 'g');
+    const draw = () => {
+      g.replaceChildren();
+      shade.forEach(code => setRegion(g, code, sets, uid));
+      svgEl(g, 'rect', { x: 10, y: 8, width: 300, height: 194, rx: 8, fill: 'none', stroke: PC.base });
+      circ.forEach(([cx, cy], i) => {
+        svgEl(g, 'circle', { cx, cy, r: R, fill: 'none', stroke: PC.ink, 'stroke-width': 1.5 });
+        svgText(g, [cx + 0.6 * (cx - mid[0]), cy + 0.6 * (cy - mid[1]) + 5], sets[i], { 'text-anchor': 'middle', 'font-weight': 600 });
+      });
+    };
+    draw();
+    onDrag(svg, pt => {
+      const code = sets.filter((_, i) => Math.hypot(pt[0] - circ[i][0], pt[1] - circ[i][1]) < R).join('');
+      if (!shade.delete(code)) shade.add(code);
+      draw();
+      return null;
+    }, () => {});
+  },
+};
+// Fill one region of a set diagram: clip to each set in the code, mask out each set not in it
+function setRegion(g, code, sets, uid) {
+  let host = g;
+  sets.forEach((s, i) => { host = svgEl(host, 'g', code.includes(s) ? { 'clip-path': `url(#${uid}c${i})` } : { mask: `url(#${uid}m${i})` }); });
+  svgEl(host, 'rect', { x: 10, y: 8, width: 300, height: 194, fill: PC.acc, 'fill-opacity': 0.35 });
+}
+// Formula tree: node = [label, ...children]; tapping a node lights its subtree (its scope)
+function truthTree(svg, tree) {
+  const g = svgEl(svg, 'g'), boxes = [];
+  let lit = null;
+  const draw = () => { g.replaceChildren(); boxes.length = 0; treeNode(g, tree, [0, 320], { depth: 0, lit: tree === lit, hl: lit, boxes }); };
+  draw();
+  onDrag(svg, pt => { const i = nearest(boxes.map(b => b.at), pt, 24); lit = i === null ? null : boxes[i].node; draw(); return null; }, () => {});
+}
+function treeNode(g, node, [x0, x1], ctx) {
+  const at = [(x0 + x1) / 2, 28 + ctx.depth * 46], kids = node.slice(1), w = (x1 - x0) / (kids.length || 1);
+  kids.forEach((kid, i) => {
+    const span = [x0 + i * w, x0 + (i + 1) * w];
+    svgLine(g, at, [(span[0] + span[1]) / 2, at[1] + 46], ctx.lit ? PC.acc : PC.base, 2);
+    treeNode(g, kid, span, { ...ctx, depth: ctx.depth + 1, lit: ctx.lit || kid === ctx.hl });
+  });
+  const bw = 16 + 8 * node[0].length;
+  svgEl(g, 'rect', { x: at[0] - bw / 2, y: at[1] - 13, width: bw, height: 26, rx: 7, fill: ctx.lit ? PC.acc : PC.key, stroke: PC.acc });
+  svgText(g, [at[0], at[1] + 5], node[0], { 'text-anchor': 'middle', fill: ctx.lit ? '#0b0c0f' : PC.ink });
+  ctx.boxes.push({ node, at });
+}
+function graphPath(fx, X, Y, [x0, x1]) {
+  let d = '', pen = false;
+  for (let i = 0; i <= 140; i++) {
+    const x = x0 + (x1 - x0) * i / 140, y = fx(x), sy = typeof y === 'number' ? Y(y) : NaN;
+    if (!isFinite(sy) || Math.abs(sy) > 2000) { pen = false; continue; }
+    d += `${pen ? 'L' : 'M'}${X(x).toFixed(1)} ${sy.toFixed(1)}`;
+    pen = true;
+  }
+  return d;
+}
+// Draw a concept picture into container: 320×220 SVG plus caption
+function renderPicture(container, pic) {
+  const svg = svgEl(null, 'svg', { viewBox: '0 0 320 220', role: 'img', 'aria-label': pic.alt || pic.caption || '' });
+  Object.assign(svg.style, { display: 'block', width: '100%', maxWidth: '100%', touchAction: 'none', userSelect: 'none', webkitUserSelect: 'none',
+    background: '#1d2026', borderRadius: '10px', fontFamily: '-apple-system, system-ui, sans-serif' });
+  PICTURES[pic.template](svg, pic.params || {});
+  container.append(svg);
+  if (pic.caption) container.append(Object.assign(document.createElement('div'), { className: 'muted', textContent: pic.caption }));
+}
+</script>
+
 <!-- ============================ CHECKER ============================ -->
 <script>
 // Longest names first, so the greedy split prefers 'asinh' over 'asin', 'sech' over 'sec'
@@ -3547,8 +3827,8 @@ function init() {
 ===================================================================== -->
 <script>
 function runSelfTest() {
-  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests() };
-  out.ok = out.concepts.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests() };
+  out.ok = out.concepts.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
   const pre = $('selftest');
   pre.style.display = 'block';
   pre.textContent = JSON.stringify(out, null, 1);
@@ -3578,6 +3858,46 @@ function validateConcepts(concepts, typeIds, coverage) {
     for (const k of [...c.origin, ...c.feeds]) if (!ids.has(k)) f.push(`${c.id}: link to unknown concept ${k}`);
   }
   if (coverage === 'full') for (const t of typeIds) if (!owner[t]) f.push(`${t}: type without a concept`);
+  return f;
+}
+
+// ---- picture template checks ----
+const PICTURE_SAMPLES = {
+  unitCircle: { angleM: 2, showTriangle: true },
+  numberLine: { intervals: ['[-1,2)'], points: [0.5], draggable: true },
+  graphSlider: { expr: 'k*x^2', k: [0.5, -2, 2], xr: [-3, 3], yr: [-4, 4], label: 'k' },
+  vectors2d: { vecs: [[2, 1], [1, 2]], dot: true },
+  plane3d: { n: [1, 3, -2], a: [0, 0, 1] },
+  truthGrid: { head: ['P', 'Q', 'P→Q'], rows: [['T', 'T', 'T'], ['T', 'F', 'F'], ['F', 'T', 'T'], ['F', 'F', 'T']] },
+  setDiagram: { sets: ['A', 'B'], shade: ['A', 'AB'] },
+};
+function pictureFitsTest(svg, name) {
+  const f = [];
+  if ((svg.getAttribute('viewBox') || '').split(' ')[2] !== '320') f.push(`${name}: viewBox width not 320`);
+  if (svg.style.maxWidth !== '100%') f.push(`${name}: max-width not 100%`);
+  if (svg.style.touchAction !== 'none') f.push(`${name}: touch-action not none`);
+  return f;
+}
+function pictureTests() {
+  const f = [];
+  for (const name of ['unitCircle', 'numberLine', 'graphSlider', 'vectors2d', 'plane3d', 'truthGrid', 'setDiagram']) {
+    const div = document.createElement('div');
+    try { renderPicture(div, { template: name, params: PICTURE_SAMPLES[name], caption: 'c', alt: 'a' }); } catch (e) { f.push(`${name}: throws ${e.message}`); continue; }
+    const svg = div.querySelector('svg');
+    if (!svg || !svg.children.length) { f.push(`${name}: empty svg`); continue; }
+    f.push(...pictureFitsTest(svg, name));
+  }
+  try { f.push(...pictureHelperTests()); } catch (e) { f.push(`helpers throw ${e.message}`); }
+  return f;
+}
+function pictureHelperTests() {
+  const f = [], dot = (p, q) => p.reduce((s, v, i) => s + v * q[i], 0);
+  const p = unitCirclePoint(2);
+  if (p.exactCos !== '√3/2' || p.exactSin !== '1/2') f.push(`unitCirclePoint(2) gave ${p.exactCos}, ${p.exactSin}`);
+  const pp = { n: [1, 3, -2], a: [0, 0, 1] }, X = planePoint(pp, 1, 2);
+  if (Math.abs(dot(pp.n, X) - dot(pp.n, pp.a)) > 1e-9) f.push(`planePoint off plane: ${X}`);
+  const iv = numberLineInterval('[-1,2)');
+  if (JSON.stringify(iv) !== '{"lo":-1,"hi":2,"lc":true,"hc":false}') f.push(`numberLineInterval gave ${JSON.stringify(iv)}`);
   return f;
 }
 
