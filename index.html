@@ -1439,8 +1439,8 @@ const wordCount = s => s.split(/\s+/).filter(Boolean).length;
   .prompt { font-size: 22px; min-height: 120px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 12px 4px; overflow-x: auto; }
   .prompt .katex { font-size: 1.1em; }
   .f { font-family: "Times New Roman", serif; font-size: 1.15em; white-space: nowrap; }
-  #answer { width: 100%; font-size: 24px; padding: 12px; border-radius: 10px; border: 2px solid #2c313a; background: #0f1114; color: var(--ink); text-align: center; outline: none; }
-  #answer:focus { border-color: var(--accent); }
+  #answer, #tryAnswer { width: 100%; font-size: 24px; padding: 12px; border-radius: 10px; border: 2px solid #2c313a; background: #0f1114; color: var(--ink); text-align: center; outline: none; }
+  #answer:focus, #tryAnswer:focus { border-color: var(--accent); }
   .bools { display: none; gap: 12px; }
   .bools button { flex: 1; font-size: 24px; padding: 28px 0; }
   .row { display: flex; gap: 8px; margin-top: 10px; }
@@ -1476,6 +1476,16 @@ const wordCount = s => s.split(/\s+/).filter(Boolean).length;
   .drills button { text-align: left; padding: 10px 12px; background: #262a32; }
   .prog { display: inline-block; width: 60px; height: 6px; background: #2c313a; border-radius: 3px; overflow: hidden; vertical-align: middle; }
   .prog i { display: block; height: 100%; background: var(--accent); }
+  .tabs { display: flex; gap: 6px; margin: 10px 0; }
+  .tabs button { flex: 1; min-width: 0; padding: 10px 4px; font-size: 15px; }
+  .tabs button.on { background: var(--accent); color: #0b0c0f; font-weight: 600; }
+  .lens { padding: 8px 2px; line-height: 1.7; overflow-x: auto; }
+  .links { display: flex; flex-wrap: wrap; gap: 8px; }
+  .links button { background: #262a32; padding: 8px 12px; font-size: 15px; }
+  .trykeys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .trykeys button { flex: 1 0 calc(14% - 6px); min-width: 40px; padding: 10px 8px; font-size: 18px; background: #262a32; }
+  #tryMsg { min-height: 26px; margin-top: 8px; }
+  #concept .row { margin-top: 18px; } #concept .row button { flex: 1; padding: 12px 8px; font-size: 15px; }
   svg .pt { fill: var(--accent); } svg .ln { stroke: var(--accent); stroke-width: 2; fill: none; } svg .base { stroke: #2c313a; }
 </style>
 </head>
@@ -1507,6 +1517,13 @@ const wordCount = s => s.split(/\s+/).filter(Boolean).length;
   <div id="misses"></div>
   <div id="roundStats"></div>
   <button style="width:100%; margin-top: 16px" onclick="showHome()">Home</button>
+</div>
+<div id="concept" class="screen">
+  <div class="bar"><span class="big" id="cName"></span></div>
+  <div class="muted" id="cMeta"></div>
+  <div class="tabs" id="cTabs"><button data-tab="picture" onclick="conceptTab('picture')">Picture</button><button data-tab="algebra" onclick="conceptTab('algebra')">Algebra</button><button data-tab="origin" onclick="conceptTab('origin')">Origin</button><button data-tab="try" onclick="conceptTab('try')">Try</button></div>
+  <div id="cBody"></div>
+  <div class="row"><button onclick="askClaude()">Ask Claude about this</button><button onclick="closeConcept()">Back to drilling</button></div>
 </div>
 <div id="keys" style="display:none"></div>
 <pre id="selftest" style="display:none"></pre>
@@ -3393,8 +3410,7 @@ function focusInput(mode) {
   if (input.inputMode !== mode) { input.inputMode = mode; input.blur(); }
   input.focus();
 }
-function setKeys(q) {
-  const box = $('keys');
+function setKeys(q, box = $('keys'), input = $('answer')) {
   box.style.display = q ? 'flex' : 'none';
   if (!q) return;
   const keys = [...(q.keys || KEYSETS[q.kind].keys), '⌫'];
@@ -3402,17 +3418,17 @@ function setKeys(q) {
   for (const k of keys) {
     const b = document.createElement('button');
     b.textContent = KEY_LABEL[k] || k;
-    b.addEventListener('pointerdown', e => { e.preventDefault(); pressKey(k === '×' ? 'x' : k); });
+    b.addEventListener('pointerdown', e => { e.preventDefault(); pressKey(k === '×' ? 'x' : k, input); });
     box.appendChild(b);
   }
 }
-function pressKey(k) {
-  const el = $('answer'), [a, b] = [el.selectionStart ?? el.value.length, el.selectionEnd ?? el.value.length];
+function pressKey(k, el = $('answer')) {
+  const [a, b] = [el.selectionStart ?? el.value.length, el.selectionEnd ?? el.value.length];
   if (k === '⌫') {
     const from = a === b ? Math.max(0, a - 1) : a;
     el.setRangeText('', from, b, 'end');
   } else el.setRangeText(k, a, b, 'end');
-  onInput();
+  el.dispatchEvent(new Event('input'));
 }
 function onInput() {
   if (!S?.cur) return;
@@ -3466,7 +3482,7 @@ function skip() {
   if (S?.cur && Date.now() - S.start >= CONFIG.skipUnlockSeconds * 1000) record(false, true, S.cur.kind === 'bool' ? '' : $('answer').value);
 }
 function answerBool(choice) {
-  if (!S?.cur || S.cur.kind !== 'bool') return;
+  if (!S?.cur || S.cur.kind !== 'bool' || S.pausedAt) return;
   record(choice === S.cur.a, false, S.cur.labels[choice ? 0 : 1]);
 }
 
@@ -3783,6 +3799,95 @@ function stackGuide() {
 }
 
 // Pin the symbol row to the top of the on-screen keyboard
+// ---------- concept screen: Picture / Algebra / Origin / Try lenses; the round clock pauses while it is open ----------
+const SEEN_KEY = 'drill-concepts-seen-v1';
+const seenConcepts = () => new Set(loadJSON(SEEN_KEY, []));
+function markSeen(id) { localStorage.setItem(SEEN_KEY, JSON.stringify([...seenConcepts().add(id)])); }
+function askClaude() {}   // stub: Task 5 replaces this
+const conceptById = id => CONCEPTS.find(c => c.id === id);
+let CV = null;   // the open concept: { c, prev, context, q }
+function openConcept(id, context = {}) {
+  const c = conceptById(id), prev = CV ? CV.prev : document.querySelector('.screen.on').id;
+  if (!CV) pauseRound();
+  CV = { c, prev, context };
+  $('cName').textContent = c.name;
+  $('cMeta').textContent = `${CONFIG.categories[c.cat].label} · week ${c.week} · ${c.types.length} drill type${c.types.length === 1 ? '' : 's'}`;
+  showScreen('concept');
+  conceptTab('picture');
+}
+function closeConcept() {
+  const prev = CV.prev;
+  CV = null;
+  showScreen(prev);
+  resumeRound();
+}
+function pauseRound() {
+  if (!S) return;
+  S.pausedAt = Date.now();
+  clearInterval(S.timer);
+  $('keys').style.display = 'none';
+  $('answer').blur();
+}
+function resumeRound() {
+  if (!S?.pausedAt) return;
+  const paused = Date.now() - S.pausedAt;
+  S.end += paused;
+  S.start += paused;
+  delete S.pausedAt;
+  S.timer = setInterval(tick, 200);
+  const isBool = S.cur.kind === 'bool';
+  setKeys(isBool ? null : S.cur);
+  if (!isBool) $('answer').focus();
+}
+// A line that is only a formula renders as a centred display formula; other lines render as prose
+const lensHTML = str => `<div class="lens">${str.split(/<br\s*\/?>|\n/).map(line => {
+  const m = line.match(/^\s*\$\$?([^$]+)\$\$?\s*$/);
+  return m ? katex.renderToString(m[1], { displayMode: true, throwOnError: false }) : `<div>${renderMath(line)}</div>`;
+}).join('')}</div>`;
+const LENSES = {
+  picture: (body, c) => renderPicture(body, c.picture),
+  algebra: (body, c) => { body.innerHTML = lensHTML(c.algebra); },
+  origin: (body, c) => {
+    body.innerHTML = `${lensHTML(c.originText)}<div class="links">${c.origin.map(id => `<button onclick="openConcept('${id}')">${conceptById(id).name}</button>`).join('')}</div>`;
+  },
+  try: (body, c) => renderTry(body, tryDraw(c.types)),
+};
+function conceptTab(name) {
+  $('cTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  $('cBody').innerHTML = '';
+  LENSES[name]($('cBody'), CV.c);
+}
+function tryDraw(types) {
+  for (let tries = 0; tries < 200; tries++) {
+    const t = TYPE_BY_ID[pick(types)], q = t.gen();
+    if (q) return { ...q, type: t.id, cat: t.cat };
+  }
+  throw new Error('no question could be drawn');
+}
+function renderTry(body, q) {
+  CV.q = q;
+  body.innerHTML = `<div class="prompt">${renderMath(q.q)}</div><div class="muted center" id="tryHint"></div>
+    <input id="tryAnswer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <div class="bools row" id="tryBools"><button id="tryTrue"></button><button id="tryFalse"></button></div>
+    <div class="trykeys" id="tryKeys"></div><div class="center" id="tryMsg"></div>`;
+  $('tryHint').textContent = formatHint(q);
+  const isBool = q.kind === 'bool', input = $('tryAnswer');
+  input.style.display = isBool ? 'none' : 'block';
+  $('tryBools').style.display = isBool ? 'flex' : 'none';
+  if (isBool) [['tryTrue', true], ['tryFalse', false]].forEach(([id, v], i) => { $(id).textContent = q.labels[i]; $(id).onclick = () => tryBool(v); });
+  setKeys(isBool ? null : q, $('tryKeys'), input);
+  if (!isBool) input.inputMode = q.noKeyboard ? 'none' : q.mode || KEYSETS[q.kind].mode;
+  input.addEventListener('input', () => { if (check(q, input.value, false)) trySolved(); });
+}
+function tryBool(choice) {
+  if (choice === CV.q.a) trySolved();
+  else $('tryMsg').innerHTML = '✗ ' + renderMath(`$${answerTeX(CV.q)}$`);
+}
+function trySolved() {
+  $('tryMsg').innerHTML = '<span class="up">✓ — back to drilling</span>';
+  markSeen(CV.c.id);
+}
+
 function pinKeys() {
   const vv = window.visualViewport;
   if (!vv) return;
@@ -3827,8 +3932,8 @@ function init() {
 ===================================================================== -->
 <script>
 function runSelfTest() {
-  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests() };
-  out.ok = out.concepts.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests() };
+  out.ok = out.concepts.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
   const pre = $('selftest');
   pre.style.display = 'block';
   pre.textContent = JSON.stringify(out, null, 1);
@@ -3920,6 +4025,80 @@ function conceptTests() {
     if (JSON.stringify(got) !== JSON.stringify(want)) failed.push(`fixture expected ${JSON.stringify(want)} got ${JSON.stringify(got)}`);
   }
   return [...failed, ...validateConcepts(CONCEPTS, TYPES.map(t => t.id), CONFIG.conceptCoverage)];
+}
+
+// ---- concept screen checks ----
+const CS_KEYS = [RATINGS_KEY, PB_KEY, HISTORY_KEY, 'drill-concepts-seen-v1'];
+function fixtureConcept(id, types, origin = []) {
+  return { id, name: `Fixture ${id}`, cat: Object.keys(CONFIG.categories)[0], week: 1, source: 'fixture', types, origin, feeds: [],
+    picture: { template: 'unitCircle', params: PICTURE_SAMPLES.unitCircle, caption: 'Fixture caption.', alt: 'fixture' }, algebra: 'Fixture $x^2$.', originText: 'Fixture origin.' };
+}
+// Run fn with fixture concepts appended to CONCEPTS and app state restored afterwards
+function withFixtures(list, fn) {
+  const saved = CS_KEYS.map(k => localStorage.getItem(k)), savedRS = RS, realNow = Date.now, n = CONCEPTS.length;
+  CONCEPTS.push(...list);
+  try { return fn(); } catch (e) { return [`concept screen threw: ${e.message}`]; } finally {
+    CONCEPTS.splice(n);
+    if (typeof CV !== 'undefined' && CV) closeConcept();
+    if (S) clearInterval(S.timer);
+    S = null; RS = savedRS; Date.now = realNow;
+    CS_KEYS.forEach((k, i) => saved[i] === null ? localStorage.removeItem(k) : localStorage.setItem(k, saved[i]));
+    $('keys').style.display = 'none';
+    showScreen('home');
+  }
+}
+function conceptScreenTests() {
+  const t = TYPES.map(x => x.id), list = [fixtureConcept('fxA', [t[0]], ['fxB', 'fxC']), fixtureConcept('fxB', [t[1]]), fixtureConcept('fxC', [t[2]])];
+  return [...withFixtures(list, screenTest), ...withFixtures(list, pauseResumeTest), ...tryKindsTest()];
+}
+function screenTest() {
+  const f = [];
+  localStorage.removeItem('drill-concepts-seen-v1');
+  openConcept('fxA');
+  if (!$('concept').classList.contains('on')) f.push('openConcept does not show the concept screen');
+  const tabs = [...$('concept').querySelectorAll('.tabs button')].map(b => b.textContent).join(',');
+  if (tabs !== 'Picture,Algebra,Origin,Try') f.push(`tabs are ${tabs}`);
+  if (!$('cBody').querySelector('svg')) f.push('Picture tab has no svg');
+  conceptTab('origin');
+  const links = $('cBody').querySelectorAll('.links button');
+  if (links.length !== 2) f.push(`Origin shows ${links.length} links, want 2`);
+  links[0]?.click();
+  if (!$('cName').textContent.includes('fxB')) f.push('Origin link does not open the linked concept');
+  closeConcept();
+  if (!$('home').classList.contains('on')) f.push('closeConcept does not return to the previous screen');
+  markSeen('fxA');
+  if (!seenConcepts().has('fxA') || !JSON.parse(localStorage.getItem('drill-concepts-seen-v1')).includes('fxA')) f.push('markSeen does not persist');
+  return f;
+}
+function pauseResumeTest() {
+  const f = [];
+  let now = Date.now();
+  Date.now = () => now;
+  startRound();
+  const left = S.end - now, log = JSON.stringify(S.log), sinceStart = now - S.start;
+  openConcept('fxA');
+  now += 30000;
+  closeConcept();
+  if (Math.abs(S.end - now - left) > 250) f.push(`clock did not pause: left ${left} before, ${S.end - now} after`);
+  if (now - S.start !== sinceStart) f.push('question clock did not pause');
+  if (JSON.stringify(S.log) !== log) f.push('opening a concept changed the round log');
+  if (!$('play').classList.contains('on')) f.push('closeConcept does not return to the round');
+  return f;
+}
+function tryKindsTest() {
+  const f = [], byKind = {};
+  for (const t of TYPES) for (let i = 0; i < 5; i++) { const q = t.gen(); if (q && !byKind[q.kind]) byKind[q.kind] = t.id; }
+  for (const [kind, id] of Object.entries(byKind)) f.push(...withFixtures([fixtureConcept('fxT', [id])], () => tryOne(kind, id)));
+  return f;
+}
+function tryOne(kind, id) {
+  openConcept('fxT');
+  conceptTab('try');
+  const q = CV.q;
+  if (q.kind === 'bool') $(q.a ? 'tryTrue' : 'tryFalse').click();
+  else { $('tryAnswer').value = answerInput(q); $('tryAnswer').dispatchEvent(new Event('input')); }
+  const ok = $('tryMsg').textContent.startsWith('✓') && seenConcepts().has('fxT');
+  return ok ? [] : [`Try (${kind}, ${id}) rejects its own answer ${JSON.stringify(q.a)}`];
 }
 
 // [canonical, kind, inputs that must pass, inputs that must fail, extra options]
