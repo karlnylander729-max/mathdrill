@@ -3408,7 +3408,7 @@ function nextQuestion() {
   input.value = '';
   tick();
   if (!isBool) focusInput(q.noKeyboard ? 'none' : q.mode || KEYSETS[q.kind].mode);
-  if (S.drill) conceptFirst(q.type);
+  if (S?.drill) conceptFirst(q.type);   // tick() may have ended the round (S = null)
 }
 // Focus drills only: a type whose concept was never opened shows the concept first (opening marks it seen, so once per concept)
 function conceptFirst(typeId) {
@@ -4169,7 +4169,7 @@ function entryTests() {
   const t = activeTypes().map(x => x.id), drill = CONFIG.drills.find(d => drillTypes(d).length >= 2);
   const shared = fixtureConcept('fxS', drillTypes(drill).slice(0, 2).map(x => x.id)), list = [fixtureConcept('fxA', [t[0]]), fixtureConcept('fxB', [t[1], t[2]])];
   return [...withFixtures(list, whyLinkTest), ...withFixtures([shared], () => conceptFirstOnceTest(drill, shared)),
-    ...withFixtures([fixtureConcept('fxM', [t[0]])], conceptFirstMainTest), ...withFixtures(list, accuracyTest), ...withFixtures(list, unopenedTest)];
+    ...withFixtures([fixtureConcept('fxM', [t[0]])], conceptFirstMainTest), ...withFixtures([shared], () => lastAnswerDrillTest(drill)), ...withFixtures(list, accuracyTest), ...withFixtures(list, unopenedTest)];
 }
 function whyLinkTest() {
   const f = [], noConcept = TYPES.find(x => !CONCEPT_OF[x.id]).id;
@@ -4201,6 +4201,16 @@ function conceptFirstOnceTest(drill, c) {
     nextQuestion(); if (CV) closeConcept();
   });
   return calls.length === 1 && calls[0] === 'fxS' ? [] : [`focus drill opened the shared concept ${calls.length} times, want 1`];
+}
+// The last answer lands after S.end: tick() inside nextQuestion ends the round, so concept-first must not read S
+function lastAnswerDrillTest(drill) {
+  startRound(drill.id);
+  if (CV) closeConcept();
+  localStorage.removeItem(SEEN_KEY);
+  S.end = Date.now() - 1000;
+  let calls = [];
+  try { calls = spyOpen(() => record(true)); } catch (e) { return [`answer after the round end threw: ${e.message}`]; }
+  return $('results').classList.contains('on') && !calls.length ? [] : ['answer after the round end: no results screen, or a concept opened'];
 }
 function conceptFirstMainTest() {
   localStorage.removeItem(SEEN_KEY);
