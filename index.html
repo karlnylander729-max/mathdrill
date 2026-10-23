@@ -3127,9 +3127,9 @@ const PICTURES = {
       draw();
     });
   },
-  // ndStepper { lines: [{ n: 3, formula: 'P \\land Q', rule: '∧I', deps: [1, 2] }, ...] (at most 7 lines) }; Next / Back reveal one line at a time
+  // ndStepper { lines: [{ n: 3, formula: 'P \\land Q', rule: '∧I', deps: [1, 2] }, ...] (at most 6 lines; formula is TeX, rule is plain Unicode text such as '∧I', '→E') }; Next / Back reveal one line at a time
   ndStepper(svg, p) {
-    const box = svgEl(svg, 'foreignObject', { x: 0, y: 0, width: 320, height: 168 }), g = svgEl(svg, 'g'), st = { k: 1 };
+    const box = svgEl(svg, 'foreignObject', { x: 0, y: 0, width: 320, height: 160 }), g = svgEl(svg, 'g'), st = { k: 1 };
     const draw = () => {
       g.replaceChildren();
       box.replaceChildren(ndRows(p.lines, st.k));
@@ -3141,8 +3141,8 @@ const PICTURES = {
   },
   // unitSquare { M: [[a, b], [c, d]] (integers; columns = images of e₁, e₂) }; drag the two arrow tips
   unitSquare(svg, p) {
-    const O = [160, 105], s = 25, scr = v => [O[0] + s * v[0], O[1] - s * v[1]];
-    for (let i = -6; i <= 6; i++) svgLine(svg, scr([i, -3.6]), scr([i, 3.6]), i ? PC.key : PC.base);
+    const O = [160, 95], s = 25, scr = v => [O[0] + s * v[0], O[1] - s * v[1]];
+    for (let i = -6; i <= 6; i++) svgLine(svg, scr([i, -3.2]), scr([i, 3.2]), i ? PC.key : PC.base);
     for (let j = -3; j <= 3; j++) svgLine(svg, scr([-6.2, j]), scr([6.2, j]), j ? PC.key : PC.base);
     const cv = [[p.M[0][0], p.M[1][0]], [p.M[0][1], p.M[1][1]]], g = svgEl(svg, 'g'), draw = () => { g.replaceChildren(); unitSquareDraw(g, cv, scr); };
     draw();
@@ -3203,7 +3203,7 @@ function matrixCells(g, M, p, y0) {
 }
 function matrixButtons(st) {
   const n = st.M.length, i = st.i, j = (i + 1) % n, k = MATRIX_KS[st.k];
-  const btn = (c, r, label, act) => ({ x: 8 + c * 104, y: 124 + r * 32, w: 96, h: 26, label, act });
+  const btn = (c, r, label, act) => ({ x: 8 + c * 104, y: 112 + r * 38, w: 96, h: 32, label, act });
   const run = t => () => { const op = { t, i, j, k }; st.M = matrixRowOp(st.M, op); st.said = matrixOpText(op); };
   return [
     btn(0, 0, `row R${i + 1}`, () => { st.i = j; }),
@@ -3255,7 +3255,7 @@ function argandPoint(g, scr, it) {
   svgText(g, [P[0] + 9, P[1] - 7], it.name, { fill: it.col, 'font-weight': 600 });
 }
 function argandDraw(g, pts, scr) {
-  const items = [{ z: pts[0], name: 'z', col: PC.acc, R: 20, legs: pts.length === 1, drag: true }];
+  const items = [{ z: pts[0], name: 'z', col: PC.acc, R: 20, legs: true, drag: true }];
   if (pts[1]) items.push({ z: pts[1], name: 'w', col: PC.good, R: 27, drag: true }, { z: cmul(pts[0], pts[1]), name: 'zw', col: PC.ink, R: 34, prod: true });
   items.forEach(it => { it.info = argandInfo(it.z); });
   items.forEach(it => argandPoint(g, scr, it));
@@ -3270,10 +3270,10 @@ function argandDraw(g, pts, scr) {
 const ndView = (lines, k) => ({ shown: lines.slice(0, k), cited: k > 0 ? lines[k - 1].deps || [] : [] });
 function ndRows(lines, k) {
   const { shown, cited } = ndView(lines, k), box = document.createElement('div');
-  box.style.cssText = `padding:6px 8px;color:${PC.ink};font-size:13px;line-height:1.5`;
+  box.style.cssText = `padding:4px 8px;height:152px;overflow:hidden;color:${PC.ink};font-size:13px;line-height:1.4`;
   shown.forEach((l, i) => {
     const row = Object.assign(document.createElement('div'), { className: 'nd-row' });
-    row.style.cssText = `display:flex;gap:8px;align-items:center;padding:0 6px;border-radius:6px;min-height:20px;`
+    row.style.cssText = `display:flex;gap:8px;align-items:center;padding:0 6px;border-radius:6px;min-height:22px;`
       + (cited.includes(l.n) ? `background:rgba(110,168,254,.28);` : '') + (i === k - 1 ? `outline:1px solid ${PC.acc};` : '');
     const rule = [l.rule, (l.deps || []).join(', ')].filter(Boolean).join(' ');
     row.innerHTML = `<span style="color:${PC.muted};width:18px">${l.n}</span><span style="flex:1">${katex.renderToString(l.formula, { throwOnError: false })}</span><span style="color:${PC.muted}">${rule}</span>`;
@@ -3283,8 +3283,8 @@ function ndRows(lines, k) {
 }
 function ndButtons(lines, st) {
   return [
-    { x: 8, y: 174, w: 96, h: 26, label: '← Back', off: st.k <= 1, act: () => { st.k--; } },
-    { x: 216, y: 174, w: 96, h: 26, label: 'Next →', off: st.k >= lines.length, act: () => { st.k++; } },
+    { x: 8, y: 164, w: 96, h: 32, label: '← Back', off: st.k <= 1, act: () => { st.k--; } },
+    { x: 216, y: 164, w: 96, h: 32, label: 'Next →', off: st.k >= lines.length, act: () => { st.k++; } },
   ];
 }
 function ndReadout(lines, k) {
@@ -4369,7 +4369,7 @@ const PICTURE_SAMPLES = {
   setDiagram: { sets: ['A', 'B'], shade: ['A', 'AB'] },
   matrixGrid: { M: [[1, 2, 3], [4, 5, 6]], row: 0, col: 1, ops: true },
   argand: { z: [1, 1], w: [0, 1] },
-  ndStepper: { lines: [{ n: 1, formula: 'P \\land Q', rule: 'premise' }, { n: 2, formula: 'P', rule: '\\land E', deps: [1] }, { n: 3, formula: 'Q \\land P', rule: '\\land I', deps: [1, 2] }] },
+  ndStepper: { lines: [{ n: 1, formula: 'P \\land Q', rule: 'premise' }, { n: 2, formula: 'P', rule: '∧E', deps: [1] }, { n: 3, formula: 'Q \\land P', rule: '∧I', deps: [1, 2] }] },
   unitSquare: { M: [[2, 1], [1, 1]] },
 };
 function pictureFitsTest(svg, name) {
@@ -4418,6 +4418,7 @@ function pictureBehaviourTests() {
   same('matrix add', matrixRowOp(M, { t: 'add', i: 1, j: 0, k: K(-3) }), matrixStart([[1, 2], [0, -2]]));
   same('matrix scale', matrixRowOp(M, { t: 'scale', i: 0, k: [1, 2] }), [[[1, 2], [1, 1]], [[3, 1], [4, 1]]]);
   same('matrix op text', matrixOpText({ t: 'add', i: 1, j: 0, k: K(-3) }), 'R2 → R2 − 3·R1');
+  f.push(...pictureWiringTests(same));
   const z = argandInfo([1, 1]);
   same('argand z=1+i', [z.zs, z.rs, z.ths], ['1 + i', '√2', 'π/4']);
   same('argand arg −i', argandInfo([0, -1]).ths, '−π/2');
@@ -4432,6 +4433,27 @@ function pictureBehaviourTests() {
   same('unitSquare det', unitSquareInfo([[2, 1], [1, 1]]).det, 1);
   same('unitSquare flip', unitSquareInfo([[0, 1], [1, 0]]).orient, 'orientation reversed');
   if (!pictureText('unitSquare', { M: [[2, 1], [1, 1]] }).includes('det = 1')) f.push('unitSquare readout text missing');
+  return f;
+}
+
+// Button wiring: matrixButtons act() changes the matrix, ndButtons Next advances; ndStepper line cap and plain-text rules
+function pictureWiringTests(same) {
+  const f = [], st = { M: matrixStart([[1, 2], [3, 4]]), start: [[1, 2], [3, 4]], i: 0, k: 5, said: '' };
+  matrixButtons(st)[3].act();
+  same('button swap', st.M, matrixStart([[3, 4], [1, 2]]));
+  matrixButtons(st)[4].act();
+  same('button add (R1 + 2·R2)', st.M, matrixStart([[5, 8], [1, 2]]));
+  matrixButtons(st)[2].act();
+  same('button reset', st.M, matrixStart([[1, 2], [3, 4]]));
+  const lines = PICTURE_SAMPLES.ndStepper.lines, ns = { k: 1 };
+  same('Back off at start', ndButtons(lines, ns)[0].off, true);
+  ndButtons(lines, ns)[1].act();
+  same('Next advances', ns.k, 2);
+  const nd = [PICTURE_SAMPLES.ndStepper, ...CONCEPTS.map(c => c.picture).filter(pc => pc && pc.template === 'ndStepper').map(pc => pc.params)];
+  for (const par of nd) {
+    if (par.lines.length > 6) f.push(`ndStepper has ${par.lines.length} lines (max 6)`);
+    if (par.lines.some(l => /[\\$]/.test(l.rule))) f.push('ndStepper rule must be plain text');
+  }
   return f;
 }
 
