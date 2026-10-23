@@ -570,7 +570,7 @@ const TYPES = [
   }},
   { id: 'logic-sentence', name: 'Sentence?', par: 6, cat: 'logic', week: 3, weight: 1, gen() {
     const s = balanced(() => mutate(abbrev(rfDeep(3, ['P', 'Q', 'R']))), isSentence);
-    return { q: `Sentence, official or abbreviated?<br><span class="f">${s}</span>`, a: isSentence(s), kind: 'bool', labels: ['Yes', 'No'] };
+    return { q: `Is this a sentence of L<sub>1</sub>?<br><span class="f">${s}</span><br><span class="muted">official or an allowed abbreviation both count</span>`, a: isSentence(s), kind: 'bool', labels: ['Yes', 'No'] };
   }},
   { id: 'logic-restore', name: 'Restore brackets', par: 14, cat: 'logic', week: 3, weight: 1, gen() {
     const f = rfDeep(3, ['P', 'Q', 'R']), disp = show(f), ans = official(f);
