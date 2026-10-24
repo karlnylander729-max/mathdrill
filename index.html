@@ -46,6 +46,11 @@ const CONFIG = {
   // Focus drills: 120 s rounds on a few types, always available (ahead of lectures too). Own best score and history; ratings and mastery are shared.
   // Types marked hub: false appear only here (not in the main round, not in the overall rating).
   drills: [
+    // Class-test drills: every drillable type on the test, shown at the top of home until the test day ends. Delete after the test.
+    { id: 'ct1-seq',  name: 'S&S Class Test 1',      until: '2026-10-28', types: ['seq-interval', 'seq-setdiff', 'seq-modulus', 'seq-count', 'seq-negation', 'seq-quant', 'seq-bigunion', 'seq-bounded', 'seq-maxmin'] },
+    { id: 'ct1-calc', name: 'Calculus Class Test 1', until: '2026-10-28', types: ['calc-log', 'calc-ln', 'calc-loglaw', 'calc-logcombine', 'calc-logbase', 'calc-exp', 'calc-explaw', 'calc-expsolve',
+      'calc-trig', 'calc-arc', 'calc-arc-branch', 'calc-angle', 'calc-inverse', 'calc-series', 'calc-cx-mul', 'calc-cx-div', 'calc-cx-mod', 'calc-cx-arg', 'calc-cx-euler', 'calc-ipow',
+      'calc-unity', 'calc-compose', 'calc-hyp', 'calc-hypid'] },
     { id: 'matmul',      name: 'Matrix multiplication', types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'] },
     { id: 'rowred',      name: 'Row reduction',         types: ['la-rowop', 'la-elimk', 'la-elementary', 'la-soltype'] },
     { id: 'subspaces',   name: 'Subspaces & span',      types: ['la-subspace', 'la-inspan', 'la-indep', 'la-basis'] },
@@ -393,6 +398,46 @@ const TYPES = [
     const arg = s > 0 ? T`\ln ${a}` : T`\ln\frac{1}{${a}}`;
     return { q: T`$${'\\' + f}(${arg})$`, a: ans.s, show: ans.tex, kind: 'num', val: Math[f](s * Math.log(a)) };
   }},
+  { id: 'calc-logbase', name: 'Change of log base', par: 12, cat: 'calc', week: 1, weight: 1, gen() {
+    const b = pick([2, 3]), p = ri(1, 4), r = ri(1, 4), m = ri(1, 12), k = ri(1, 6);
+    if (p === r || b ** Math.max(p, r) > 81) return null;
+    const ans = frac(m * r, p * k), val = (m / (p * Math.log(b))) / (k / (r * Math.log(b)));
+    if (Math.random() < 0.4) {   // log_{b^p}(b^m) on its own
+      const v = frac(m, p);
+      return { q: T`$\log_{${b ** p}} ${b}^{${m}}$`, a: v.s, show: v.tex, kind: 'num', val: m * Math.log(b) / (p * Math.log(b)) };
+    }
+    return { q: T`For which $a$ is $\log_{${b ** p}}(e^{${m}}) = a\log_{${b ** r}}(e^{${k}})$?`, a: ans.s, show: ans.tex, kind: 'num', val };
+  }},
+  { id: 'calc-angle', name: 'Compound & double angle', par: 15, cat: 'calc', week: 2, weight: 1, gen() {
+    if (Math.random() < 0.5) {   // odd multiples of π/12 via π/4 ± π/6 or the half-angle formula
+      const m = pick([1, 5, 7, 11, -1, -5, -7, -11]), f = pick(['sin', 'cos', 'tan']), v = Math[f](m * Math.PI / 12);
+      const [s, tex] = ODD12.find(e => Math.abs(Math.abs(v) - e[2]) < 1e-9);
+      return { q: T`$${'\\' + f}\left(${piFrac(m, 12).tex}\right)$`, a: v < 0 ? `-(${s})` : s, show: (v < 0 ? '-' : '') + tex, kind: 'num', val: v };
+    }
+    const [[x, y], h] = pick([[[3, 4], 5], [[4, 3], 5], [[5, 12], 13], [[12, 5], 13], [[8, 15], 17]]), quad = ri(1, 4);
+    const c = (quad === 1 || quad === 4 ? 1 : -1) * x, s = (quad <= 2 ? 1 : -1) * y, given = pick(['sin', 'cos']), want = pick(['sin', 'cos']);
+    const ans = want === 'sin' ? frac(2 * s * c, h * h) : frac(c * c - s * s, h * h), g = frac(given === 'sin' ? s : c, h);
+    const range = ['', T`0 < \theta < \tfrac\pi2`, T`\tfrac\pi2 < \theta < \pi`, T`\pi < \theta < \tfrac{3\pi}2`, T`\tfrac{3\pi}2 < \theta < 2\pi`][quad];
+    const th = Math.atan2(s, c);
+    return { q: T`$${'\\' + given}\theta = ${g.tex}$, $${range}$. $\ ${'\\' + want}(2\theta) = ?$`, a: ans.s, show: ans.tex, kind: 'num', val: Math[want](2 * th) };
+  }},
+  { id: 'calc-unity', name: 'Root of zⁿ = w', par: 15, cat: 'calc', week: 3, weight: 1, gen() {
+    const n = pick([2, 3, 4, 6]), R = pick([1, 2]), phi = pick([0, 12, 6, -6]), quad = ri(1, 4);   // phi, angles in units of π/12
+    const roots = Array.from({ length: n }, (_, k) => ((phi + 24 * k) / n + 36) % 24 - 12).filter(m => {
+      const lo = [0, 0, 6, -12, -6][quad];
+      return m > lo && m < lo + 6;
+    });
+    if (roots.length !== 1 || !Number.isInteger(roots[0]) || (roots[0] % 2 && roots[0] % 3)) return null;
+    const th = roots[0] * Math.PI / 12, re = niceScaled(R * Math.cos(th)), im = niceScaled(R * Math.sin(th)), W = R ** n;
+    const w = { 0: String(W), 12: `-${W}`, 6: `${W === 1 ? '' : W}i`, '-6': `-${W === 1 ? '' : W}i` }[phi];
+    const q = ['', 'first', 'second', 'third', 'fourth'][quad];
+    return { q: T`The root of $z^{${n}} = ${w}$ in the open ${q} quadrant, as $a + bi$`, a: `${re.s} + (${im.s})*i`, kind: 'num',
+             keys: [...CX_KEYS, 'sqrt('], show: cxTeX(re, im), check: Math.abs(re.v - R * Math.cos(th)) < 1e-9 && Math.abs(im.v - R * Math.sin(th)) < 1e-9 };
+  }},
+  { id: 'calc-hypid', name: 'Hyperbolic identity', par: 12, cat: 'calc', week: 3, weight: 1, gen() {
+    const [lhs, a, show] = pick(HYP_IDS);
+    return { q: T`Simplify to one term: $${lhs}$`, a, show, kind: 'expr', dom: [0.3, 2] };
+  }},
   { id: 'calc-series', name: 'Series coefficient', par: 8, cat: 'calc', week: 1, weight: 1, gen() {
     const [tex, coef] = pick(SERIES)(), n = ri(1, 6), c = coef(n);
     if (c[0] === 0 && Math.random() < 0.7) return null;
@@ -660,6 +705,20 @@ const TYPES = [
     const a = ri(-9, 9), r = ri(1, 9);
     return { q: T`$\{x\in\mathbb R : \lvert ${poly([[1, 'x'], [-a, '']])} \rvert = ${r}\}$`, a: [`{${a - r},${a + r}}`, `{${a + r},${a - r}}`], kind: 'text',
              show: T`\{${a - r}, ${a + r}\}`, keys: ['{', '}', ',', '-'], hint: 'a set, e.g. {2,4}' };
+  }},
+  { id: 'seq-setdiff', name: 'Interval set difference', par: 10, cat: 'seq', week: 1, weight: 1, gen() {
+    const I = randInterval(), J = randInterval();
+    const left = J.lo > -Infinity ? intersect(I, { lo: -Infinity, hi: J.lo, lc: false, hc: !J.lc }) : '∅';
+    const right = J.hi < Infinity ? intersect(I, { lo: J.hi, hi: Infinity, lc: !J.hc, hc: false }) : '∅';
+    const parts = [left, right].filter(p => p !== '∅'), res = parts.join(' U ') || '∅';
+    if (res === ivStr(I)) return null;   // J misses I: too easy
+    return { q: T`$${ivTeX(I)} \setminus ${ivTeX(J)}$`, a: res, kind: 'interval', show: setTeX(res) };
+  }},
+  { id: 'seq-bigunion', name: 'Infinite ∪ / ∩: true?', par: 12, cat: 'seq', week: 1, weight: 1, gen() {
+    const a = ri(-3, 3), b = a + ri(1, 3), right = Math.random() < 0.5;
+    const [op, set, yes, no] = pick(BIG_SETS)(a, b);
+    const rhs = right ? yes : pick(no);
+    return { q: T`$\displaystyle${'\\' + op}_{n=1}^{\infty} ${set} = ${rhs}$`, a: right, kind: 'bool', labels: ['True', 'False'] };
   }},
 
   // ---------- Elementary Logic ----------
@@ -1588,7 +1647,7 @@ const CONCEPTS = [
     originText: String.raw`Built from repeated multiplication: $x^n \cdot x^m = x^{n+m}$ (Def 1.13) forces $x^0 = 1$, $x^{-n} = 1/x^n$ and roots for fractions. Feeds: logarithms, which invert $a^x$.` },
   { id: 'log-definition-laws', name: 'Logs: powers and laws', cat: 'calc', week: 1,
     source: 'Calculus_1_2026-27.pdf §1.4: Def 1.20 and Remark 1.21 pp. 15 (log_a y is the power of a that gives y; ln = log_e), identities (i)–(iii) p. 15, Helpful hint and Example 1.22 p. 16',
-    types: ['calc-log', 'calc-ln', 'calc-loglaw', 'calc-logcombine'], origin: ['exponent-laws'], feeds: ['solve-exponential', 'hyperbolic-at-ln'],
+    types: ['calc-log', 'calc-ln', 'calc-loglaw', 'calc-logcombine', 'calc-logbase'], origin: ['exponent-laws'], feeds: ['solve-exponential', 'hyperbolic-at-ln'],
     picture: { template: 'graphSlider', params: { expr: 'log(x, k)', k: [2, 1.2, 9.2], xr: [0, 9], yr: [-3, 3], label: 'base', level: 'log(8, k)' },
       caption: 'Drag the base. The dashed line is log of 8 in that base. At base 2 it sits at 3, because 2³ = 8.',
       alt: 'Graph of log base k of x for x from 0 to 9 with a slider for the base k; a dashed line marks log base k of 8, equal to 3 at k = 2.' },
@@ -1620,7 +1679,7 @@ const CONCEPTS = [
     originText: String.raw`Built from the definition of a function: the output of $g$ must lie in the domain of $f$ (Def 3.14). Feeds: the chain rule, which differentiates $f(g(x))$.` },
   { id: 'hyperbolic-at-ln', name: 'Hyperbolic functions at ln a', cat: 'calc', week: 3,
     source: 'Calculus_1_2026-27.pdf §3.1: Def 3.3 p. 36 (tanh = sinh/cosh), p. 37 (cosh even, sinh odd), eqs (3.3)–(3.5) p. 38 (sinh x = ½(eˣ − e⁻ˣ), cosh x = ½(eˣ + e⁻ˣ), tanh x = (e²ˣ − 1)/(e²ˣ + 1))',
-    types: ['calc-hyp'], origin: ['log-definition-laws'], feeds: [],
+    types: ['calc-hyp'], origin: ['log-definition-laws'], feeds: ['hyperbolic-identities'],
     picture: { template: 'graphSlider', params: { expr: 'sinh(x)', k: [2, 0.2, 4.2], xr: [-2.5, 2.5], yr: [-3, 3], label: 'a', level: '(k - 1/k)/2' },
       caption: 'Drag a. The dashed line is sinh(ln a) = (a − 1/a)/2. The curve y = sinh x crosses it at x = ln a.',
       alt: 'Graph of y = sinh x with a slider for a and a dashed line at height (a - 1/a)/2, which the curve meets at x = ln a.' },
@@ -1908,11 +1967,11 @@ const CONCEPTS = [
     originText: String.raw`Built from the definition of subset and the size $\#S$ (§2.1–2.2): each element is in the subset or not. Feeds: $2^n$ as a growth rate (§11.2).` },
   { id: 'interval-set-ops', name: 'Interval intersection and union', cat: 'seq', week: 1,
     source: '115lecturenotes(2026).pdf §2.3–2.4 p. 9 (interval notation; (−∞, 1) ∩ [−1, ∞) = [−1, 1), (−1, 0] ∪ [0, 1] = (−1, 1], (−1, 0] ∩ [0, 1] = {0}); Exercises1.pdf Q2; Friday 16th October 2026.pdf p. 2 (A ∪ B and A ∩ B as intervals)',
-    types: ['seq-interval'], origin: [], feeds: ['bounds-of-sets', 'modulus-interval'],
+    types: ['seq-interval', 'seq-setdiff'], origin: [], feeds: ['bounds-of-sets', 'modulus-interval', 'infinite-unions'],
     picture: { template: 'numberLine', params: { range: [-4, 5], intervals: ['[0,2]'], points: [2.5], draggable: true },
       caption: '(−1, 2] ∩ [0, 4) = [0, 2]: larger left end, smaller right end, both kept. Drag x to test.',
       alt: 'Number line with the closed interval [0, 2], the intersection of (−1, 2] and [0, 4), and a draggable point x that reports whether it is in it.' },
-    algebra: String.raw`Intersection: take the larger left end and the smaller right end. An end stays only if it is in both sets; empty if the ends cross; one point if they meet and both are closed.<br>$(-\infty, 1) \cap [-1, \infty) = [-1, 1)$<br>Union: if the sets overlap, or touch at an end that one contains, join them.`,
+    algebra: String.raw`Intersection: larger left end, smaller right end; an end stays only if both sets contain it. Empty if the ends cross.<br>$(-\infty, 1) \cap [-1, \infty) = [-1, 1)$<br>Union: join sets that overlap or touch. Difference $A \setminus B$: the parts of $A$ outside $B$. Where $B$ is closed, $A$ becomes open.`,
     originText: String.raw`Built from interval notation (§2.4) and the meanings of $\cap$ (in both) and $\cup$ (in either). Feeds: upper and lower bounds of a set, which are themselves intervals.` },
   { id: 'quantifier-statements', name: 'Reading quantified statements', cat: 'seq', week: 2,
     source: '115lecturenotes(2026).pdf §5.2–5.3 pp. 21–22 (∀ and ∃ over a domain; negation swaps ∃ and ∀, e.g. ∀k ∈ ℕ ∃j ∈ ℕ: k < j has negation ∃k ∀j: k ≥ j); Exercises2.pdf Q1–Q2; Tuesday 6th October 2026.pdf p. 2',
@@ -2251,6 +2310,38 @@ const CONCEPTS = [
       alt: 'Formula tree of P ∧ Q → ¬R ∨ P: root →, children ∧ (P, Q) and ∨ (¬R, P). Tapping a node lights its subtree.' },
     algebra: String.raw`Official: one pair per binary connective, none for ¬.<br>$((P \land Q) \to (\neg R \lor P))$<br>Conventions drop (1) outer brackets, (2) inner pairs in $P \land Q \land R$ (grouped left). (3) $\land, \lor$ bind tighter than $\to, \leftrightarrow$:<br>$P \land Q \to \neg R \lor P$<br>Nothing ranks $\to$ against $\leftrightarrow$, or $\land$ against $\lor$. Main connective: outside all brackets (after dropping an outer pair), $\to$ or $\leftrightarrow$, else rightmost $\land$ or $\lor$, else $\neg$.`,
     originText: String.raw`Built from the definition of a sentence of L₁ (§2.1): sentence letters, then ¬φ and (φ ∧ ψ) and so on. Feeds: truth tables, where the main connective is evaluated last.` },
+  { id: 'infinite-unions', name: 'Infinite unions and intersections', cat: 'seq', week: 1,
+    source: '115lecturenotes(2026).pdf §2.3 p. 8 (union, intersection); Friday 2nd October 2026.pdf (⋃[j, j+1], ⋃(−n, n) = ℝ); Friday 16th October 2026.pdf p. 1 (proof that ⋃(1/n, n) = (0, ∞)); Class Test 1 Q4 in 2022-23 to 2025-26',
+    types: ['seq-bigunion'], origin: ['interval-set-ops'], feeds: [],
+    picture: { template: 'numberLine', params: { range: [-1, 4], intervals: ['(0,3]'], points: [0.25, 2], draggable: true },
+      caption: '⋃[1/n, 3] = (0, 3]. Any x > 0 is in [1/n, 3] once 1/n < x. Zero never is.',
+      alt: 'Number line with the interval (0, 3], open at 0 and closed at 3, the union of [1/n, 3], and draggable test points.' },
+    algebra: String.raw`Test each endpoint on its own. Union: $x$ is in it if some $n$ puts $x$ in the set. Intersection: $x$ must be in the set for every $n$. A $\tfrac1n$ shrinks to 0 but never reaches it:<br>$\bigcap_{n}\left(-\tfrac1n, \tfrac1n\right) = \{0\}, \qquad \bigcup_n \left[\tfrac1n, 3\right] = (0, 3]$<br>Trap: $\bigcup_n (n, n+1)$ misses every integer.`,
+    originText: String.raw`Built from finite union and intersection of intervals (§2.3–2.4), applied to a family indexed by $n \in \mathbb N$. Feeds: limits, where $\tfrac1n \to 0$ is the same idea.` },
+  { id: 'compound-angles', name: 'Compound and double angles', cat: 'calc', week: 2,
+    source: 'Calculus_1_2026-27.pdf §2.5 pp. 30–31 (double-angle formulae from Euler’s formula; Exercise 2.24 tan(θ + ϕ); Example 2.25, adapted from the January 2021 exam); Solutions2.pdf p. 8 (cos(π/12) by the half-angle formula, no calculator)',
+    types: ['calc-angle'], origin: ['exact-trig', 'complex-modulus-arg'], feeds: [],
+    picture: { template: 'unitCircle', params: { angleM: 2, showTriangle: true },
+      caption: 'Drag the point. Odd multiples of π/12 are sums of known angles: π/12 = π/4 − π/6.',
+      alt: 'Unit circle with a draggable point; the angle can be split into a sum or difference of standard angles.' },
+    algebra: String.raw`Split the angle into known ones, then expand:<br>$\sin(a \pm b) = \sin a\cos b \pm \cos a\sin b, \quad \cos(a \pm b) = \cos a\cos b \mp \sin a\sin b$<br>Double: $\sin 2\theta = 2\sin\theta\cos\theta$, $\cos 2\theta = \cos^2\theta - \sin^2\theta$. Given $\sin\theta$, get $\cos\theta$ from Pythagoras and fix its sign by the quadrant.`,
+    originText: String.raw`Built from Euler's formula: $e^{i(a+b)} = e^{ia}e^{ib}$, then compare real and imaginary parts. Uses exact values for $\tfrac\pi6, \tfrac\pi4, \tfrac\pi3$.` },
+  { id: 'roots-of-unity', name: 'Roots of zⁿ = w', cat: 'calc', week: 3,
+    source: 'Calculus_1_2026-27.pdf §2.6 p. 33 (Def 2.28 roots of unity, and nth roots via polar form); Exercises3.pdf Q2–Q4 (sixth roots of unity, (z − i)⁶ = 64, primitive roots)',
+    types: ['calc-unity'], origin: ['complex-modulus-arg'], feeds: [],
+    picture: { template: 'argand', params: { z: [0, 1], w: [0, 1] },
+      caption: 'Times i is a quarter-turn. So i⁴ = 1, and 1, i, −1, −i are the four 4th roots of unity.',
+      alt: 'Complex plane with z = i and w = i and their product −1, showing that multiplying by i turns by a right angle.' },
+    algebra: String.raw`Write $w = Re^{i\varphi}$. The $n$ roots have modulus $R^{1/n}$ and arguments $\tfrac{\varphi + 2\pi k}{n}$, $k = 0, \dots, n-1$:<br>$z_k = R^{1/n} e^{i(\varphi + 2\pi k)/n}$<br>They sit evenly spaced on a circle, $\tfrac{2\pi}{n}$ apart. Pick the one in the asked quadrant, then convert to $a + bi$.`,
+    originText: String.raw`Built from polar form and De Moivre: $(re^{i\theta})^n = r^n e^{in\theta}$, so the modulus takes an $n$th root and the angle divides by $n$.` },
+  { id: 'hyperbolic-identities', name: 'Hyperbolic identities', cat: 'calc', week: 3,
+    source: 'Calculus_1_2026-27.pdf §3.1 pp. 36–38 (sinh, cosh, tanh from exponentials; cosh² − sinh² = 1); Exercise 3.12 p. 41 (hyperbolic double-angle formulae); Example 3.13 p. 41 (coth z − tanh z, adapted from the January 2021 exam)',
+    types: ['calc-hypid'], origin: ['hyperbolic-at-ln'], feeds: [],
+    picture: { template: 'graphSlider', params: { expr: 'cosh(x)^2 - k*sinh(x)^2', k: [0.5, 0, 1.5], xr: [-2, 2], yr: [-2, 4], label: 'k' },
+      caption: 'Drag k to 1. The curve goes flat at height 1, because cosh² x − sinh² x = 1 for every x.',
+      alt: 'Graph of cosh squared x minus k times sinh squared x with a slider for k; at k = 1 it is the constant 1.' },
+    algebra: String.raw`Same shapes as the trig identities, with some signs flipped:<br>$\cosh^2 x - \sinh^2 x = 1, \quad \sinh 2x = 2\sinh x\cosh x, \quad \cosh 2x = \cosh^2 x + \sinh^2 x$<br>Fractions: put everything over $\sinh x\cosh x$ first. Then $\coth x - \tanh x = \tfrac{1}{\sinh x\cosh x} = \tfrac{2}{\sinh 2x}$.`,
+    originText: String.raw`Built from $\cosh x = \tfrac12(e^x + e^{-x})$ and $\sinh x = \tfrac12(e^x - e^{-x})$: multiply out and the cross terms cancel. Also $\cosh x \pm \sinh x = e^{\pm x}$.` },
 ];
 const CONCEPT_OF = {};
 for (const c of CONCEPTS) for (const t of c.types) CONCEPT_OF[t] = c.id;
@@ -2510,6 +2601,48 @@ function ivStr({ lo, hi, lc, hc }) {
 const ivTeX = I => setTeX(ivStr(I));
 const setTeX = s => s.replace(/inf/g, T`\infty`).replace(/ U /g, T` \cup `)
   .replace(/\{/g, T`\{`).replace(/\}/g, T`\}`).replace(/^R$/, T`\mathbb R`).replace('∅', T`\varnothing`);
+// Infinite unions / intersections over n ≥ 1: (a, b) -> [op, set TeX, true RHS, [false RHS…]]
+const BIG_SETS = (() => {
+  const pn = (c, k = 1) => poly([[c, ''], [k, T`\tfrac1n`]]), pN = c => poly([[1, 'n'], [c, '']]);   // c ± 1/n, n + c
+  return [
+    (a, b) => ['bigcap', T`\left(${pn(a, -1)},\ ${pn(b)}\right)`, `[${a}, ${b}]`, [`(${a}, ${b})`, `[${a - 1}, ${b + 1}]`]],
+    (a, b) => ['bigcap', T`\left[${a},\ ${pn(b)}\right)`, `[${a}, ${b}]`, [`[${a}, ${b})`, `[${a}, ${b + 1})`]],
+    (a, b) => ['bigcup', T`\left[${pn(a)},\ ${b}\right]`, `(${a}, ${b}]`, [`[${a}, ${b}]`, `[${a + 1}, ${b}]`]],
+    (a, b) => ['bigcup', T`\left(${pn(a)},\ ${pn(b + 2, -1)}\right)`, `(${a}, ${b + 2})`, [`[${a}, ${b + 2}]`, `(${a + 1}, ${b + 1})`]],
+    (a) => ['bigcap', T`\left(${pn(a, -1)},\ ${pn(a)}\right)`, T`\{${a}\}`, [T`\varnothing`, `(${a - 1}, ${a + 1})`]],
+    (a) => ['bigcap', T`\left(${a},\ ${pn(a)}\right)`, T`\varnothing`, [T`\{${a}\}`, `(${a}, ${a + 1})`]],
+    (a) => ['bigcap', T`\left[${a},\ ${pn(a)}\right)`, T`\{${a}\}`, [T`\varnothing`]],
+    (a) => ['bigcup', T`(${a},\ ${pN(a)})`, T`(${a}, \infty)`, [T`[${a}, \infty)`, T`(${a + 1}, \infty)`]],
+    (a) => ['bigcup', T`\left[${pn(a)},\ ${pN(a)}\right]`, T`(${a}, \infty)`, [T`[${a}, \infty)`, T`[${a + 1}, \infty)`]],
+    () => ['bigcup', T`(-n,\ n)`, T`\mathbb R`, [T`(-1, 1)`, T`\mathbb R \setminus \{0\}`]],
+    (a) => ['bigcap', T`[${pN(a)},\ \infty)`, T`\varnothing`, [T`[${a + 1}, \infty)`]],
+    (a) => ['bigcup', T`(${pN(a)},\ ${pN(a + 1)})`, T`(${a + 1}, \infty) \setminus \mathbb Z`, [T`(${a + 1}, \infty)`, T`[${a + 1}, \infty)`]],
+    (a) => ['bigcup', T`[${pN(a)},\ ${pN(a + 1)}]`, T`[${a + 1}, \infty)`, [T`(${a + 1}, \infty)`, T`[${a + 1}, ${a + 2}]`]],
+  ];
+})();
+// |sin|, |cos|, |tan| at odd multiples of π/12: [answer, TeX, value]
+const ODD12 = [['(sqrt(6)-sqrt(2))/4', T`\frac{\sqrt6-\sqrt2}{4}`, (Math.sqrt(6) - Math.SQRT2) / 4], ['(sqrt(6)+sqrt(2))/4', T`\frac{\sqrt6+\sqrt2}{4}`, (Math.sqrt(6) + Math.SQRT2) / 4],
+  ['2-sqrt(3)', T`2-\sqrt3`, 2 - Math.sqrt(3)], ['2+sqrt(3)', T`2+\sqrt3`, 2 + Math.sqrt(3)]];
+// R·cos or R·sin at a standard angle, R ∈ {1, 2}, as { s, tex, v }
+function niceScaled(x) {
+  const t = [[0, '0', '0'], [0.5, '1/2', T`\frac12`], [Math.SQRT1_2, 'sqrt(2)/2', T`\frac{\sqrt2}{2}`], [Math.sqrt(3) / 2, 'sqrt(3)/2', T`\frac{\sqrt3}{2}`],
+    [1, '1', '1'], [Math.SQRT2, 'sqrt(2)', T`\sqrt2`], [Math.sqrt(3), 'sqrt(3)', T`\sqrt3`], [2, '2', '2']].find(e => Math.abs(Math.abs(x) - e[0]) < 1e-9);
+  const neg = x < -1e-12;
+  return { s: (neg ? '-' : '') + t[1], tex: (neg ? '-' : '') + t[2], v: x };
+}
+// [expression, answer, answer TeX]; all collapse to one hyperbolic term
+const HYP_IDS = [
+  [T`\coth x - \tanh x`, '2/sinh(2*x)', T`\frac{2}{\sinh 2x}`],
+  [T`\coth x + \tanh x`, '2*cosh(2*x)/sinh(2*x)', T`2\coth 2x`],
+  [T`2\sinh x\cosh x`, 'sinh(2*x)', T`\sinh 2x`],
+  [T`\cosh^2 x + \sinh^2 x`, 'cosh(2*x)', T`\cosh 2x`],
+  [T`\cosh^2 x - \sinh^2 x`, '1', '1'],
+  [T`1 - \tanh^2 x`, '1/cosh(x)^2', T`\operatorname{sech}^2 x`],
+  [T`\coth^2 x - 1`, '1/sinh(x)^2', T`\operatorname{csch}^2 x`],
+  [T`\cosh x + \sinh x`, 'e^x', T`e^x`],
+  [T`\cosh x - \sinh x`, 'e^(-x)', T`e^{-x}`],
+  [T`\frac{2\tanh x}{1 + \tanh^2 x}`, 'tanh(2*x)', T`\tanh 2x`],
+];
 
 // Quantified statements over N = {1,2,...}, Z, R: (A, B, c) -> [tex, truth]
 const bb = D => T`\mathbb ${D}`;
@@ -4817,8 +4950,18 @@ function drillButton(d) {
   const pb = loadJSON(pbKey(d), null), r = Math.round(mean(drillTypes(d).map(t => ratingOf(t.id))));
   return `<button onclick="startRound('${d.id}')"><b>${d.name}</b><br><span class="muted">rating ${r}${pb ? ` · best ${pb.points}` : ''}</span></button>`;
 }
+// Class-test drills: own block at the top of home while the test is ahead, hidden from the course groups
+const isExamDrill = d => !!d.until;
+function examBlock() {
+  const ds = CONFIG.drills.filter(d => isExamDrill(d) && dayKey() <= d.until);
+  if (!ds.length) return '';
+  const days = d => Math.round((new Date(d.until) - new Date(dayKey())) / 864e5);
+  const row = d => { const ts = drillTypes(d), done = ts.filter(t => RS[t.id]?.mastered).length;
+    return drillButton(d).replace('</span></button>', ` · ${done}/${ts.length} mastered · ${days(d) ? `${days(d)} day${days(d) === 1 ? '' : 's'} left` : 'today'}</span></button>`); };
+  return `<h2>Class tests · every drillable type on the test</h2><div class="drills">${ds.map(row).join('')}</div>`;
+}
 function drillsBlock() {
-  const groups = Object.keys(CONFIG.categories).map(cat => [cat, CONFIG.drills.filter(d => drillTypes(d).length && drillCourse(d) === cat)]).filter(([, ds]) => ds.length);
+  const groups = Object.keys(CONFIG.categories).map(cat => [cat, CONFIG.drills.filter(d => !isExamDrill(d) && drillTypes(d).length && drillCourse(d) === cat)]).filter(([, ds]) => ds.length);
   return '<h2>Focus drills · 120 s on one skill</h2>' + groups.map(([cat, ds]) =>
     `<details class="cat"><summary><span>${CONFIG.categories[cat].label}<br><span class="muted">${ds.length} drills</span></span></summary><div class="drills">${ds.map(drillButton).join('')}</div></details>`).join('');
 }
@@ -4829,7 +4972,7 @@ function showHome() {
   $('poolInfo').textContent = `Week ${Math.max(...Object.values(CONFIG.currentWeek))} · ${types.length} types`;
   $('homeHead').innerHTML = `<div class="score">${Math.round(headline())}</div>
     <div class="muted center">rating · ${mastered}/${types.length} mastered · streak ${streak} day${streak === 1 ? '' : 's'} · today: ${todaysModifier().name}</div>${unopenedLine()}`;
-  $('homeStats').innerHTML = drillsBlock() + conceptsList() + statsSection(hist) + dashboard(types, hist) + stackGuide() + weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
+  $('homeStats').innerHTML = examBlock() + drillsBlock() + conceptsList() + statsSection(hist) + dashboard(types, hist) + stackGuide() + weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
   showScreen('home');
 }
 function unopenedLine() {
