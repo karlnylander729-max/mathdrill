@@ -48,9 +48,10 @@ const CONFIG = {
   drills: [
     // Class-test drills: every drillable type on the test, shown at the top of home until the test day ends. Delete after the test.
     { id: 'ct1-seq',  name: 'S&S Class Test 1',      until: '2026-10-28', types: ['seq-interval', 'seq-setdiff', 'seq-modulus', 'seq-count', 'seq-negation', 'seq-quant', 'seq-bigunion', 'seq-bounded', 'seq-maxmin'] },
-    { id: 'ct1-calc', name: 'Calculus Class Test 1', until: '2026-10-28', types: ['calc-log', 'calc-ln', 'calc-loglaw', 'calc-logcombine', 'calc-logbase', 'calc-exp', 'calc-explaw', 'calc-expsolve',
-      'calc-trig', 'calc-arc', 'calc-arc-branch', 'calc-angle', 'calc-inverse', 'calc-series', 'calc-cx-mul', 'calc-cx-div', 'calc-cx-mod', 'calc-cx-arg', 'calc-cx-euler', 'calc-ipow',
-      'calc-unity', 'calc-compose', 'calc-hyp', 'calc-hypid', 'calc-recip', 'calc-hypi'] },
+    // Trimmed to what Mock 1 and Mock 2 test (slots: trig + Euler, complex algebra in a and b, hyperbolics, logs; one power series)
+    { id: 'ct1-calc', name: 'Calculus Class Test 1', until: '2026-10-28', types: ['calc-trig', 'calc-cx-euler', 'calc-cx-mul', 'calc-cx-div', 'calc-cx-mod', 'calc-cx-arg', 'calc-ipow',
+      'calc-recip', 'calc-cxsym', 'calc-hypi', 'calc-hyp', 'calc-hypid', 'calc-hypfrom', 'calc-series',
+      'calc-log', 'calc-ln', 'calc-loglaw', 'calc-logcombine', 'calc-logbase', 'calc-logsym', 'calc-explaw'] },
     { id: 'matmul',      name: 'Matrix multiplication', types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'] },
     { id: 'rowred',      name: 'Row reduction',         types: ['la-rowop', 'la-elimk', 'la-elementary', 'la-soltype'] },
     { id: 'subspaces',   name: 'Subspaces & span',      types: ['la-subspace', 'la-inspan', 'la-indep', 'la-basis'] },
@@ -458,6 +459,35 @@ const TYPES = [
     const real = f === 'cosh', z = math[f](math.complex(0, th));
     return { q: T`$${'\\' + f}\left(i\,${piFrac(m, 12).tex}\right)$`, a: real ? ex.s : `(${ex.s})*i`, show: real ? ex.tex : T`${ex.tex}\,i`, kind: 'num',
              keys: [...CX_KEYS, 'sqrt('], check: Math.abs(z.re - (real ? v : 0)) < 1e-9 && Math.abs(z.im - (real ? 0 : v)) < 1e-9 };
+  }},
+  { id: 'calc-hypfrom', name: 'All hyperbolics from one', par: 15, cat: 'calc', week: 3, weight: 1, gen() {
+    const [[a, b], c] = pick([[[3, 4], 5], [[4, 3], 5], [[5, 12], 13], [[12, 5], 13], [[8, 15], 17], [[15, 8], 17]]);   // sinh = a/b, cosh = c/b, x > 0
+    const vals = { sinh: [a, b], cosh: [c, b], tanh: [a, c], sech: [b, c], csch: [b, a], coth: [c, a] };
+    const given = pick(['tanh', 'cosh', 'sinh']), want = pick(Object.keys(vals).filter(f => f !== given));
+    const x = { tanh: Math.atanh(a / c), cosh: Math.acosh(c / b), sinh: Math.asinh(a / b) }[given];
+    const fx = { sinh: Math.sinh(x), cosh: Math.cosh(x), tanh: Math.tanh(x) }, val = { ...fx, sech: 1 / fx.cosh, csch: 1 / fx.sinh, coth: 1 / fx.tanh }[want];
+    const g = frac(...vals[given]), ans = frac(...vals[want]), name = f => ['sech', 'csch'].includes(f) ? T`\operatorname{${f}}` : '\\' + f;
+    return { q: T`$${name(given)} x = ${g.tex}$, $x > 0$. $\ ${name(want)} x = ?$`, a: ans.s, show: ans.tex, kind: 'num', val };
+  }},
+  { id: 'calc-cxsym', name: 'Re / Im in a and b', par: 15, cat: 'calc', week: 2, weight: 1, gen() {
+    const [w, re, im, reTeX, imTeX] = pick([
+      ['z^2', 'a^2-b^2', '2*a*b', 'a^2 - b^2', '2ab'],
+      ['z^3', 'a^3-3*a*b^2', '3*a^2*b-b^3', 'a^3 - 3ab^2', '3a^2b - b^3'],
+      [T`\bar z^2`, 'a^2-b^2', '-2*a*b', 'a^2 - b^2', '-2ab'],
+      ['e^z', 'e^a*cos(b)', 'e^a*sin(b)', T`e^a\cos b`, T`e^a\sin b`],
+      ['e^{iz}', 'e^(-b)*cos(a)', 'e^(-b)*sin(a)', T`e^{-b}\cos a`, T`e^{-b}\sin a`],
+      ['e^{z^2}', 'e^(a^2-b^2)*cos(2*a*b)', 'e^(a^2-b^2)*sin(2*a*b)', T`e^{a^2-b^2}\cos 2ab`, T`e^{a^2-b^2}\sin 2ab`]]);
+    const part = pick(['Re', 'Im']);
+    return { q: T`$z = a + ib$. $\ \operatorname{${part}}(${w}) = ?$`, a: part === 'Re' ? re : im, show: part === 'Re' ? reTeX : imTeX, kind: 'expr', dom: [0.3, 1.5] };
+  }},
+  { id: 'calc-logsym', name: 'Log with a letter base', par: 12, cat: 'calc', week: 1, weight: 1, gen() {
+    const k = pick([2, 3]), p = ri(1, 3), m = ri(2, 4), j = ri(1, 5), ap = p === 1 ? 'a' : `a^{${p}}`;
+    const [q, ans, B, X] = pick([
+      [T`\log_{a/${k}}\left(\left(\dfrac{${k ** p}}{${ap}}\right)^{${m}}\right)`, frac(-p * m, 1), a => a / k, a => (k ** p / a ** p) ** m],
+      [T`\log_{a^{${p + 1}}}\left(a^{${j}}\right)`, frac(j, p + 1), a => a ** (p + 1), a => a ** j],
+      [T`\log_{${k}a}\left(${k ** p}${ap}\right)`, frac(p, 1), a => k * a, a => k ** p * a ** p],
+      [T`\log_{\sqrt a}\left(a^{${j}}\right)`, frac(2 * j, 1), a => Math.sqrt(a), a => a ** j]]);
+    return { q: T`Simplify $${q}$ ($a > 0$, base $\ne 1$)`, a: ans.s, show: ans.tex, kind: 'num', val: Math.log(X(5)) / Math.log(B(5)) };
   }},
   { id: 'calc-series', name: 'Series coefficient', par: 8, cat: 'calc', week: 1, weight: 1, gen() {
     const [tex, coef] = pick(SERIES)(), n = ri(1, 6), c = coef(n);
@@ -1668,7 +1698,7 @@ const CONCEPTS = [
     originText: String.raw`Built from repeated multiplication: $x^n \cdot x^m = x^{n+m}$ (Def 1.13) forces $x^0 = 1$, $x^{-n} = 1/x^n$ and roots for fractions. Feeds: logarithms, which invert $a^x$.` },
   { id: 'log-definition-laws', name: 'Logs: powers and laws', cat: 'calc', week: 1,
     source: 'Calculus_1_2026-27.pdf §1.4: Def 1.20 and Remark 1.21 pp. 15 (log_a y is the power of a that gives y; ln = log_e), identities (i)–(iii) p. 15, Helpful hint and Example 1.22 p. 16',
-    types: ['calc-log', 'calc-ln', 'calc-loglaw', 'calc-logcombine', 'calc-logbase'], origin: ['exponent-laws'], feeds: ['solve-exponential', 'hyperbolic-at-ln'],
+    types: ['calc-log', 'calc-ln', 'calc-loglaw', 'calc-logcombine', 'calc-logbase', 'calc-logsym'], origin: ['exponent-laws'], feeds: ['solve-exponential', 'hyperbolic-at-ln'],
     picture: { template: 'graphSlider', params: { expr: 'log(x, k)', k: [2, 1.2, 9.2], xr: [0, 9], yr: [-3, 3], label: 'base', level: 'log(8, k)' },
       caption: 'Drag the base. The dashed line is log of 8 in that base. At base 2 it sits at 3, because 2³ = 8.',
       alt: 'Graph of log base k of x for x from 0 to 9 with a slider for the base k; a dashed line marks log base k of 8, equal to 3 at k = 2.' },
@@ -1708,7 +1738,7 @@ const CONCEPTS = [
     originText: String.raw`Built from the exponential form of $\sinh$ and $\cosh$ (eqs 3.3–3.4) and $e^{\ln a} = a$. Feeds: inverse hyperbolic functions, e.g. $\operatorname{arcsinh} y = \ln(y + \sqrt{1+y^2})$ (Example 3.9).` },
   { id: 'complex-arithmetic', name: 'Complex arithmetic', cat: 'calc', week: 2,
     source: 'Calculus_1_2026-27.pdf §2.1: Def 2.1 and Remark 2.2(2) p. 23 (i² = −1, i³ = −i, i⁴ = 1) and the product formula p. 23; division by the conjugate, Example 2.5 p. 24; Def 2.7 p. 24; 1/w = w̄/|w|² p. 26',
-    types: ['calc-cx-mul', 'calc-cx-div', 'calc-ipow', 'calc-recip'], origin: [], feeds: ['complex-modulus-arg'],
+    types: ['calc-cx-mul', 'calc-cx-div', 'calc-ipow', 'calc-recip', 'calc-cxsym'], origin: [], feeds: ['complex-modulus-arg'],
     picture: { template: 'argand', params: { z: [1, 1], w: [0, 1] },
       caption: 'Drag z. With w = i the product zw is z turned a quarter-turn anticlockwise. So the powers of i cycle: 1, i, −1, −i.',
       alt: 'Complex plane with draggable points z and w (starting at i) and their product zw, with modulus and argument readouts.' },
@@ -2357,7 +2387,7 @@ const CONCEPTS = [
     originText: String.raw`Built from polar form and De Moivre: $(re^{i\theta})^n = r^n e^{in\theta}$, so the modulus takes an $n$th root and the angle divides by $n$.` },
   { id: 'hyperbolic-identities', name: 'Hyperbolic identities', cat: 'calc', week: 3,
     source: 'Calculus_1_2026-27.pdf §3.1 pp. 36–38 (sinh, cosh, tanh from exponentials; cosh² − sinh² = 1); Exercise 3.12 p. 41 (hyperbolic double-angle formulae); Example 3.13 p. 41 (coth z − tanh z, adapted from the January 2021 exam)',
-    types: ['calc-hypid'], origin: ['hyperbolic-at-ln'], feeds: [],
+    types: ['calc-hypid', 'calc-hypfrom'], origin: ['hyperbolic-at-ln'], feeds: [],
     picture: { template: 'graphSlider', params: { expr: 'cosh(x)^2 - k*sinh(x)^2', k: [0.5, 0, 1.5], xr: [-2, 2], yr: [-2, 4], label: 'k' },
       caption: 'Drag k to 1. The curve goes flat at height 1, because cosh² x − sinh² x = 1 for every x.',
       alt: 'Graph of cosh squared x minus k times sinh squared x with a slider for k; at k = 1 it is the constant 1.' },
