@@ -50,7 +50,7 @@ const CONFIG = {
     { id: 'ct1-seq',  name: 'S&S Class Test 1',      until: '2026-10-28', types: ['seq-interval', 'seq-setdiff', 'seq-modulus', 'seq-count', 'seq-negation', 'seq-quant', 'seq-bigunion', 'seq-bounded', 'seq-maxmin'] },
     { id: 'ct1-calc', name: 'Calculus Class Test 1', until: '2026-10-28', types: ['calc-log', 'calc-ln', 'calc-loglaw', 'calc-logcombine', 'calc-logbase', 'calc-exp', 'calc-explaw', 'calc-expsolve',
       'calc-trig', 'calc-arc', 'calc-arc-branch', 'calc-angle', 'calc-inverse', 'calc-series', 'calc-cx-mul', 'calc-cx-div', 'calc-cx-mod', 'calc-cx-arg', 'calc-cx-euler', 'calc-ipow',
-      'calc-unity', 'calc-compose', 'calc-hyp', 'calc-hypid'] },
+      'calc-unity', 'calc-compose', 'calc-hyp', 'calc-hypid', 'calc-recip', 'calc-hypi'] },
     { id: 'matmul',      name: 'Matrix multiplication', types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'] },
     { id: 'rowred',      name: 'Row reduction',         types: ['la-rowop', 'la-elimk', 'la-elementary', 'la-soltype'] },
     { id: 'subspaces',   name: 'Subspaces & span',      types: ['la-subspace', 'la-inspan', 'la-indep', 'la-basis'] },
@@ -437,6 +437,27 @@ const TYPES = [
   { id: 'calc-hypid', name: 'Hyperbolic identity', par: 12, cat: 'calc', week: 3, weight: 1, gen() {
     const [lhs, a, show] = pick(HYP_IDS);
     return { q: T`Simplify to one term: $${lhs}$`, a, show, kind: 'expr', dom: [0.3, 2] };
+  }},
+  { id: 'calc-recip', name: 'Re and Im of 1/z', par: 12, cat: 'calc', week: 2, weight: 1, gen() {
+    const part = pick(['Re', 'Im']);
+    if (Math.random() < 0.3) {   // symbolic, as in Mock 1 Q1
+      const a = part === 'Re' ? 'a/(a^2+b^2)' : '-b/(a^2+b^2)', show = part === 'Re' ? T`\frac{a}{a^2+b^2}` : T`-\frac{b}{a^2+b^2}`;
+      return { q: T`$z = a + ib$, $a, b \in \mathbb R$ not both 0. $\ \operatorname{${part}}(1/z) = ?$`, a, show, kind: 'expr', dom: [0.5, 3] };
+    }
+    const a = nz(-6, 6), b = nz(-6, 6), ans = frac(part === 'Re' ? a : -b, a * a + b * b), w = math.divide(1, math.complex(a, b));
+    return { q: T`$\operatorname{${part}}\left(\dfrac{1}{${cx(a, b)}}\right)$`, a: ans.s, show: ans.tex, kind: 'num', val: part === 'Re' ? w.re : w.im };
+  }},
+  { id: 'calc-hypi', name: 'cosh, sinh, tanh at iθ', par: 10, cat: 'calc', week: 3, weight: 1, gen() {
+    if (Math.random() < 0.25) {   // |e^{a+ib}| = e^a
+      const a = nz(-4, 4), b = pick(['1', '2', T`\pi`, T`\tfrac\pi3`, '-3']);
+      return { q: T`$\left\lvert e^{${a} + ${b}\,i}\right\rvert$`.replace('+ -', '- '), a: `e^(${a})`, show: `e^{${a}}`, kind: 'num', val: Math.exp(a) };
+    }
+    const m = pick(STD_ANGLES.filter(t => t > 0 && t < 12)), f = pick(['cosh', 'sinh', 'tanh']);
+    if (f === 'tanh' && m === 6) return null;
+    const th = m * Math.PI / 12, v = { cosh: Math.cos(th), sinh: Math.sin(th), tanh: Math.tan(th) }[f], ex = exact(v);
+    const real = f === 'cosh', z = math[f](math.complex(0, th));
+    return { q: T`$${'\\' + f}\left(i\,${piFrac(m, 12).tex}\right)$`, a: real ? ex.s : `(${ex.s})*i`, show: real ? ex.tex : T`${ex.tex}\,i`, kind: 'num',
+             keys: [...CX_KEYS, 'sqrt('], check: Math.abs(z.re - (real ? v : 0)) < 1e-9 && Math.abs(z.im - (real ? 0 : v)) < 1e-9 };
   }},
   { id: 'calc-series', name: 'Series coefficient', par: 8, cat: 'calc', week: 1, weight: 1, gen() {
     const [tex, coef] = pick(SERIES)(), n = ri(1, 6), c = coef(n);
@@ -1687,7 +1708,7 @@ const CONCEPTS = [
     originText: String.raw`Built from the exponential form of $\sinh$ and $\cosh$ (eqs 3.3–3.4) and $e^{\ln a} = a$. Feeds: inverse hyperbolic functions, e.g. $\operatorname{arcsinh} y = \ln(y + \sqrt{1+y^2})$ (Example 3.9).` },
   { id: 'complex-arithmetic', name: 'Complex arithmetic', cat: 'calc', week: 2,
     source: 'Calculus_1_2026-27.pdf §2.1: Def 2.1 and Remark 2.2(2) p. 23 (i² = −1, i³ = −i, i⁴ = 1) and the product formula p. 23; division by the conjugate, Example 2.5 p. 24; Def 2.7 p. 24; 1/w = w̄/|w|² p. 26',
-    types: ['calc-cx-mul', 'calc-cx-div', 'calc-ipow'], origin: [], feeds: ['complex-modulus-arg'],
+    types: ['calc-cx-mul', 'calc-cx-div', 'calc-ipow', 'calc-recip'], origin: [], feeds: ['complex-modulus-arg'],
     picture: { template: 'argand', params: { z: [1, 1], w: [0, 1] },
       caption: 'Drag z. With w = i the product zw is z turned a quarter-turn anticlockwise. So the powers of i cycle: 1, i, −1, −i.',
       alt: 'Complex plane with draggable points z and w (starting at i) and their product zw, with modulus and argument readouts.' },
@@ -2342,6 +2363,14 @@ const CONCEPTS = [
       alt: 'Graph of cosh squared x minus k times sinh squared x with a slider for k; at k = 1 it is the constant 1.' },
     algebra: String.raw`Same shapes as the trig identities, with some signs flipped:<br>$\cosh^2 x - \sinh^2 x = 1, \quad \sinh 2x = 2\sinh x\cosh x, \quad \cosh 2x = \cosh^2 x + \sinh^2 x$<br>Fractions: put everything over $\sinh x\cosh x$ first. Then $\coth x - \tanh x = \tfrac{1}{\sinh x\cosh x} = \tfrac{2}{\sinh 2x}$.`,
     originText: String.raw`Built from $\cosh x = \tfrac12(e^x + e^{-x})$ and $\sinh x = \tfrac12(e^x - e^{-x})$: multiply out and the cross terms cancel. Also $\cosh x \pm \sinh x = e^{\pm x}$.` },
+  { id: 'complex-exp-hyp', name: 'e^z and hyperbolics at iθ', cat: 'calc', week: 3,
+    source: 'Calculus_1_2026-27.pdf p. 41 (cos θ = cosh(iθ), sin θ = −i sinh(iθ), tan θ = −i tanh(iθ)); Thm 2.19 p. 28 (Euler’s formula); Class test 1 - Mock 1 Quiz (KEATS) Q1(ii) |e^(1/z)| and Q3 cosh, sinh, tanh at iπ/3',
+    types: ['calc-hypi'], origin: ['complex-modulus-arg', 'hyperbolic-identities'], feeds: [],
+    picture: { template: 'unitCircle', params: { angleM: 4, showTriangle: true },
+      caption: 'Drag the point. cosh(iθ) is the red leg cos θ; sinh(iθ) is i times the green leg sin θ.',
+      alt: 'Unit circle with a draggable point at angle θ; its legs cos θ and sin θ give cosh(iθ) and sinh(iθ) divided by i.' },
+    algebra: String.raw`Put $x = i\theta$ into the exponential forms. Euler turns them into trig:<br>$\cosh(i\theta) = \cos\theta, \quad \sinh(i\theta) = i\sin\theta, \quad \tanh(i\theta) = i\tan\theta$<br>Also $e^{a+ib} = e^a e^{ib}$ and $|e^{ib}| = 1$, so $|e^{a+ib}| = e^a$. Only the real part sets the size.`,
+    originText: String.raw`Built from Euler's formula $e^{i\theta} = \cos\theta + i\sin\theta$ and the exponential forms of $\cosh$ and $\sinh$ (eqs 3.3–3.4).` },
 ];
 const CONCEPT_OF = {};
 for (const c of CONCEPTS) for (const t of c.types) CONCEPT_OF[t] = c.id;
