@@ -35,7 +35,7 @@
 const CONFIG = {
   roundSeconds: 120,
   conceptCoverage: 'full',   // 'pilot': only some types have a concept; 'full': every TYPES id must (self-test enforced)
-  currentWeek: { la: 4, calc: 4, seq: 4, logic: 4, basics: 4 },   // per course: courses move at different speeds
+  currentWeek: { la: 5, calc: 4, seq: 4, logic: 5, basics: 4 },   // per course: courses move at different speeds
   categories: {
     la:    { label: 'Linear algebra',       weight: 1 },
     calc:  { label: 'Calculus',             weight: 1.2 },
@@ -47,11 +47,14 @@ const CONFIG = {
   // Types marked hub: false appear only here (not in the main round, not in the overall rating).
   drills: [
     // Class-test drills: every drillable type on the test, shown at the top of home until the test day ends. Delete after the test.
-    { id: 'ct1-seq',  name: 'S&S Class Test 1',      until: '2026-10-28', types: ['seq-interval', 'seq-setdiff', 'seq-modulus', 'seq-count', 'seq-negation', 'seq-quant', 'seq-bigunion', 'seq-bounded', 'seq-maxmin'] },
-    // Trimmed to what Mock 1 and Mock 2 test (slots: trig + Euler, complex algebra in a and b, hyperbolics, logs; one power series)
-    { id: 'ct1-calc', name: 'Calculus Class Test 1', until: '2026-10-28', types: ['calc-trig', 'calc-cx-euler', 'calc-cx-mul', 'calc-cx-div', 'calc-cx-mod', 'calc-cx-arg', 'calc-ipow',
-      'calc-recip', 'calc-cxsym', 'calc-hypi', 'calc-hyp', 'calc-hypid', 'calc-hypfrom', 'calc-series',
-      'calc-log', 'calc-ln', 'calc-loglaw', 'calc-logcombine', 'calc-logbase', 'calc-logsym', 'calc-explaw'] },
+    // LA CT1 scope assumed weeks 1–5 (KEATS gives no scope); revise after Karl's past-test mocks.
+    { id: 'ct1-la',   name: 'LA Class Test 1',      until: '2026-11-11', types: ['la-dot', 'la-norm', 'la-normsq', 'la-distsq', 'la-lincomb', 'la-orth', 'la-alpha', 'la-dotexp',
+      'la-direction', 'la-linept', 'la-plane-d', 'la-size', 'la-entry', 'la-Av', 'la-product', 'la-rowop', 'la-elimk', 'la-elementary', 'la-soltype', 'la-freevars', 'la-consist',
+      'la-subspace', 'la-inspan', 'la-indep', 'la-basis', 'la-depc', 'la-dimnamed', 'la-dimcond', 'la-dimmat'] },
+    // Logic in-class problem set: propositional logic, course weeks 1–5 (validity, L1 syntax, truth tables, ND for L1, formalisation in L1)
+    { id: 'ps-logic', name: 'Logic Problem Set',    until: '2026-11-13', types: ['logic-famous', 'logic-name', 'logic-main', 'logic-sentence', 'logic-official', 'logic-restore', 'logic-drop',
+      'logic-formalise', 'logic-connective', 'logic-value', 'logic-column', 'logic-forced', 'logic-rows', 'logic-truerows', 'logic-taut', 'logic-valid', 'logic-consistent',
+      'logic-equiv', 'logic-counter', 'logic-negin', 'logic-ndrule', 'logic-goalrule', 'logic-ndassume'] },
     { id: 'matmul',      name: 'Matrix multiplication', types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'] },
     { id: 'rowred',      name: 'Row reduction',         types: ['la-rowop', 'la-elimk', 'la-elementary', 'la-soltype'] },
     { id: 'subspaces',   name: 'Subspaces & span',      types: ['la-subspace', 'la-inspan', 'la-indep', 'la-basis'] },
