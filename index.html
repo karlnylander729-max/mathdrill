@@ -50,7 +50,8 @@ const CONFIG = {
     // LA CT1 scope assumed weeks 1–5 (KEATS gives no scope); revise after Karl's past-test mocks.
     { id: 'ct1-la',   name: 'LA Class Test 1',      until: '2026-11-11', types: ['la-dot', 'la-norm', 'la-normsq', 'la-distsq', 'la-lincomb', 'la-orth', 'la-alpha', 'la-dotexp',
       'la-direction', 'la-linept', 'la-plane-d', 'la-size', 'la-entry', 'la-Av', 'la-product', 'la-rowop', 'la-elimk', 'la-elementary', 'la-soltype', 'la-freevars', 'la-consist',
-      'la-subspace', 'la-inspan', 'la-indep', 'la-basis', 'la-depc', 'la-dimnamed', 'la-dimcond', 'la-dimmat'] },
+      'la-subspace', 'la-inspan', 'la-indep', 'la-basis', 'la-depc', 'la-dimnamed', 'la-dimcond', 'la-dimmat',
+      'calc-recip', 'calc-cxsym', 'calc-cx-mod'] },   // Q1 of both past CT1s: Re/Im of 1/z, z², |e^(1/z)|, e^(z²) in a and b
     // Logic in-class problem set: propositional logic, course weeks 1–5 (validity, L1 syntax, truth tables, ND for L1, formalisation in L1)
     { id: 'ps-logic', name: 'Logic Problem Set',    until: '2026-11-13', types: ['logic-famous', 'logic-name', 'logic-main', 'logic-sentence', 'logic-official', 'logic-restore', 'logic-drop',
       'logic-formalise', 'logic-connective', 'logic-value', 'logic-column', 'logic-forced', 'logic-rows', 'logic-truerows', 'logic-taut', 'logic-valid', 'logic-consistent',
@@ -2779,6 +2780,15 @@ const SUBSPACE_FAMILIES = [
     return { q: T`Is $\{(a,\ ${poly([[k, 'a'], [c, '']])},\ b) : a, b \in \mathbb R\}$ a subspace of $\mathbb R^3$?`, a: c === 0 }; },
   () => ({ q: T`Is $\{(x, y, z) : z = ${pick(['xy', 'x^2', '\\lvert x\\rvert', 'x^2 + y^2'])}\}$ a subspace of $\mathbb R^3$?`, a: false }),
   () => ({ q: T`Is $\{(x, y) : ${pick(['x \\ge 0', 'x \\in \\mathbb Z', 'xy = 0', 'x + y \\ge 0'])}\}$ a subspace of $\mathbb R^2$?`, a: false }),
+  // Past class tests: two conditions joined by "and" (yes if both homogeneous), "or" and "≠" (never)
+  () => { const d = Math.random() < 0.5 ? 0 : nz(-3, 3), k = nz(-3, 3);
+    return { q: T`Is $\{(x, y, z) : ${poly([[1, 'x'], [k, 'y']])} = 0 \ \text{and}\ z = ${d}\}$ a subspace of $\mathbb R^3$?`, a: d === 0 }; },
+  () => { const k = ri(1, 3), x = k === 1 ? '' : k;
+    return { q: T`Is $\{(x, y, z) : ${pick([T`x = ${x}y \ \text{or}\ x = -${x}y`, T`x = 0 \ \text{or}\ y = 0`, T`x + y \ne ${k}`, T`x^2 + y^2 - z^2 = 0`])}\}$ a subspace of $\mathbb R^3$?`, a: false }; },
+  // Subsets of M_2(R) = {(a b; c d)}
+  () => { const k = nz(-3, 3), c = Math.random() < 0.5 ? 0 : nz(-3, 3);
+    return { q: T`Is $\left\{\begin{pmatrix}a&b\\c&d\end{pmatrix} : ${poly([[1, 'a'], [-k, 'b'], [c, '']])} = 0\right\}$ a subspace of $M_2(\mathbb R)$?`, a: c === 0 }; },
+  () => ({ q: T`Is $\left\{\begin{pmatrix}a&b\\c&d\end{pmatrix} : ${pick(['c = 2ab', 'ad = 0', 'a = b \\ \\text{or}\\ a = -b', 'd \\ne a + b', 'a^2 = d'])}\right\}$ a subspace of $M_2(\mathbb R)$?`, a: false }),
 ];
 // Sets for bounded / upper-bound questions: intervals, unions, and {c + d/n}
 function boundedSet() {
