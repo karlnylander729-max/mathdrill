@@ -48,10 +48,11 @@ const CONFIG = {
   drills: [
     // Class-test drills: every drillable type on the test, shown at the top of home until the test day ends. Delete after the test.
     // LA CT1 scope assumed weeks 1–5 (KEATS gives no scope); revise after Karl's past-test mocks.
-    { id: 'ct1-la',   name: 'LA Class Test 1',      until: '2026-11-11', types: ['la-dot', 'la-norm', 'la-normsq', 'la-distsq', 'la-lincomb', 'la-orth', 'la-alpha', 'la-dotexp',
-      'la-direction', 'la-linept', 'la-plane-d', 'la-size', 'la-entry', 'la-Av', 'la-product', 'la-rowop', 'la-elimk', 'la-elementary', 'la-soltype', 'la-freevars', 'la-consist',
-      'la-subspace', 'la-inspan', 'la-indep', 'la-basis', 'la-depc', 'la-dimnamed', 'la-dimcond', 'la-dimmat',
-      'calc-recip', 'calc-cxsym', 'calc-cx-mod'] },   // Q1 of both past CT1s: Re/Im of 1/z, z², |e^(1/z)|, e^(z²) in a and b
+    { id: 'ct1-la',   name: 'LA Class Test 1',      until: '2026-11-11', types: [
+      'calc-recip', 'calc-cxsym',                                   // Q1: Re/Im of 1/z, z², e^(...) in a and b
+      'la-dotexp', 'la-cdist', 'la-linept', 'la-normsq', 'la-distsq', 'la-alpha',   // Q2: dot expansion, ℂ² distance, lines
+      'la-inspan', 'la-indep', 'la-basis',                          // Q3: span select-all
+      'la-subspace', 'la-consist'] },                               // Q4: subspace select-all; consistency
     // Logic in-class problem set: propositional logic, course weeks 1–5 (validity, L1 syntax, truth tables, ND for L1, formalisation in L1)
     { id: 'ps-logic', name: 'Logic Problem Set',    until: '2026-11-13', types: ['logic-famous', 'logic-name', 'logic-main', 'logic-sentence', 'logic-official', 'logic-restore', 'logic-drop',
       'logic-formalise', 'logic-connective', 'logic-value', 'logic-column', 'logic-forced', 'logic-rows', 'logic-truerows', 'logic-taut', 'logic-valid', 'logic-consistent',
@@ -884,6 +885,14 @@ const TYPES = [
     return { q: `Consistent? <span class="f">{ ${set.map(f => show(f)).join(', ')} }</span>`, a: consistent(set), kind: 'bool', labels: ['Yes', 'No'] };
   }},
   // ---------- Linear algebra: exam drills for weeks 1-5, then linear maps, rank, change of basis, determinants, eigen ----------
+  { id: 'la-cdist', name: 'Distance in ℂ²', par: 20, cat: 'la', week: 1, weight: 1, gen() {
+    const z = [[ri(-2, 2), ri(-2, 2)], [ri(-2, 2), ri(-2, 2)]], w = [[ri(-2, 2), ri(-2, 2)], [ri(-2, 2), ri(-2, 2)]];
+    const d2 = z.reduce((s, [a, b], k) => s + (a - w[k][0]) ** 2 + (b - w[k][1]) ** 2, 0), r = Math.round(Math.sqrt(d2));
+    if (d2 === 0) return null;
+    const vec2 = v => T`(${v.map(([a, b]) => cx(a, b)).join(',\\ ')})`, root = r * r === d2;
+    return { q: T`$\mathbf z = ${vec2(z)}$, $\mathbf w = ${vec2(w)}$ in $\mathbb C^2$. ${root ? T`Distance $\lVert\mathbf z - \mathbf w\rVert$` : T`$\lVert\mathbf z - \mathbf w\rVert^2$`} = ?`,
+             a: String(root ? r : d2), kind: 'num', hint: 'sum of |entry|² of z − w' };
+  }},
   { id: 'la-dotexp', name: 'Dot expansion, unit vectors', par: 35, cat: 'la', week: 1, weight: 1, gen() {
     const V = [-9, -8, -6, -4, -3, 0, 3, 4, 6, 8, 9], [P, Q, R] = [pick(V), pick(V), pick(V)];   // twelfths: ±3/4, ±2/3, ±1/2, ±1/3, ±1/4, 0
     const a = pick([1, -1, 2]), b = nz(-2, 2), c = nz(-3, 3), d = nz(-4, 4), e = nz(-3, 3);
@@ -1542,11 +1551,11 @@ const CONCEPTS = [
     originText: String.raw`Built from the entries of a vector in $\mathbb R^n$ (Def 1.1) and the cosine rule in a triangle (proof of Prop 1.15). Feeds: lengths and distances, planes with a normal, and the row-times-column rule for matrix products.` },
   { id: 'norm-distance', name: 'Norm and distance', cat: 'la', week: 1,
     source: 'Week1 - Column vectors.pdf Def 1.9 p. 5 (norm, distance ‖v − u‖), Remark 1.12 p. 5 (v·v = ‖v‖²), Example 1.10 p. 5; May 2026 - Main.pdf A1',
-    types: ['la-normsq', 'la-norm', 'la-distsq'], origin: ['dot-orthogonality'], feeds: [],
+    types: ['la-normsq', 'la-norm', 'la-distsq', 'la-cdist'], origin: ['dot-orthogonality'], feeds: [],
     picture: { template: 'vectors2d', params: { vecs: [[3, 2], [-1, -1]], dot: true },
       caption: 'Drag the tips. Their distance squared is ‖a‖² + ‖b‖² − 2 a·b. At the start: 13 + 2 + 10 = 25.',
       alt: 'Two draggable arrows a and b; the readout shows a·b. The distance between the tips squared equals the squares of both lengths minus twice a·b.' },
-    algebra: String.raw`The norm squared is the dot product with itself. No root, no extra work:<br>$\lVert\mathbf v\rVert^2 = \mathbf v\cdot\mathbf v = v_1^2 + \dots + v_n^2$<br>The norm is the root of that. Distance is the norm of the difference. Subtract first, then square each entry:<br>$\lVert\mathbf u - \mathbf v\rVert^2 = (u_1 - v_1)^2 + \dots + (u_n - v_n)^2$`,
+    algebra: String.raw`The norm squared is the dot product with itself. No root, no extra work:<br>$\lVert\mathbf v\rVert^2 = \mathbf v\cdot\mathbf v = v_1^2 + \dots + v_n^2$<br>The norm is the root of that. Distance is the norm of the difference. Subtract first, then square each entry:<br>$\lVert\mathbf u - \mathbf v\rVert^2 = (u_1 - v_1)^2 + \dots + (u_n - v_n)^2$<br>In $\mathbb C^n$, use $|z_k|^2 = a^2 + b^2$ for each entry, never $z_k^2$.`,
     originText: String.raw`Built from the dot product: $\mathbf v\cdot\mathbf v$ adds the squares of the entries (Remark 1.12). Feeds: the angle between vectors, $\cos\theta = \mathbf u\cdot\mathbf v/(\lVert\mathbf u\rVert\lVert\mathbf v\rVert)$.` },
   { id: 'linear-combination', name: 'Linear combinations', cat: 'la', week: 1,
     source: 'Week1 - Column vectors.pdf Def 1.4 p. 3 (linear combination), Example 1.5 p. 3 (evaluate ⅙(2u − 5v + 2w))',
@@ -2785,6 +2794,10 @@ const SUBSPACE_FAMILIES = [
     return { q: T`Is $\{(x, y, z) : ${poly([[1, 'x'], [k, 'y']])} = 0 \ \text{and}\ z = ${d}\}$ a subspace of $\mathbb R^3$?`, a: d === 0 }; },
   () => { const k = ri(1, 3), x = k === 1 ? '' : k;
     return { q: T`Is $\{(x, y, z) : ${pick([T`x = ${x}y \ \text{or}\ x = -${x}y`, T`x = 0 \ \text{or}\ y = 0`, T`x + y \ne ${k}`, T`x^2 + y^2 - z^2 = 0`])}\}$ a subspace of $\mathbb R^3$?`, a: false }; },
+  // Subsets of P_2 = {a + bt + ct^2} (2023/24 CT1 Q4)
+  () => { const [cond, yes] = pick([['b = 0', true], ['a = c', true], ['a + b + c = 0', true], ['a = 1', false], ['c \\ne 0', false],
+      [T`a, b, c \in \mathbb Z`, false], ['b = c^2', false], ['a = 2b + 1', false]]);
+    return { q: T`Is $\{a + bt + ct^2 : ${cond}\}$ a subspace of $\mathbb P_2$?`, a: yes }; },
   // Subsets of M_2(R) = {(a b; c d)}
   () => { const k = nz(-3, 3), c = Math.random() < 0.5 ? 0 : nz(-3, 3);
     return { q: T`Is $\left\{\begin{pmatrix}a&b\\c&d\end{pmatrix} : ${poly([[1, 'a'], [-k, 'b'], [c, '']])} = 0\right\}$ a subspace of $M_2(\mathbb R)$?`, a: c === 0 }; },
