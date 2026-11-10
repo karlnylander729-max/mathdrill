@@ -14,6 +14,7 @@ for f in d.get('pictures', ['pictures missing']): print('  PICTURE', f)
 for f in d.get('conceptScreen', ['conceptScreen missing']): print('  SCREEN', f)
 for f in d.get('entry', ['entry missing']): print('  ENTRY', f)
 for f in d.get('askClaude', ['askClaude missing']): print('  ASK', f)
+for f in d.get('scratch', ['scratch missing']): print('  SCRATCH', f)
 for g in d['generators']:
   flag = '!!' if g['errors'] else '  '
   print(flag, g['id'], 'wk', g['week'], 'distinct', g['distinct'], 'true%', g.get('trueRatio',''), *g['errors'][:3])

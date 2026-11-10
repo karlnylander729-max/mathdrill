@@ -109,6 +109,7 @@ const CONFIG = {
   weakness: { pull: 1, pointsBonus: 0.5 },   // weakest types drawn up to (1 + pull)×; weakest category scores up to (1 + bonus)×
   decay: { afterDays: 21, perDay: 2, maxLoss: 40 },
   skipUnlockSeconds: 5,
+  scratchParFactor: 2,   // par multiplier for types with a scratch space: writing steps out takes longer (retune after real runs)
   resurfaceAfter: [3, 6],                    // a skipped question returns after this many other questions
   combo: { step: 0.1, max: 20 },             // points multiplier 1 + step × (streak − 1), capped at max
   points: { base: 10, miss: 25 },            // correct: base × (0.5 + speed) × combo × weakness. Skip/wrong tap: −miss × weakness
@@ -2435,6 +2436,7 @@ const wordCount = s => s.split(/\s+/).filter(Boolean).length;
   .prompt { font-size: 22px; min-height: 120px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 12px 4px; overflow-x: auto; }
   .prompt .katex { font-size: 1.1em; }
   .f { font-family: "Times New Roman", serif; font-size: 1.15em; white-space: nowrap; }
+  #scratch { width: 100%; box-sizing: border-box; margin: 8px 0; padding: 10px; font: 14px/1.45 ui-monospace, Menlo, monospace; color: var(--ink); background: #0f1114; border: 1px dashed #2c313a; border-radius: 10px; resize: vertical; }
   #answer, #tryAnswer { width: 100%; font-size: 24px; padding: 12px; border-radius: 10px; border: 2px solid #2c313a; background: #0f1114; color: var(--ink); text-align: center; outline: none; }
   #answer:focus, #tryAnswer:focus { border-color: var(--accent); }
   .bools { display: none; gap: 12px; }
@@ -2502,6 +2504,7 @@ const wordCount = s => s.split(/\s+/).filter(Boolean).length;
   <div class="bar sub"><span class="tag" id="tag"></span><span><span id="delta"></span> <span class="combo" id="combo"></span></span></div>
   <div class="prompt" id="prompt"></div>
   <div class="muted center" id="hint"></div>
+  <textarea id="scratch" spellcheck="false" style="display:none" aria-label="Working"></textarea>
   <input id="answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="next">
   <div class="bools row" id="bools"><button id="bTrue"></button><button id="bFalse"></button></div>
   <div class="row"><button style="flex:1" id="skipBtn" onclick="skip()">Skip</button><button onclick="endRound()">End</button></div>
@@ -4541,7 +4544,49 @@ const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const mean = xs => xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : RC.start;
 const dayKey = (t = Date.now()) => new Date(t).toLocaleDateString('en-CA');
 const loadJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+// ---- scratch space: a pre-filled working template per multi-step type, laid out the way the course sets answers out ----
+// It holds working like paper; nothing in it is checked.
+const SCRATCH_ROWOPS = () => ['k = (entry to clear) ÷ (pivot). Write the operation first, then the new rows.', '',
+  'Step 1:  R2 → R2 − (k = ___) R1', '  k·R1   = (    ,    ,    )', '  new R2 = (    ,    ,    )', '',
+  'Step 2:  R_ → R_ − (k = ___) R_', '  k·R_   = (    ,    ,    )', '  new R_ = (    ,    ,    )', '',
+  'Pivots: ___   Unknowns: ___   Free = unknowns − pivots = ___', 'Zero row on the left reads: 0 = ___   → consistent iff ___'].join('\n');
+const SCRATCH_SPAN = () => ['w = α·u + β·v, one coordinate at a time.', 'Start with a coordinate where u or v has a 0.', '',
+  'coord _:  ______ = ___   → β = ___', 'coord _:  ______ = ___   → α = ___', 'check coord _:  ______ = ___   ✓ in span / ✗ not in span'].join('\n');
+const SCRATCH_DOT = () => ['Every term on the left meets every term on the right.', 'Table: u·u = v·v = w·w = 1, other pairs from the question.', '',
+  'pair | coefficients (summed) | value | product', 'u·u  |                       |   1   |', 'v·v  |                       |   1   |', 'w·w  |                       |   1   |',
+  'u·v  |                       |       |', 'v·w  |                       |       |', 'w·u  |                       |       |', 'sum  =  ___'].join('\n');
+const SCRATCH_DET = () => ['Expand along row/column ___ (the one with most zeros). Signs  + − + / − + − / + − +', '',
+  'term 1: (+) a__ × M__ = ___ × ___ = ___', 'term 2: (−) a__ × M__ = ___ × ___ = ___', 'term 3: (+) a__ × M__ = ___ × ___ = ___', 'det = ___'].join('\n');
+const SCRATCH_ND = () => ['Goal: ___   main connective: ___  → use its Intro rule', '',
+  '#  | formula                | rule      | from', '1  |                        | premise   |', '2  |                        |           |',
+  '3  |                        |           |', '4  |                        |           |'].join('\n');
+function SCRATCH_TT(q) {
+  const letters = [...new Set((q.q || '').match(/\b[PQRS]\b/g) || [])].sort().slice(0, 3);
+  const L = letters.length ? letters : ['P', 'Q'], n = L.length;
+  const rows = Array.from({ length: 2 ** n }, (_, r) => L.map((_, j) => (r >> (n - 1 - j)) & 1 ? 'F' : 'T').join(' ') + ' |');
+  return ['Sub-formulas left to right, main connective last.', '', `${L.join(' ')} | sub-formulas → sentence`, ...rows, '',
+    'Valid?  Look for a row with every premise T and the conclusion F.'].join('\n');
+}
+const SCRATCH_FORM = () => ['Dictionary (each letter stands for a full sentence / each predicate shows its places with dots):', 'P: ', 'Q: ', 'R: ', '',
+  'Key words: "if" / "only if" / "unless" / "provided" → ___', 'Formula: ', 'Main connective: '].join('\n');
+const SCRATCH = {
+  'la-rowop': SCRATCH_ROWOPS, 'la-elimk': SCRATCH_ROWOPS, 'la-elementary': SCRATCH_ROWOPS, 'la-soltype': SCRATCH_ROWOPS, 'la-consist': SCRATCH_ROWOPS, 'la-freevars': SCRATCH_ROWOPS,
+  'la-inspan': SCRATCH_SPAN, 'la-dotexp': SCRATCH_DOT,
+  'la-det3': SCRATCH_DET, 'la-cof3': SCRATCH_DET, 'la-invcof': SCRATCH_DET, 'la-detrowops': SCRATCH_DET,
+  'logic-ndrule': SCRATCH_ND, 'logic-goalrule': SCRATCH_ND, 'logic-ndassume': SCRATCH_ND, 'logic-ndrule2': SCRATCH_ND, 'logic-quantlegal': SCRATCH_ND,
+  'logic-valid': SCRATCH_TT, 'logic-taut': SCRATCH_TT, 'logic-counter': SCRATCH_TT, 'logic-equiv': SCRATCH_TT, 'logic-consistent': SCRATCH_TT,
+  'logic-column': SCRATCH_TT, 'logic-forced': SCRATCH_TT, 'logic-truerows': SCRATCH_TT,
+  'logic-formalise': SCRATCH_FORM, 'logic-l2formal': SCRATCH_FORM,
+};
+const scratchTemplate = q => SCRATCH[q.type] ? SCRATCH[q.type](q) : null;
+// The working typed for the current question, or '' when the template was left untouched
+function scratchWork() {
+  const el = $('scratch');
+  return el.style.display !== 'none' && el.value !== el.dataset.template ? el.value.trimEnd() : '';
+}
 const TYPE_BY_ID = Object.fromEntries(TYPES.map(t => [t.id, t]));
+const BASE_PAR = Object.fromEntries(TYPES.map(t => [t.id, t.par]));
+for (const id of Object.keys(SCRATCH)) if (TYPE_BY_ID[id]) TYPE_BY_ID[id].par = BASE_PAR[id] * CONFIG.scratchParFactor;
 const weekNow = cat => CONFIG.currentWeek[cat] ?? 0;
 const weekLabel = () => Object.entries(CONFIG.currentWeek).filter(([c]) => c !== 'basics').map(([c, w]) => `${c} ${w}`).join(' · ');
 const activeTypes = () => TYPES.filter(t => t.hub !== false && t.weight > 0 && t.week <= weekNow(t.cat) && CONFIG.categories[t.cat]?.weight > 0);
@@ -4712,9 +4757,16 @@ function nextQuestion() {
   if (isBool) { $('bTrue').textContent = q.labels[0]; $('bFalse').textContent = q.labels[1]; }
   setKeys(isBool ? null : q);
   input.value = '';
+  showScratch(q);
   tick();
   if (S?.drill) conceptFirst(q.type);   // tick() may have ended the round (S = null)
   if (!isBool && !CV) focusInput(q.noKeyboard ? 'none' : q.mode || KEYSETS[q.kind].mode);
+}
+function showScratch(q) {
+  const el = $('scratch'), tpl = scratchTemplate(q);
+  el.style.display = tpl ? 'block' : 'none';
+  el.value = el.dataset.template = tpl || '';
+  el.rows = tpl ? tpl.split('\n').length + 1 : 2;
 }
 // Focus drills only: a type whose concept was never opened shows the concept first (opening marks it seen, so once per concept)
 function conceptFirst(typeId) {
@@ -5305,6 +5357,7 @@ function installMeta() {
 function init() {
   $('answer').addEventListener('input', onInput);
   $('answer').addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+  $('scratch').addEventListener('keydown', e => e.stopPropagation());   // typing working never answers a yes/no question
   $('bTrue').addEventListener('click', () => answerBool(true));
   $('bFalse').addEventListener('click', () => answerBool(false));
   document.addEventListener('keydown', e => {
@@ -5325,8 +5378,8 @@ function init() {
 ===================================================================== -->
 <script>
 function runSelfTest() {
-  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests(), askClaude: askClaudeTextTest() };
-  out.ok = out.concepts.length === 0 && out.entry.length === 0 && out.askClaude.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests(), askClaude: askClaudeTextTest(), scratch: scratchTests() };
+  out.ok = out.scratch.length === 0 && out.concepts.length === 0 && out.entry.length === 0 && out.askClaude.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
   const pre = $('selftest');
   pre.style.display = 'block';
   pre.textContent = JSON.stringify(out, null, 1);
@@ -5598,6 +5651,37 @@ function whyLinkTest() {
   return f;
 }
 // Queue one question of each given type so the next nextQuestion() calls show them
+// ---- scratch space: templates, visibility, keys typed into it never answer, par raised ----
+function scratchTests() {
+  const f = [];
+  if (typeof SCRATCH !== 'object') return ['SCRATCH is not defined'];
+  for (const id of Object.keys(SCRATCH)) {
+    if (!TYPE_BY_ID[id]) { f.push(`SCRATCH key ${id} is not a type`); continue; }
+    for (let k = 0; k < 20; k++) { const q = tryDraw([id]); if (!(scratchTemplate({ ...q, type: id }) || '').trim()) { f.push(`${id}: empty template`); break; } }
+    if (TYPE_BY_ID[id].par !== BASE_PAR[id] * CONFIG.scratchParFactor) f.push(`${id}: par not raised`);
+  }
+  const rows = scratchTemplate({ type: 'logic-taut', q: '$P \\to (Q \\to P)$' }).split('\n').filter(l => /^[TF] [TF] +\|/.test(l));
+  if (rows.length !== 4) f.push(`two-letter truth table has ${rows.length} valuation rows, want 4`);
+  const keys = [RATINGS_KEY, PB_KEY, HISTORY_KEY], saved = keys.map(k => localStorage.getItem(k)), savedRS = JSON.parse(JSON.stringify(RS));
+  try {
+    startRound(); if (CV) closeConcept();
+    queueTypes(['la-inspan']); nextQuestion(); if (CV) closeConcept();
+    if ($('scratch').style.display === 'none' || $('scratch').value !== $('scratch').dataset.template || !$('scratch').value.trim()) f.push('la-inspan: scratch hidden or not pre-filled');
+    queueTypes(['la-dot']); nextQuestion(); if (CV) closeConcept();
+    if ($('scratch').style.display !== 'none') f.push('la-dot: scratch should be hidden');
+    queueTypes(['logic-taut']); nextQuestion(); if (CV) closeConcept();
+    const n = S.log.length;
+    for (const key of ['1', '2', 'ArrowLeft']) $('scratch').dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    if (S.log.length !== n) f.push('a key typed in the scratch space answered a yes/no question');
+  } catch (e) { f.push('scratch round threw: ' + e.message); }
+  finally {
+    if (S) clearInterval(S.timer);
+    S = null;
+    keys.forEach((k, i) => saved[i] === null ? localStorage.removeItem(k) : localStorage.setItem(k, saved[i]));
+    RS = savedRS; showScreen('home');
+  }
+  return f;
+}
 function queueTypes(ids) {
   S.queue = ids.map(id => ({ q: { ...tryDraw([id]), golden: false }, at: 0 }));
 }
