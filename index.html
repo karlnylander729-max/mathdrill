@@ -45,15 +45,15 @@ const CONFIG = {
   // Focus drills: rounds on a few types, always available (ahead of lectures too). Own best score and history; ratings and mastery are shared.
   // Types marked hub: false appear only here (not in the main round, not in the overall rating).
   drills: [
-    // Class-test drills: every drillable type on the test, shown at the top of home until the test day ends. Delete after the test.
+    // Class-test drills: every drillable type on the test. `ends` (local time) is when the test is over; until then the soonest one is the home focus. Delete after the test.
     // LA CT1 scope assumed weeks 1–5 (KEATS gives no scope); revise after Karl's past-test mocks.
-    { id: 'ct1-la',   name: 'LA Class Test 1',      until: '2026-11-11', types: [
+    { id: 'ct1-la',   name: 'LA Class Test 1',      ends: '2026-11-11T10:00', when: 'Wed 11 Nov, 09:00', types: [
       'calc-recip', 'calc-cxsym',                                   // Q1: Re/Im of 1/z, z², e^(...) in a and b
       'la-dotexp', 'la-cdist', 'la-linept', 'la-normsq', 'la-distsq', 'la-alpha',   // Q2: dot expansion, ℂ² distance, lines
       'la-inspan', 'la-indep', 'la-basis',                          // Q3: span select-all
       'la-subspace', 'la-consist'] },                               // Q4: subspace select-all; consistency
     // Logic in-class problem set: propositional logic, course weeks 1–5 (validity, L1 syntax, truth tables, ND for L1, formalisation in L1)
-    { id: 'ps-logic', name: 'Logic Problem Set',    until: '2026-11-13', types: ['logic-famous', 'logic-name', 'logic-main', 'logic-sentence', 'logic-official', 'logic-restore', 'logic-drop',
+    { id: 'ps-logic', name: 'Logic Problem Set',    ends: '2026-11-13T17:20', when: 'Fri 13 Nov, 16:20, Strand LG305', types: ['logic-famous', 'logic-name', 'logic-main', 'logic-sentence', 'logic-official', 'logic-restore', 'logic-drop',
       'logic-formalise', 'logic-connective', 'logic-value', 'logic-column', 'logic-forced', 'logic-rows', 'logic-truerows', 'logic-taut', 'logic-valid', 'logic-consistent',
       'logic-equiv', 'logic-counter', 'logic-negin', 'logic-ndrule', 'logic-goalrule', 'logic-ndassume'] },
     { id: 'matmul',      name: 'Matrix multiplication', types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'] },
@@ -2436,6 +2436,9 @@ const wordCount = s => s.split(/\s+/).filter(Boolean).length;
   .prompt { font-size: 22px; min-height: 120px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 12px 4px; overflow-x: auto; }
   .prompt .katex { font-size: 1.1em; }
   .f { font-family: "Times New Roman", serif; font-size: 1.15em; white-space: nowrap; }
+  .focus { text-align: center; margin: 28px 0 20px; }
+  .focusName { font-size: 30px; font-weight: 700; margin: 6px 0; }
+  #everythingElse > summary { cursor: pointer; color: var(--muted, #8a8f98); margin: 18px 0 8px; }
   #scratch { width: 100%; box-sizing: border-box; margin: 8px 0; padding: 10px; font: 14px/1.45 ui-monospace, Menlo, monospace; color: var(--ink); background: #0f1114; border: 1px dashed #2c313a; border-radius: 10px; resize: vertical; }
   #answer, #tryAnswer { width: 100%; font-size: 24px; padding: 12px; border-radius: 10px; border: 2px solid #2c313a; background: #0f1114; color: var(--ink); text-align: center; outline: none; }
   #answer:focus, #tryAnswer:focus { border-color: var(--accent); }
@@ -2494,9 +2497,12 @@ const wordCount = s => s.split(/\s+/).filter(Boolean).length;
 <body>
 <div id="home" class="screen on">
   <div class="bar"><span class="big">Drill</span><span class="muted" id="poolInfo"></span></div>
-  <div id="homeHead"></div>
-  <button class="start" onclick="startRound()">Start</button>
-  <div id="homeStats"></div>
+  <div id="homeFocus"></div>
+  <details id="everythingElse"><summary>Everything else</summary>
+    <div id="homeHead"></div>
+    <button class="start" onclick="startRound()">Start main round</button>
+    <div id="homeStats"></div>
+  </details>
 </div>
 
 <div id="play" class="screen">
@@ -5088,11 +5094,24 @@ function drillButton(d) {
   return `<button onclick="startRound('${d.id}')"><b>${d.name}</b><br><span class="muted">rating ${r}${pb ? ` · best ${pb.points}` : ''}</span></button>`;
 }
 // Class-test drills: own block at the top of home while the test is ahead, hidden from the course groups
-const isExamDrill = d => !!d.until;
+const isExamDrill = d => !!d.ends;
+const examActive = d => isExamDrill(d) && Date.now() < Date.parse(d.ends);
+// The one thing on the home screen: the class-test drill whose test is soonest and not yet over; null means the main round
+function focusPick() {
+  return CONFIG.drills.filter(examActive).sort((a, b) => Date.parse(a.ends) - Date.parse(b.ends))[0] || null;
+}
+function focusBlock() {
+  const d = focusPick();
+  if (!d) return `<div class="focus"><div class="muted">Now</div><div class="focusName">Main round</div>
+    <div class="muted">everything lectured so far · rating ${Math.round(headline())}</div><button class="start" onclick="startRound()">Start</button></div>`;
+  const ts = drillTypes(d), done = ts.filter(t => RS[t.id]?.mastered).length;
+  return `<div class="focus"><div class="muted">Now</div><div class="focusName">${d.name}</div>
+    <div class="muted">test ${d.when} · ${done}/${ts.length} types mastered</div><button class="start" onclick="startRound('${d.id}')">Start</button></div>`;
+}
 function examBlock() {
-  const ds = CONFIG.drills.filter(d => isExamDrill(d) && dayKey() <= d.until);
+  const ds = CONFIG.drills.filter(examActive);
   if (!ds.length) return '';
-  const days = d => Math.round((new Date(d.until) - new Date(dayKey())) / 864e5);
+  const days = d => Math.round((new Date(d.ends.slice(0, 10)) - new Date(dayKey())) / 864e5);
   const row = d => { const ts = drillTypes(d), done = ts.filter(t => RS[t.id]?.mastered).length;
     return drillButton(d).replace('</span></button>', ` · ${done}/${ts.length} mastered · ${days(d) ? `${days(d)} day${days(d) === 1 ? '' : 's'} left` : 'today'}</span></button>`); };
   return `<h2>Class tests · every drillable type on the test</h2><div class="drills">${ds.map(row).join('')}</div>`;
@@ -5107,6 +5126,7 @@ function showHome() {
   const hist = loadJSON(HISTORY_KEY, []), types = activeTypes(), mastered = types.filter(t => RS[t.id]?.mastered).length;
   const streak = dayStreak(hist.map(r => dayKey(r.t)));
   $('poolInfo').textContent = `Week ${Math.max(...Object.values(CONFIG.currentWeek))} · ${types.length} types`;
+  $('homeFocus').innerHTML = focusBlock();
   $('homeHead').innerHTML = `<div class="score">${Math.round(headline())}</div>
     <div class="muted center">rating · ${mastered}/${types.length} mastered · streak ${streak} day${streak === 1 ? '' : 's'} · today: ${todaysModifier().name}</div>${unopenedLine()}`;
   $('homeStats').innerHTML = examBlock() + drillsBlock() + conceptsList() + statsSection(hist) + dashboard(types, hist) + stackGuide() + weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
@@ -5388,8 +5408,8 @@ function init() {
 ===================================================================== -->
 <script>
 function runSelfTest() {
-  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests(), askClaude: askClaudeTextTest(), scratch: scratchTests() };
-  out.ok = out.scratch.length === 0 && out.concepts.length === 0 && out.entry.length === 0 && out.askClaude.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests(), askClaude: askClaudeTextTest(), scratch: scratchTests(), focus: homeFocusTest() };
+  out.ok = out.focus.length === 0 && out.scratch.length === 0 && out.concepts.length === 0 && out.entry.length === 0 && out.askClaude.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
   const pre = $('selftest');
   pre.style.display = 'block';
   pre.textContent = JSON.stringify(out, null, 1);
@@ -5663,6 +5683,21 @@ function whyLinkTest() {
   return f;
 }
 // Queue one question of each given type so the next nextQuestion() calls show them
+// ---- single-focus home: the soonest unfinished class test, else the main round; everything else folded away ----
+function homeFocusTest() {
+  const f = [], realNow = Date.now, at = t => { Date.now = () => Date.parse(t); };
+  try {
+    if (typeof focusPick !== 'function') return ['focusPick is not defined'];
+    at('2026-11-10T22:00'); if (focusPick()?.id !== 'ct1-la') f.push(`22:00 the night before: focus ${focusPick()?.id}, want ct1-la`);
+    at('2026-11-11T10:30'); if (focusPick()?.id !== 'ps-logic') f.push(`after the LA test: focus ${focusPick()?.id}, want ps-logic`);
+    at('2026-11-14T09:00'); if (focusPick() !== null) f.push(`after both tests: focus ${focusPick()?.id}, want the main round (null)`);
+    at('2026-11-10T22:00'); showHome();
+    const focus = $('homeFocus'), rest = $('everythingElse');
+    if (!focus || !focus.textContent.includes('LA Class Test 1') || !focus.querySelector('button')) f.push('home focus does not show LA Class Test 1 with a Start button');
+    if (!rest || rest.open || !rest.contains($('homeStats'))) f.push('everything else is not folded away under one closed section');
+  } finally { Date.now = realNow; showHome(); }
+  return f;
+}
 // ---- scratch space: templates, visibility, keys typed into it never answer, par raised ----
 function scratchTests() {
   const f = [];
