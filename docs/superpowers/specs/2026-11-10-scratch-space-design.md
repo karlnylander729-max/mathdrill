@@ -38,7 +38,8 @@ Some question types take several steps (row reduction, span checks, natural-dedu
 
 ## Calls made by Claude
 
-- Par for scratch-space types goes up, because writing steps takes longer than doing them in the head. Set by timing a few runs. *(Claude's call)*
+- A question answered with written working scores its time ÷ `scratchParFactor` (2), because writing steps takes longer than doing them in the head; par itself is unchanged, so types answered in the head are not inflated. Retune after real runs. *(Claude's call, revised after review: a global par doubling inflated ratings and mastery)*
+- A hidden tab pauses the round; closing the page ends and saves it. *(Claude's call, from review)*
 - Points and personal bests stay as they are. With no clock, longer rounds score more points, so a PB rewards stamina as well as speed. *(Claude's call)*
 - Build on a branch; do not push before the LA class test on 2026-11-11 09:00, so the live drill stays stable for the test. *(Claude's call)*
 

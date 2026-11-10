@@ -109,7 +109,7 @@ const CONFIG = {
   weakness: { pull: 1, pointsBonus: 0.5 },   // weakest types drawn up to (1 + pull)×; weakest category scores up to (1 + bonus)×
   decay: { afterDays: 21, perDay: 2, maxLoss: 40 },
   skipUnlockSeconds: 5,
-  scratchParFactor: 2,   // par multiplier for types with a scratch space: writing steps out takes longer (retune after real runs)
+  scratchParFactor: 2,   // a question answered with written working scores its time ÷ this: writing steps out takes longer (retune after real runs)
   resurfaceAfter: [3, 6],                    // a skipped question returns after this many other questions
   combo: { step: 0.1, max: 20 },             // points multiplier 1 + step × (streak − 1), capped at max
   points: { base: 10, miss: 25 },            // correct: base × (0.5 + speed) × combo × weakness. Skip/wrong tap: −miss × weakness
@@ -4585,8 +4585,6 @@ function scratchWork() {
   return el.style.display !== 'none' && el.value !== el.dataset.template ? el.value.trimEnd() : '';
 }
 const TYPE_BY_ID = Object.fromEntries(TYPES.map(t => [t.id, t]));
-const BASE_PAR = Object.fromEntries(TYPES.map(t => [t.id, t.par]));
-for (const id of Object.keys(SCRATCH)) if (TYPE_BY_ID[id]) TYPE_BY_ID[id].par = BASE_PAR[id] * CONFIG.scratchParFactor;
 const weekNow = cat => CONFIG.currentWeek[cat] ?? 0;
 const weekLabel = () => Object.entries(CONFIG.currentWeek).filter(([c]) => c !== 'basics').map(([c, w]) => `${c} ${w}`).join(' · ');
 const activeTypes = () => TYPES.filter(t => t.hub !== false && t.weight > 0 && t.week <= weekNow(t.cat) && CONFIG.categories[t.cat]?.weight > 0);
@@ -4759,7 +4757,7 @@ function nextQuestion() {
   input.value = '';
   showScratch(q);
   tick();
-  if (S?.drill) conceptFirst(q.type);   // tick() may have ended the round (S = null)
+  if (S?.drill) conceptFirst(q.type);
   if (!isBool && !CV) focusInput(q.noKeyboard ? 'none' : q.mode || KEYSETS[q.kind].mode);
 }
 function showScratch(q) {
@@ -4808,13 +4806,14 @@ function onInput() {
   else $('prev').innerHTML = $('prev').dataset.miss || '';
 }
 function record(ok, skipped = false, attempt = '') {
-  const q = S.cur, type = TYPE_BY_ID[q.type], ms = Date.now() - S.start;
+  const q = S.cur, type = TYPE_BY_ID[q.type], ms = Date.now() - S.start, work = scratchWork();
+  const scored = work ? ms / CONFIG.scratchParFactor : ms;   // written working: the time counts at a reduced weight
   S.streak = ok ? S.streak + 1 : 0;
   const ctx = { combo: comboMult(S.streak, S.mod.comboStep ?? CONFIG.combo.step), weak: weakMult(q.cat), golden: q.golden };
-  const pts = points(ok, ms, type.par, ctx), { delta, change } = applyAnswer(type, ok, ms);
+  const pts = points(ok, scored, type.par, ctx), { delta, change } = applyAnswer(type, ok, scored);
   S.points += pts;
   if (ok) S.correct++;
-  S.log.push({ cat: q.cat, type: type.id, ok, ms, q: q.q, ans: answerTeX(q), delta, attempt, skipped, bool: q.kind === 'bool', again: !!q.resurfaced, work: scratchWork() });
+  S.log.push({ cat: q.cat, type: type.id, ok, ms, q: q.q, ans: answerTeX(q), delta, attempt, skipped, bool: q.kind === 'bool', again: !!q.resurfaced, work });
   if (change) S.changes.push({ id: type.id, change });
   if (skipped && (q.resurfaced || 0) < 2) S.queue.push({ q: { ...q, resurfaced: (q.resurfaced || 0) + 1 }, at: S.count + ri(...CONFIG.resurfaceAfter) });
   feedback(ok, ctx, delta, q);
@@ -4920,7 +4919,7 @@ const plain = html => html.replace(/<br\s*\/?>/g, ' / ').replace(/<\/?(span|sub|
 const secs = ms => (ms / 1000).toFixed(1) + ' s';
 // Every question in order, with status; the one on screen when the round ended is included (it never touches ratings)
 function questionLine(e, i) {
-  const par = TYPE_BY_ID[e.type].par, t = `${secs(e.ms)}, par ${par} s`;
+  const par = TYPE_BY_ID[e.type].par * (e.work ? CONFIG.scratchParFactor : 1), t = `${secs(e.ms)}, par ${par} s`;
   const typed = e.bool ? '' : `; I had typed: ${e.attempt.trim() ? `"${e.attempt}"` : '(nothing)'}`;
   const status = e.unanswered ? `UNANSWERED when the round ended (${secs(e.ms)})${typed}`
     : e.ok ? `${e.ms > par * 1000 ? 'correct but SLOW' : 'correct'} (${t})${e.attempt ? `; I answered: ${e.attempt}` : ''}`
@@ -5043,7 +5042,7 @@ function trendBlock(hist) {
 let WHY = [];   // Why? context per Review item: the missed question and the attempt
 function reviewList(log) {
   const items = log.filter(e => !e.ok && !(e.unanswered && e.ms < 2000 && !e.attempt));
-  WHY = items.map(e => ({ q: e, attempt: e.attempt }));
+  WHY = items.map(e => ({ q: e, attempt: e.attempt, work: e.work }));
   if (!items.length) return '';
   return '<h2>Review</h2>' + items.map((e, i) => {
     const status = e.unanswered ? 'unfinished' : e.skipped ? 'skipped' : 'wrong', cid = CONCEPT_OF[e.type];
@@ -5269,6 +5268,13 @@ function pauseRound() {
   $('keys').style.display = 'none';
   $('answer').blur();
 }
+// A hidden tab (laptop asleep, app in the background) pauses the round; closing the page saves it
+function onVisibility(hidden) {
+  if (!S) return;
+  if (hidden && !S.pausedAt) { pauseRound(); S.hiddenPause = true; }
+  else if (!hidden && S.hiddenPause) { delete S.hiddenPause; resumeRound(); }
+}
+function onPageHide() { if (S) endRound(); }
 function resumeRound() {
   if (!S?.pausedAt) return;
   const paused = Date.now() - S.pausedAt;
@@ -5359,7 +5365,9 @@ function installMeta() {
 function init() {
   $('answer').addEventListener('input', onInput);
   $('answer').addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
-  $('scratch').addEventListener('keydown', e => e.stopPropagation());   // typing working never answers a yes/no question
+  $('scratch').addEventListener('keydown', e => e.stopPropagation());
+  document.addEventListener('visibilitychange', () => onVisibility(document.hidden));
+  window.addEventListener('pagehide', onPageHide);   // typing working never answers a yes/no question
   $('bTrue').addEventListener('click', () => answerBool(true));
   $('bFalse').addEventListener('click', () => answerBool(false));
   document.addEventListener('keydown', e => {
@@ -5662,7 +5670,6 @@ function scratchTests() {
   for (const id of Object.keys(SCRATCH)) {
     if (!TYPE_BY_ID[id]) { f.push(`SCRATCH key ${id} is not a type`); continue; }
     for (let k = 0; k < 20; k++) { const q = tryDraw([id]); if (!(scratchTemplate({ ...q, type: id }) || '').trim()) { f.push(`${id}: empty template`); break; } }
-    if (TYPE_BY_ID[id].par !== BASE_PAR[id] * CONFIG.scratchParFactor) f.push(`${id}: par not raised`);
   }
   const rows = scratchTemplate({ type: 'logic-taut', q: '$P \\to (Q \\to P)$' }).split('\n').filter(l => /^[TF] [TF] +\|/.test(l));
   if (rows.length !== 4) f.push(`two-letter truth table has ${rows.length} valuation rows, want 4`);
@@ -5684,6 +5691,30 @@ function scratchTests() {
     $('scratch').value = 'pending work';
     endRound();
     if (!lastSummary.includes('pending work')) f.push('working of the question open at End is missing from the summary');
+    // Written working: time counts at 1/scratchParFactor; no working: full time; par itself never changes
+    startRound(); if (CV) closeConcept();
+    if (TYPE_BY_ID['la-inspan'].par !== 12) f.push('la-inspan par was changed globally');
+    queueTypes(['la-inspan']); nextQuestion(); if (CV) closeConcept();
+    S.start = Date.now() - 20000; $('scratch').value += '\nworked'; answerBool(true);
+    const withWork = RS['la-inspan'].log.at(-1).ms;
+    queueTypes(['la-inspan']); nextQuestion(); if (CV) closeConcept();
+    S.start = Date.now() - 20000; answerBool(true);
+    const without = RS['la-inspan'].log.at(-1).ms;
+    if (Math.abs(withWork - 20000 / CONFIG.scratchParFactor) > 500 || Math.abs(without - 20000) > 500) f.push(`scored time with/without working ${withWork}/${without}, want ${20000 / CONFIG.scratchParFactor}/20000`);
+    // Hidden tab pauses the question clock; closing the page saves the round
+    const realNow = Date.now; let now = realNow();
+    Date.now = () => now;
+    try {
+      const since = now - S.start;
+      if (typeof onVisibility !== 'function') f.push('onVisibility is not defined');
+      else { onVisibility(true); now += 8 * 3600e3; onVisibility(false); if (now - S.start !== since) f.push('an 8 h hidden tab counted as answer time'); }
+    } finally { Date.now = realNow; }
+    const before = loadJSON(HISTORY_KEY, []).length;
+    if (typeof onPageHide !== 'function') f.push('onPageHide is not defined');
+    else { onPageHide(); if (S !== null || loadJSON(HISTORY_KEY, []).length !== before + 1) f.push('closing the page did not save the round'); }
+    // Ask Claude from the results Review list carries the working
+    reviewList([{ cat: 'la', type: 'la-inspan', ok: false, ms: 1, q: 'Q', ans: 'A', attempt: '', bool: true, work: 'review work' }]);
+    if (WHY[0]?.work !== 'review work') f.push('results Review list drops the working for Ask Claude');
   } catch (e) { f.push('scratch round threw: ' + e.message); }
   finally {
     if (S) clearInterval(S.timer);
