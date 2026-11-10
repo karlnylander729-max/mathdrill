@@ -4814,7 +4814,7 @@ function record(ok, skipped = false, attempt = '') {
   const pts = points(ok, ms, type.par, ctx), { delta, change } = applyAnswer(type, ok, ms);
   S.points += pts;
   if (ok) S.correct++;
-  S.log.push({ cat: q.cat, type: type.id, ok, ms, q: q.q, ans: answerTeX(q), delta, attempt, skipped, bool: q.kind === 'bool', again: !!q.resurfaced });
+  S.log.push({ cat: q.cat, type: type.id, ok, ms, q: q.q, ans: answerTeX(q), delta, attempt, skipped, bool: q.kind === 'bool', again: !!q.resurfaced, work: scratchWork() });
   if (change) S.changes.push({ id: type.id, change });
   if (skipped && (q.resurfaced || 0) < 2) S.queue.push({ q: { ...q, resurfaced: (q.resurfaced || 0) + 1 }, at: S.count + ri(...CONFIG.resurfaceAfter) });
   feedback(ok, ctx, delta, q);
@@ -4827,7 +4827,7 @@ function feedback(ok, ctx, delta, q) {
   $('delta').textContent = `${delta >= 0 ? '+' : ''}${Math.round(delta)}`;
   $('delta').className = delta >= 0 ? 'up' : 'down';
   const cid = !ok && CONCEPT_OF[q.type], last = S.log.at(-1);
-  WHY_PREV = { q: last, attempt: last.attempt };
+  WHY_PREV = { q: last, attempt: last.attempt, work: last.work };
   const why = cid ? ` <button class="why" onclick="openConcept('${cid}', WHY_PREV)">Why? →</button>` : '';
   $('prev').innerHTML = ok ? '' : '✗ ' + renderMath(`$${answerTeX(q)}$`) + why;
   $('prev').dataset.miss = $('prev').innerHTML;
@@ -4905,7 +4905,7 @@ function endRound() {
   const tail = S.drill ? statsBlock(hist, S.drill.id, S.drill.name, true) : statsBlock(hist, null, 'Main round') + weakBox(mainRounds(hist)) + trendBlock(mainRounds(hist));
   $('roundStats').innerHTML = ratingTable(S, round) + movers(S.log) + changeList(S.changes) + catTable(round.cats) + tail;
   const q = S.cur, pending = q && { cat: q.cat, type: q.type, ok: false, unanswered: true, ms: Date.now() - S.start, q: q.q, ans: answerTeX(q),
-    attempt: q.kind === 'bool' ? '' : $('answer').value, bool: q.kind === 'bool', again: !!q.resurfaced };
+    attempt: q.kind === 'bool' ? '' : $('answer').value, bool: q.kind === 'bool', again: !!q.resurfaced, work: scratchWork() };
   const fullLog = pending ? [...S.log, pending] : S.log;
   $('misses').innerHTML = reviewList(fullLog);
   lastSummary = S.log.length || pending?.attempt ? roundSummary({ ...round, drillName: S.drill?.name, log: fullLog, before: S.before, beforeHead: S.beforeHead }) : '';
@@ -4926,7 +4926,8 @@ function questionLine(e, i) {
     : e.ok ? `${e.ms > par * 1000 ? 'correct but SLOW' : 'correct'} (${t})${e.attempt ? `; I answered: ${e.attempt}` : ''}`
     : e.skipped ? `MISSED, skipped (${t})${typed}` : `MISSED, I answered: ${e.attempt} (${t})`;
   const tag = e.again ? ' (returned after skip)' : '';
-  return `${i + 1}. [${CONFIG.categories[e.cat].label} · ${TYPE_BY_ID[e.type].name}]${tag} Q: ${plain(e.q)}\n   Correct: ${e.ans.replace(/^\\text\{(.*)\}$/, '$1')}\n   ${status}`;
+  const work = e.work ? `\n   My working:\n${e.work.split('\n').map(l => '      ' + l).join('\n')}` : '';
+  return `${i + 1}. [${CONFIG.categories[e.cat].label} · ${TYPE_BY_ID[e.type].name}]${tag} Q: ${plain(e.q)}\n   Correct: ${e.ans.replace(/^\\text\{(.*)\}$/, '$1')}\n   ${status}${work}`;
 }
 function roundSummary(r) {
   const signedN = n => `${n >= 0 ? '+' : ''}${n}`;
@@ -5227,7 +5228,8 @@ function markSeen(id) { localStorage.setItem(SEEN_KEY, JSON.stringify([...seenCo
 // "Ask Claude about this": the concept's four lenses (and the missed question, if any) as plain text
 function conceptAskText(c, context = {}) {
   const q = context.q, attempt = (context.attempt || '').trim();
-  const missed = q ? [`Q: ${plain(q.q)}`, `Correct: ${q.ans ?? answerTeX(q)}`, attempt ? `I had typed: "${attempt}"` : 'I had typed: (nothing)'] : [];
+  const missed = q ? [`Q: ${plain(q.q)}`, `Correct: ${q.ans ?? answerTeX(q)}`, attempt ? `I had typed: "${attempt}"` : 'I had typed: (nothing)',
+    ...(context.work ? ['My working:', context.work] : [])] : [];
   return [`I am studying "${c.name}" in my maths course and I am stuck.`, '',
     `Picture: ${c.picture.alt}`, `Algebra: ${plain(c.algebra)}`, `Origin: ${plain(c.originText)}`, '',
     ...missed, ...(q ? [''] : []), "Explain the step I'm stuck on, then let me ask follow-ups."].join('\n');
@@ -5628,7 +5630,9 @@ function askClaudeTextTest() {
   const withQ = conceptAskText(c, { q: { q: 'Find <b>$x$</b>', a: '3', kind: 'num' }, attempt: '4' }), none = conceptAskText(c);
   for (const [what, ok] of [['name', withQ.includes(c.name)], ['alt', withQ.includes('fixture')], ['algebra TeX', withQ.includes('$x^2$')],
     ['origin', withQ.includes('Fixture origin.')], ['Q line', withQ.includes('Q: Find $x$')], ['typed line', withQ.includes('I had typed: "4"')],
-    ['no Q without context', !/^Q:/m.test(none) && !none.includes('I had typed')], ['request line last', withQ.endsWith(end) && none.endsWith(end)]])
+    ['no Q without context', !/^Q:/m.test(none) && !none.includes('I had typed')], ['request line last', withQ.endsWith(end) && none.endsWith(end)],
+    ['working block', conceptAskText(c, { q: { q: 'Q', a: '3', kind: 'num' }, attempt: '4', work: 'step 1\nstep 2' }).includes('My working:\nstep 2'.replace('step 2', 'step 1\nstep 2'))],
+    ['no working block without working', !withQ.includes('My working:')]])
     if (!ok) f.push(`ask text: ${what}`);
   return f;
 }
@@ -5673,6 +5677,13 @@ function scratchTests() {
     const n = S.log.length;
     for (const key of ['1', '2', 'ArrowLeft']) $('scratch').dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
     if (S.log.length !== n) f.push('a key typed in the scratch space answered a yes/no question');
+    $('scratch').value += '\nmy rows';
+    answerBool(true);
+    if (!(S.log.at(-1).work || '').endsWith('my rows')) f.push('answered question did not keep its working');
+    queueTypes(['la-inspan']); nextQuestion(); if (CV) closeConcept();
+    $('scratch').value = 'pending work';
+    endRound();
+    if (!lastSummary.includes('pending work')) f.push('working of the question open at End is missing from the summary');
   } catch (e) { f.push('scratch round threw: ' + e.message); }
   finally {
     if (S) clearInterval(S.timer);
@@ -5888,7 +5899,7 @@ function incentiveTests() {
 }
 function summaryTest() {
   const log = [{ cat: 'calc', type: 'calc-inverse', ok: false, ms: 9400, q: '$f(x) = 3x - 2$. $\\ f^{-1}(x) = ?$', ans: '(x+2)/3', delta: -30, attempt: '3x+2', skipped: true },
-    { cat: 'logic', type: 'logic-valid', ok: false, ms: 2100, q: '<span class="f">P → Q, &nbsp;Q &nbsp;∴&nbsp; P</span>', ans: T`\text{Invalid}`, delta: -30, attempt: 'Valid', skipped: false },
+    { cat: 'logic', type: 'logic-valid', ok: false, ms: 2100, q: '<span class="f">P → Q, &nbsp;Q &nbsp;∴&nbsp; P</span>', ans: T`\text{Invalid}`, delta: -30, attempt: 'Valid', skipped: false, work: 'P Q | P→Q\nT F | F' },
     { cat: 'la', type: 'la-product', ok: true, ms: 26000, q: 'M', ans: 'x', delta: 3, attempt: '1,2;3,4', skipped: false },
     { cat: 'la', type: 'la-dot', ok: true, ms: 3000, q: 'D', ans: '5', delta: 20, attempt: '5', skipped: false },
     { cat: 'seq', type: 'seq-geosum', ok: false, unanswered: true, ms: 12000, q: 'G', ans: '11', attempt: '1-2', bool: false },
@@ -5897,7 +5908,10 @@ function summaryTest() {
     before: { calc: 1000, logic: 1000, la: 1000 }, beforeHead: 1000 });
   const need = ['-3 < x \\le 2\\}| > 0', 'I had typed: "3x+2"', 'Correct: (x+2)/3', 'MISSED, I answered: Valid', 'P → Q, Q ∴ P', 'correct but SLOW (26.0 s, par 18 s); I answered: 1,2;3,4',
     '4. [Linear algebra · Dot product] Q: D', 'correct (3.0 s, par 7 s)', 'UNANSWERED when the round ended (12.0 s); I had typed: "1-2"', 'ALL QUESTIONS (6, in order)', 'walk me through'];
-  return need.filter(n => !text.includes(n)).map(n => ({ what: 'summary missing', n }));
+  const f = need.filter(n => !text.includes(n)).map(n => ({ what: 'summary missing', n }));
+  if (!text.includes('   My working:\n      P Q | P→Q\n      T F | F')) f.push({ what: 'summary missing the working block' });
+  if (text.split('My working:').length !== 2) f.push({ what: 'a working block appears for an entry without working' });
+  return f;
 }
 // Rounds have no clock: ten minutes in, tick() leaves the round running; End reaches the results screen
 function roundEndTest() {
