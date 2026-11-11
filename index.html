@@ -779,111 +779,167 @@ const TYPES = [
   }},
 
   // ---------- Elementary Logic ----------
-  { id: 'logic-famous', name: 'Famous form valid?', par: 5, cat: 'logic', week: 1, weight: 1, gen() {
-    const form = pick(FAMOUS), [A, B, C] = literals(3), [prem, conc] = form.f(A, B, C);
+  // L3 benchmark: Book of Problems 1.3 (named forms in English, negated and compound parts); L1 plain letters, L2 literals, L3 one part a compound
+  { id: 'logic-famous', name: 'Famous form valid?', par: 5, cat: 'logic', week: 1, weight: 1, levels: 3, gen(L = 3) {
+    const lit = x => Math.random() < 0.3 ? neg(x) : x, [X, Y, ...rest] = shuffle(['P', 'Q', 'R', 'S']);
+    const slots = L === 1 ? shuffle(['P', 'Q', 'R']) : L === 2 ? literals(3) : rest.map(lit);
+    if (L === 3) slots.splice(ri(0, 1), 0, pick([and, or, imp])(lit(X), lit(Y)));   // letters disjoint, so validity is the form's
+    const form = pick(FAMOUS), [prem, conc] = form.f(...slots);
     return { q: argText(shuffle(prem), conc), a: valid(prem, conc), kind: 'bool', labels: ['Valid', 'Invalid'] };
   }},
-  { id: 'logic-main', name: 'Main connective', par: 4, cat: 'logic', week: 3, weight: 1, gen() {
-    const f = rf(3, ['P', 'Q', 'R']);
+  // L3 benchmark: Book of Problems 2.4 (v)-(vi), e.g. ¬((P ∨ Q → R) → P ∧ R)
+  { id: 'logic-main', name: 'Main connective', par: 4, cat: 'logic', week: 3, weight: 1, levels: 3, gen(L = 3) {
+    const f = L === 1 ? rfDeep(2, ['P', 'Q'], 2, 2) : L === 2 ? rf(3, ['P', 'Q', 'R']) : rfDeep(4, ['P', 'Q', 'R'], 3, 5);
     if (typeof f === 'string' || depth(f) < 2) return null;
     return { q: `Main connective of <span class="f">${show(f)}</span>`, a: CONNECTIVE_ALIASES[f.op], show: f.op, kind: 'text', keys: ['¬', '∧', '∨', '→', '↔'], noKeyboard: true, hint: `one connective${LOGIC_ASCII}` };
   }},
-  { id: 'logic-formalise', name: 'Formalise', par: 6, cat: 'logic', week: 3, weight: 1, gen() {
-    const [A, B] = shuffle(['P', 'Q', 'R']), [phrase, ans] = pick([
-      [`${A} only if ${B}`, `${A}→${B}`], [`${A} if ${B}`, `${B}→${A}`], [`Provided that ${B}, ${A}`, `${B}→${A}`],
-      [`${A} unless ${B}`, `${A}∨${B}`], [`${A} just if ${B}`, `${A}↔${B}`], [`${A} if and only if ${B}`, `${A}↔${B}`],
-      [`Not ${A} unless ${B}`, `¬${A}∨${B}`], [`It's not true that ${A} only if ${B}`, `¬(${A}→${B})`]]);
-    return { q: `Formalise: <span class="f">${phrase}</span>`, a: ans, kind: 'logic', keys: LOGIC_KEYS, noKeyboard: true };
+  // L3 benchmark: 2021-22 P1 Q3(b) / mock 2025-26 Q3(b), e.g. "If Claudia finds Jonas and Jonas finds Martha, the knot is untied"; Book of Problems 5.4 (iii)
+  { id: 'logic-formalise', name: 'Formalise', par: 6, cat: 'logic', week: 3, weight: 1, levels: 3, gen(L = 3) {
+    const [A, B, C] = shuffle(['P', 'Q', 'R']);
+    const [phrase, tree] = pick([
+      [[`If ${A}, then ${B}`, imp(A, B)], [`${A} and not ${B}`, and(A, neg(B))], [`Neither ${A} nor ${B}`, and(neg(A), neg(B))],
+       [`Not both ${A} and ${B}`, neg(and(A, B))], [`Either ${A} or ${B}`, or(A, B)], [`If not ${A}, then ${B}`, imp(neg(A), B)]],
+      [[`${A} only if ${B}`, imp(A, B)], [`${A} if ${B}`, imp(B, A)], [`Provided that ${B}, ${A}`, imp(B, A)],
+       [`${A} unless ${B}`, or(A, B)], [`${A} just if ${B}`, iff(A, B)], [`${A} if and only if ${B}`, iff(A, B)],
+       [`Not ${A} unless ${B}`, or(neg(A), B)], [`It's not true that ${A} only if ${B}`, neg(imp(A, B))]],
+      [[`If ${A} and ${B}, then ${C}`, imp(and(A, B), C)], [`${A}, provided that ${B} or ${C}`, imp(or(B, C), A)],
+       [`${A} only if both ${B} and ${C}`, imp(A, and(B, C))], [`Not ${A} unless both ${B} and ${C}`, or(neg(A), and(B, C))],
+       [`If not ${A}, then not ${B} or not ${C}`, imp(neg(A), or(neg(B), neg(C)))], [`Provided that ${C}, ${A} if and only if ${B}`, imp(C, iff(A, B))],
+       [`Provided that ${A} unless ${B}, and that not ${B}, not ${A}`, imp(and(or(A, B), neg(B)), neg(A))],
+       [`${A} only if ${B}, and ${B} only if ${C}`, and(imp(A, B), imp(B, C))], [`If ${A}, then ${B} if ${C}`, imp(A, imp(C, B))],
+       [`It's not true that ${A} only if either ${B} or ${C}`, neg(imp(A, or(B, C)))], [`${A} if both ${B} and ${C}`, imp(and(B, C), A)],
+       [`Not both ${A} and ${B}, unless ${C}`, or(neg(and(A, B)), C)], [`If ${A} unless ${B}, then ${C}`, imp(or(A, B), C)],
+       [`${A} only if ${B}, unless ${C}`, or(imp(A, B), C)], [`Neither ${A} nor ${B}, if ${C}`, imp(C, and(neg(A), neg(B)))],
+       [`If ${A}, then ${B}; and if not ${A}, then ${C}`, and(imp(A, B), imp(neg(A), C))]],
+    ][L - 1]);
+    return { q: `Formalise: <span class="f">${phrase}</span>`, a: show(tree), kind: 'logic', keys: LOGIC_KEYS, noKeyboard: true };
   }},
-  { id: 'logic-value', name: 'Truth value', par: 7, cat: 'logic', week: 4, weight: 1, gen() {
-    const L = ['P', 'Q', 'R'].slice(0, ri(2, 3)), f = rf(3, L), v = Object.fromEntries(L.map(x => [x, Math.random() < 0.5]));
-    if (typeof f === 'string' || depth(f) < 2) return null;
-    const asg = L.map(x => `${x}=${v[x] ? 'T' : 'F'}`).join(', ');
+  // L3 benchmark: one row of 2021-22 P1 Q2(b), (P ∧ Q → R) → (P → ¬Q ∨ R): 3 letters, 4-5 connectives
+  { id: 'logic-value', name: 'Truth value', par: 7, cat: 'logic', week: 4, weight: 1, levels: 3, gen(L = 3) {
+    const Ls = L === 1 ? ['P', 'Q'] : L === 2 ? ['P', 'Q', 'R'].slice(0, ri(2, 3)) : ['P', 'Q', 'R'];
+    const v = Object.fromEntries(Ls.map(x => [x, Math.random() < 0.5])), f = balanced(() => {
+      const g = L === 1 ? rfDeep(2, Ls, 2, 2) : L === 2 ? rf(3, Ls) : rfDeep(3, Ls, 3, 5);
+      return typeof g === 'string' || depth(g) < 2 || (L === 3 && letters([g]).length < 3) ? null : g;
+    }, g => ev(g, v));
+    if (!f) return null;
+    const asg = Ls.map(x => `${x}=${v[x] ? 'T' : 'F'}`).join(', ');
     return { q: `${asg}<br><span class="f">${show(f)}</span>`, a: ev(f, v), kind: 'bool', labels: ['T', 'F'] };
   }},
-  { id: 'logic-rows', name: 'Truth-table rows', par: 4, cat: 'logic', week: 4, weight: 1, gen() {
-    const f = rf(3, shuffle(['P', 'Q', 'R', 'P₁', 'Q₁']).slice(0, ri(2, 4)));
+  // L3 benchmark: 2021-22 P1 Q2 / 2022-23 P1 Q3 truth tables (3 letters, 8 rows); L3 goes up to 5 letters
+  { id: 'logic-rows', name: 'Truth-table rows', par: 4, cat: 'logic', week: 4, weight: 1, levels: 3, gen(L = 3) {
+    const f = L === 1 ? rfDeep(2, shuffle(['P', 'Q', 'R']).slice(0, 2), 2, 2) : L === 2 ? rf(3, shuffle(['P', 'Q', 'R', 'P₁', 'Q₁']).slice(0, ri(2, 4)))
+      : rfDeep(3, shuffle(['P', 'Q', 'R', 'S', 'P₁', 'Q₁']).slice(0, ri(3, 5)), 3, 6);
     if (depth(f) < 2) return null;
     return { q: `How many rows does the truth table for <span class="f">${show(f)}</span> have?`, a: String(2 ** letters([f]).length), kind: 'num',
              hint: 'a number: how many rows, not the table itself' };
   }},
-  { id: 'logic-taut', name: 'Tautology?', par: 8, cat: 'logic', week: 4, weight: 1, gen() {
-    const f = balanced(() => pick(TAUT_SEEDS)(rf(1, ['P', 'Q']), rf(1, ['P', 'Q'])), g => valid([], g));
-    return { q: `Tautology? <span class="f">${show(f)}</span>`, a: valid([], f), kind: 'bool', labels: ['Yes', 'No'] };
+  // L3 benchmark: 2021-22 P1 Q2(b)-(c), Book of Problems 3.3 (iii)-(ix): 3-letter candidates
+  { id: 'logic-taut', name: 'Tautology?', par: 8, cat: 'logic', week: 4, weight: 1, levels: 3, gen(L = 3) {
+    const make = [() => pick(TAUT_SEEDS)(...literals(2)), () => pick(TAUT_SEEDS)(rf(1, ['P', 'Q']), rf(1, ['P', 'Q'])), () => pick(TAUT3_SEEDS)(...literals(3))][L - 1];
+    const f = balanced(make, g => valid([], g));
+    return f && { q: `Tautology? <span class="f">${show(f)}</span>`, a: valid([], f), kind: 'bool', labels: ['Yes', 'No'] };
   }},
-  { id: 'logic-valid', name: 'Valid?', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
-    const L = ['P', 'Q', 'R'].slice(0, ri(2, 3));
-    const [prem, conc] = balanced(() => [Array.from({ length: ri(1, 2) }, () => rf(2, L)), rf(1, L)], ([p, c]) => valid(p, c));
-    const ok = valid(prem, conc);
-    return { q: argText(prem, conc), a: ok, kind: 'bool', labels: ['Valid', 'Invalid'] };
+  // L3 benchmark: 2022-23 P1 Q3(c)-(d) and mock 2025-26 Q2(b), e.g. (P ∧ Q) → R ⊨ (P ∨ Q) → R
+  { id: 'logic-valid', name: 'Valid?', par: 12, cat: 'logic', week: 4, weight: 1, levels: 3, gen(L = 3) {
+    const Ls = L === 1 ? ['P', 'Q'] : L === 2 ? ['P', 'Q', 'R'].slice(0, ri(2, 3)) : ['P', 'Q', 'R'];
+    const make = [() => [Array.from({ length: ri(1, 2) }, () => rf(1, Ls)), rf(1, Ls)], () => [Array.from({ length: ri(1, 2) }, () => rf(2, Ls)), rf(1, Ls)],
+      () => { const p = Array.from({ length: ri(1, 2) }, () => rfDeep(2, Ls, 1, 2)), c = rfDeep(2, Ls, 2, 3); return letters([...p, c]).length === 3 ? [p, c] : null; }][L - 1];
+    const arg = balanced(make, ([p, c]) => valid(p, c));
+    return arg && { q: argText(...arg), a: valid(...arg), kind: 'bool', labels: ['Valid', 'Invalid'] };
   }},
-  { id: 'logic-equiv', name: 'Equivalent?', par: 9, cat: 'logic', week: 4, weight: 1, gen() {
-    const [A, B] = literals(2), [f, g] = pick(EQUIV_SEEDS)(A, B);
+  // L3 benchmark: Book of Problems 3.3 (ii), (iv), (ix), (xi): 3-letter equivalences such as P → Q ∨ R vs (P → Q) ∨ (P → R)
+  { id: 'logic-equiv', name: 'Equivalent?', par: 9, cat: 'logic', week: 4, weight: 1, levels: 3, gen(L = 3) {
+    const [f, g] = L === 1 ? pick(EQUIV_SEEDS)(...shuffle(['P', 'Q'])) : L === 2 ? pick(EQUIV_SEEDS)(...literals(2))
+      : balanced(() => pick(EQUIV3_SEEDS)(...literals(3)), ([x, y]) => valid([x], y) && valid([y], x));
     return { q: `Equivalent?<br><span class="f">${show(f)}</span> &nbsp;and&nbsp; <span class="f">${show(g)}</span>`,
              a: valid([f], g) && valid([g], f), kind: 'bool', labels: ['Yes', 'No'] };
   }},
-  { id: 'logic-name', name: 'Name the form', par: 7, cat: 'logic', week: 1, weight: 1, gen() {
-    const form = pick(FAMOUS.filter(x => x.names)), [A, B, C] = literals(3), [prem, conc] = form.f(A, B, C);
+  // L3 benchmark: Book of Problems 1.3 (name the form; parts negated or compound); L1 plain letters, L2 literals, L3 one part a compound
+  { id: 'logic-name', name: 'Name the form', par: 7, cat: 'logic', week: 1, weight: 1, levels: 3, gen(L = 3) {
+    const lit = x => Math.random() < 0.3 ? neg(x) : x, [X, Y, ...rest] = shuffle(['P', 'Q', 'R', 'S']);
+    const slots = L === 1 ? shuffle(['P', 'Q', 'R']) : L === 2 ? literals(3) : rest.map(lit);
+    if (L === 3) slots.splice(ri(0, 1), 0, pick([and, or, imp])(lit(X), lit(Y)));
+    const form = pick(FAMOUS.filter(x => x.names)), [prem, conc] = form.f(...slots);
     return { q: `Name the form: ${argText(shuffle(prem), conc)}`, a: form.names, show: T`\text{${form.title}}`, kind: 'text', mode: 'text', hint: 'the name or its abbreviation, e.g. Modus Tollens or MT' };
   }},
-  { id: 'logic-official', name: 'Official sentence?', par: 6, cat: 'logic', week: 3, weight: 1, gen() {
-    const s = balanced(() => mutate(official(rfDeep(3, ['P', 'Q', 'R', 'P₁']))), isOfficial);
-    return { q: `Official sentence of L<sub>1</sub>?<br><span class="f">${s}</span>`, a: isOfficial(s), kind: 'bool', labels: ['Yes', 'No'] };
+  // L3 benchmark: Book of Problems 2.1 (v), (viii); 2022-23 P1 Q2(a) (P ∧ (Q ∧ ¬(R ∧ P)))
+  { id: 'logic-official', name: 'Official sentence?', par: 6, cat: 'logic', week: 3, weight: 1, levels: 3, gen(L = 3) {
+    const make = [() => rfDeep(2, ['P', 'Q'], 1, 2), () => rfDeep(3, ['P', 'Q', 'R', 'P₁']), () => rfDeep(4, ['P', 'Q', 'R', 'P₁'], 3, 6)][L - 1];
+    const s = balanced(() => mutate(official(make())), isOfficial);
+    return s && { q: `Official sentence of L<sub>1</sub>?<br><span class="f">${s}</span>`, a: isOfficial(s), kind: 'bool', labels: ['Yes', 'No'] };
   }},
-  { id: 'logic-sentence', name: 'Sentence?', par: 6, cat: 'logic', week: 3, weight: 1, gen() {
-    const s = balanced(() => mutate(abbrev(rfDeep(3, ['P', 'Q', 'R']))), isSentence);
-    return { q: `Is this a sentence of L<sub>1</sub>?<br><span class="f">${s}</span><br><span class="muted">official or an allowed abbreviation both count</span>`, a: isSentence(s), kind: 'bool', labels: ['Yes', 'No'] };
+  // L3 benchmark: Book of Problems 2.3 and 2.5 (iii), (vi), e.g. P ∨ Q ∨ R → P ∧ Q ∧ R
+  { id: 'logic-sentence', name: 'Sentence?', par: 6, cat: 'logic', week: 3, weight: 1, levels: 3, gen(L = 3) {
+    const make = [() => rfDeep(2, ['P', 'Q'], 1, 2), () => rfDeep(3, ['P', 'Q', 'R']), () => rfDeep(4, ['P', 'Q', 'R'], 3, 5)][L - 1];
+    const s = balanced(() => mutate(abbrev(make())), isSentence);
+    return s && { q: `Is this a sentence of L<sub>1</sub>?<br><span class="f">${s}</span><br><span class="muted">official or an allowed abbreviation both count</span>`, a: isSentence(s), kind: 'bool', labels: ['Yes', 'No'] };
   }},
-  { id: 'logic-restore', name: 'Restore brackets', par: 14, cat: 'logic', week: 3, weight: 1, gen() {
-    const f = rfDeep(3, ['P', 'Q', 'R']), disp = show(f), ans = official(f);
+  // L3 benchmark: Book of Problems 2.5 (iii) P ∧ Q ∨ R ↔ P ∨ ¬¬R and (vi) P ∨ Q ∨ R → P ∧ Q ∧ R
+  { id: 'logic-restore', name: 'Restore brackets', par: 14, cat: 'logic', week: 3, weight: 1, levels: 3, gen(L = 3) {
+    const f = [() => rfDeep(2, ['P', 'Q', 'R'], 2, 2), () => rfDeep(3, ['P', 'Q', 'R']), () => rfDeep(4, ['P', 'Q', 'R'], 3, 5)][L - 1](), disp = show(f), ans = official(f);
     if (disp === ans) return null;
     return { q: `Restore all brackets:<br><span class="f">${disp}</span>`, a: ans, kind: 'syntax', keys: LOGIC_KEYS, noKeyboard: true,
              check: isOfficial(ans) && isSentence(disp) && sameTree(parseLogic(disp), f) };
   }},
-  { id: 'logic-drop', name: 'Drop brackets', par: 12, cat: 'logic', week: 3, weight: 1, gen() {
-    const f = rfDeep(3, ['P', 'Q', 'R']), disp = official(f), ans = show(f);
+  // L3 benchmark: Book of Problems 2.5 (iii), (vi) read backwards (official form with 4-5 connectives)
+  { id: 'logic-drop', name: 'Drop brackets', par: 12, cat: 'logic', week: 3, weight: 1, levels: 3, gen(L = 3) {
+    const f = [() => rfDeep(2, ['P', 'Q', 'R'], 2, 2), () => rfDeep(3, ['P', 'Q', 'R']), () => rfDeep(4, ['P', 'Q', 'R'], 3, 5)][L - 1](), disp = official(f), ans = show(f);
     if (disp === ans) return null;
     return { q: `Drop every bracket the conventions allow:<br><span class="f">${disp}</span>`, a: ans, kind: 'syntax', keys: LOGIC_KEYS, noKeyboard: true,
              check: isOfficial(disp) && isSentence(ans) && sameTree(parseLogic(ans), f) };
   }},
-  { id: 'logic-column', name: 'Truth-table column', par: 10, cat: 'logic', week: 4, weight: 1, gen() {
-    const L = Math.random() < 0.75 ? ['P', 'Q'] : ['P', 'Q', 'R'], f = rfDeep(2, L, 1), rows = tfRows(L);
-    if (letters([f]).length < L.length) return null;
-    const head = rows.map(v => L.map(x => v[x] ? 'T' : 'F').join('')).join(' ');
-    return { q: `Truth-table column of <span class="f">${show(f)}</span><br><span class="muted">rows (${L.join(' ')}): ${head}</span>`,
+  // L3 benchmark: 2022-23 P1 Q3(d) / 2021-22 P1 Q2(a) full tables: a 3-letter column of 8 rows
+  { id: 'logic-column', name: 'Truth-table column', par: 10, cat: 'logic', week: 4, weight: 1, levels: 3, gen(L = 3) {
+    const Ls = L === 1 ? ['P', 'Q'] : L === 2 ? (Math.random() < 0.75 ? ['P', 'Q'] : ['P', 'Q', 'R']) : ['P', 'Q', 'R'];
+    const f = L === 1 ? rfDeep(1, Ls, 1, 1) : L === 2 ? rfDeep(2, Ls, 1) : rfDeep(3, Ls, 2, 4), rows = tfRows(Ls);
+    if (letters([f]).length < Ls.length) return null;
+    const head = rows.map(v => Ls.map(x => v[x] ? 'T' : 'F').join('')).join(' ');
+    return { q: `Truth-table column of <span class="f">${show(f)}</span><br><span class="muted">rows (${Ls.join(' ')}): ${head}</span>`,
              a: rows.map(v => ev(f, v) ? 'T' : 'F').join(''), kind: 'text', keys: ['T', 'F'], noKeyboard: true, hint: 'one T/F per row, top to bottom, e.g. TFTT' };
   }},
-  { id: 'logic-truerows', name: 'True-row count', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
-    const f = rfDeep(2, ['P', 'Q', 'R'].slice(0, ri(2, 3)), 2);
+  // L3 benchmark: 2021-22 P1 Q2(b) (P ∧ Q → R) → (P → ¬Q ∨ R): full 3-letter table
+  { id: 'logic-truerows', name: 'True-row count', par: 12, cat: 'logic', week: 4, weight: 1, levels: 3, gen(L = 3) {
+    const f = L === 1 ? rfDeep(2, ['P', 'Q'], 1, 2) : L === 2 ? rfDeep(2, ['P', 'Q', 'R'].slice(0, ri(2, 3)), 2) : rfDeep(3, ['P', 'Q', 'R'], 3, 5);
+    if (L === 3 && letters([f]).length < 3) return null;
     return { q: `In how many rows is <span class="f">${show(f)}</span> true?`, a: String(tfRows(letters([f]).sort()).filter(v => ev(f, v)).length), kind: 'num' };
   }},
-  { id: 'logic-counter', name: 'Counterexample row', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
-    const L = ['P', 'Q', 'R'].slice(0, ri(2, 3)), prem = Array.from({ length: ri(1, 2) }, () => rf(2, L)), conc = rf(1, L);
+  // L3 benchmark: 2022-23 P1 Q3(d) counterexample to (P ∧ Q) → R ⊨ (P ∨ Q) → R; 2024-25 P1 Q2
+  { id: 'logic-counter', name: 'Counterexample row', par: 12, cat: 'logic', week: 4, weight: 1, levels: 3, gen(L = 3) {
+    const Lt = L === 1 ? ['P', 'Q'] : L === 2 ? ['P', 'Q', 'R'].slice(0, ri(2, 3)) : ['P', 'Q', 'R'];
+    const prem = Array.from({ length: ri(1, 2) }, () => L === 1 ? rf(1, Lt) : L === 2 ? rf(2, Lt) : rfDeep(2, Lt, 1, 2)), conc = L === 3 ? rfDeep(2, Lt, 2, 3) : rf(1, Lt);
     const Ls = letters([...prem, conc]).sort(), bad = tfRows(Ls).filter(v => prem.every(p => ev(p, v)) && !ev(conc, v));
-    if (!bad.length || Ls.length < 2) return null;
+    if (!bad.length || Ls.length < (L === 3 ? 3 : 2)) return null;
     const rows = bad.map(v => Ls.map(x => v[x] ? 'T' : 'F').join(''));
     return { q: `Counterexample row (${Ls.join(' ')}):<br>${argText(prem, conc)}`, a: rows, show: T`\text{${rows.join(' or ')}}`,
              kind: 'text', keys: ['T', 'F'], noKeyboard: true, hint: 'one row: a T/F per letter in the order shown, e.g. TF' };
   }},
-  { id: 'logic-forced', name: 'Forced value', par: 5, cat: 'logic', week: 4, weight: 1, gen() {
-    const q = balanced(forcedQuestion, x => x.a !== '?');
+  // L3 benchmark: partial truth tables in 2022-23 P1 Q3(d) and 2021-22 P1 Q2(a) (a compound side, one value given)
+  { id: 'logic-forced', name: 'Forced value', par: 5, cat: 'logic', week: 4, weight: 1, levels: 3, gen(L = 3) {
+    const q = balanced(() => forcedQuestion(L), x => x.a !== '?');
     return q && { ...q, kind: 'text', keys: ['T', 'F', '?'], noKeyboard: true, hint: 'T, F, or ? if not forced' };
   }},
-  { id: 'logic-negin', name: 'Push ¬ inward', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
-    const [A, B, C] = literals(3), inner = pick([and, or, imp])(A, Math.random() < 0.5 ? B : pick([and, or])(B, C));
+  // L3 benchmark: mock 2025-26 Q4(c) ¬(P ∧ Q) ⊢ ¬P ∨ ¬Q and 2024-25 P1 Q5(b) ¬(¬P ∨ Q), nested one level deeper
+  { id: 'logic-negin', name: 'Push ¬ inward', par: 12, cat: 'logic', week: 4, weight: 1, levels: 3, gen(L = 3) {
+    const [A, B, C] = literals(3), part = (x, y) => { const p = pick([and, or, imp])(x, y); return Math.random() < 0.3 ? neg(p) : p; };
+    const inner = L === 1 ? pick([and, or, imp])(A, B) : L === 2 ? pick([and, or, imp])(A, Math.random() < 0.5 ? B : pick([and, or])(B, C))
+      : pick([and, or, imp])(...shuffle([part(A, B), Math.random() < 0.5 ? C : part(C, pick([A, B]))]));
     const f = neg(inner);
     return { q: `Equivalent sentence with ¬ only directly on letters:<br><span class="f">${show(f)}</span>`, a: show(nnf(f)),
              kind: 'logic', nnf: true, keys: LOGIC_KEYS, noKeyboard: true };
   }},
-  { id: 'logic-connective', name: 'Single connective', par: 2, cat: 'logic', week: 4, weight: 1, hub: false, gen() {
-    const op = pick(['¬', ...BIN]), v = { P: Math.random() < 0.5, Q: Math.random() < 0.5 }, tv = x => x ? 'T' : 'F';
+  // L3 benchmark: Book of Problems 3.1 (truth table of every connective); L1 ¬ ∧ ∨, L2 adds →, L3 all five
+  { id: 'logic-connective', name: 'Single connective', par: 2, cat: 'logic', week: 4, weight: 1, hub: false, levels: 3, gen(L = 3) {
+    const op = pick([['¬', '∧', '∨'], ['¬', '∧', '∨', '→'], ['¬', ...BIN]][L - 1]), v = { P: Math.random() < 0.5, Q: Math.random() < 0.5 }, tv = x => x ? 'T' : 'F';
     const f = op === '¬' ? neg('P') : bin(op, 'P', 'Q'), expr = op === '¬' ? `¬${tv(v.P)}` : `${tv(v.P)} ${op} ${tv(v.Q)}`;
     return { q: `<span class="f">${expr}</span>`, a: ev(f, v), kind: 'bool', labels: ['T', 'F'] };
   }},
-  { id: 'logic-consistent', name: 'Consistent set?', par: 12, cat: 'logic', week: 4, weight: 1, gen() {
-    const L = ['P', 'Q', 'R'].slice(0, ri(2, 3));
-    const set = balanced(() => Array.from({ length: ri(2, 3) }, () => rfDeep(2, L, 1)), consistent);
-    return { q: `Consistent? <span class="f">{ ${set.map(f => show(f)).join(', ')} }</span>`, a: consistent(set), kind: 'bool', labels: ['Yes', 'No'] };
+  // L3 benchmark: 2021-22 P1 Q1(b) joint inconsistency, Book of Problems 1.6 (ii): three 3-letter sentences
+  { id: 'logic-consistent', name: 'Consistent set?', par: 12, cat: 'logic', week: 4, weight: 1, levels: 3, gen(L = 3) {
+    const Ls = L === 1 ? ['P', 'Q'] : L === 2 ? ['P', 'Q', 'R'].slice(0, ri(2, 3)) : ['P', 'Q', 'R'];
+    const make = [() => [rf(1, Ls), rf(1, Ls)], () => Array.from({ length: ri(2, 3) }, () => rfDeep(2, Ls, 1)),
+      () => { const s = Array.from({ length: 3 }, () => rfDeep(2, Ls, 1, 3)); return letters(s).length === 3 ? s : null; }][L - 1];
+    const set = balanced(make, consistent);
+    return set && { q: `Consistent? <span class="f">{ ${set.map(f => show(f)).join(', ')} }</span>`, a: consistent(set), kind: 'bool', labels: ['Yes', 'No'] };
   }},
   // ---------- Linear algebra: exam drills for weeks 1-5, then linear maps, rank, change of basis, determinants, eigen ----------
   { id: 'la-cdist', name: 'Distance in ℂ²', par: 20, cat: 'la', week: 1, weight: 1, gen() {
@@ -1426,18 +1482,21 @@ const TYPES = [
     return { q: T`$\displaystyle\lim_{x\to ${at}} ${tex}$`, a: f.s, show: f.tex, kind: 'num' };
   }},
   // ---------- Elementary Logic: predicate logic, natural deduction, sets (LG_ helpers) ----------
-  { id: 'logic-ndrule', name: 'Name the ND rule', par: 8, cat: 'logic', week: 5, weight: 1, gen() {
-    const [op, kind, nums, step] = LG_propStep();
+  // L3 benchmark: rule labels in 2024-25 P1 Q5(a)-(b) and mock 2025-26 Q4 proofs (parts like P ∧ Q → R, ¬P ∨ ¬Q); L1 letters, L2 one connective per part
+  { id: 'logic-ndrule', name: 'Name the ND rule', par: 8, cat: 'logic', week: 5, weight: 1, levels: 3, gen(L = 3) {
+    const [op, kind, nums, step] = LG_propStep(L - 1);
     return { q: `Which rule? ${step}`, ...LG_ruleAnswer(op, kind, nums), kind: 'text', keys: LG_RULE_KEYS, noKeyboard: true, hint: 'rule name, e.g. ∧Elim1 or →Intro' };
   }},
-  { id: 'logic-goalrule', name: 'Rule for the goal', par: 4, cat: 'logic', week: 5, weight: 1, gen() {
-    const f = rf(2, ['P', 'Q', 'R']);
-    if (typeof f === 'string' || depth(f) < 2) return null;
+  // L3 benchmark: goals of mock 2025-26 Q4(b) (P → Q) → (¬Q → ¬P) and 2024-25 P1 Q5(b) ¬(¬P ∨ Q)
+  { id: 'logic-goalrule', name: 'Rule for the goal', par: 4, cat: 'logic', week: 5, weight: 1, levels: 3, gen(L = 3) {
+    const f = [() => rf(1, ['P', 'Q', 'R']), () => rf(2, ['P', 'Q', 'R']), () => rfDeep(3, ['P', 'Q', 'R'], 3, 5)][L - 1]();
+    if (typeof f === 'string' || depth(f) < (L === 1 ? 1 : 2)) return null;
     return { q: `Which introduction rule gives ${LG_f(show(f))} as its last step?`, ...LG_ruleAnswer(f.op, 'Intro', f.op === '∨' ? ['', '1', '2'] : ['']),
              kind: 'text', keys: LG_RULE_KEYS, noKeyboard: true, hint: 'rule name, e.g. ∧Intro' };
   }},
-  { id: 'logic-ndassume', name: 'What to assume', par: 7, cat: 'logic', week: 6, weight: 1, gen() {
-    const [text, ans] = LG_assumeStep(), forms = [...new Set([show(ans), official(ans)])];
+  // L3 benchmark: mock 2025-26 Q4(c) ¬(P ∧ Q) ⊢ ¬P ∨ ¬Q (assume ¬(¬P ∨ ¬Q) for ¬Elim) and Q4(b) →Intro on P → Q
+  { id: 'logic-ndassume', name: 'What to assume', par: 7, cat: 'logic', week: 6, weight: 1, levels: 3, gen(L = 3) {
+    const [text, ans] = LG_assumeStep(L - 1), forms = [...new Set([show(ans), official(ans)])];
     return { q: `${text} what?`, a: forms, show: LG_tex(forms[0]), kind: 'syntax', keys: LOGIC_KEYS, noKeyboard: true, hint: 'the assumption, e.g. ¬(P ∧ Q)' };
   }},
   { id: 'logic-setop', name: 'Set operation', par: 10, cat: 'logic', week: 5, weight: 1, gen() {
@@ -3535,14 +3594,15 @@ function LG_ruleAnswer(op, kind, nums) {
            show: T`${LG_RULE_TEX[op]}\text{${kind}${nums[0]}}` };
 }
 const LG_RULE_KEYS = ['∧', '∨', '→', '↔', '¬', 'Intro', 'Elim', '1', '2'];
-function LG_propFormulas(n) {
+// d = 0: literals, 1: up to one connective, 2: up to two binary connectives (exam-size parts such as P ∧ Q → R)
+function LG_propFormulas(n, d) {
   const out = [];
-  while (out.length < n) { const f = rf(1, ['P', 'Q', 'R']); if (!out.some(g => sameTree(f, g))) out.push(f); }
+  while (out.length < n) { const f = d < 2 ? rf(d, ['P', 'Q', 'R']) : rfDeep(2, ['P', 'Q', 'R'], 1, 2); if (!out.some(g => sameTree(f, g))) out.push(f); }
   return out;
 }
 // One displayed step per rule of PropLogic_NatDedRules.pdf: [connective, Intro|Elim, accepted suffixes, description]
-function LG_propStep() {
-  const [A, B, C] = LG_propFormulas(3), f = x => LG_f(show(x));
+function LG_propStep(d) {
+  const [A, B, C] = LG_propFormulas(3, d), f = x => LG_f(show(x));
   return pick([
     ['∧', 'Intro', [''], `from ${f(A)} and ${f(B)} infer ${f(and(A, B))}`],
     ['∧', 'Elim', ['1', ''], `from ${f(and(A, B))} infer ${f(A)}`],
@@ -3585,8 +3645,8 @@ function LG_quantStep() {
            legal: noA(phi) && noA(psi) && noA(gamma) };
 }
 // Which formula does the rule assume? [description, answer tree]
-function LG_assumeStep() {
-  const [A, B] = LG_propFormulas(2), f = x => LG_f(show(x));
+function LG_assumeStep(d) {
+  const [A, B] = LG_propFormulas(2, d), f = x => LG_f(show(x));
   return pick([
     [`To prove ${f(neg(A))} by ¬Intro, assume`, A],
     [`To prove ${f(A)} by ¬Elim, assume`, neg(A)],
@@ -3739,13 +3799,16 @@ function nnf(f, negated = false) {
 const negOnLetters = f => typeof f === 'string' || (f.op === '¬' ? typeof f.a === 'string' : negOnLetters(f.a) && negOnLetters(f.b));
 
 // Partial-truth-table forcing: given the sentence's value (and maybe one letter), is the other letter forced?
-function forcedQuestion() {
-  const [X, Y] = shuffle(['P', 'Q', 'R']), lit = x => Math.random() < 0.3 ? neg(x) : x;
-  const f = bin(pick(BIN), lit(X), lit(Y)), val = Math.random() < 0.5, known = Math.random() < 0.5 ? Math.random() < 0.5 : undefined;
-  const rows = tfRows([X, Y]).filter(v => ev(f, v) === val && (known === undefined || v[Y] === known));
+// L1: two plain letters, only the sentence's value given; L2: literals, maybe one letter given; L3: one side compound (3 letters), maybe one letter given
+function forcedQuestion(L) {
+  const [X, Y, Z] = shuffle(['P', 'Q', 'R']), lit = x => L > 1 && Math.random() < 0.3 ? neg(x) : x;
+  const f = L < 3 ? bin(pick(BIN), lit(X), lit(Y)) : bin(pick(BIN), ...shuffle([lit(X), bin(pick(BIN), lit(Y), lit(Z))]));
+  const Ls = L < 3 ? [X, Y] : [X, Y, Z], tgt = pick(Ls), val = Math.random() < 0.5;
+  const known = L > 1 && Math.random() < 0.5 ? [pick(Ls.filter(x => x !== tgt))] : [], kv = Object.fromEntries(known.map(k => [k, Math.random() < 0.5]));
+  const rows = tfRows(Ls).filter(v => ev(f, v) === val && known.every(k => v[k] === kv[k]));
   if (!rows.length) return null;
-  const vals = new Set(rows.map(v => v[X])), given = known === undefined ? '' : ` and ${Y} is ${known ? 'T' : 'F'}`;
-  return { q: `<span class="f">${show(f)}</span> is ${val ? 'T' : 'F'}${given}. Value of ${X}?<br><span class="muted">? if not forced</span>`,
+  const vals = new Set(rows.map(v => v[tgt])), given = known.map(k => ` and ${k} is ${kv[k] ? 'T' : 'F'}`).join('');
+  return { q: `<span class="f">${show(f)}</span> is ${val ? 'T' : 'F'}${given}. Value of ${tgt}?<br><span class="muted">? if not forced</span>`,
            a: vals.size === 1 ? (vals.has(true) ? 'T' : 'F') : '?' };
 }
 
@@ -3825,6 +3888,33 @@ const TAUT_SEEDS = [
   A => imp(imp(A, neg(A)), neg(A)), A => imp(imp(A, neg(A)), A), A => imp(imp(neg(A), A), A), (A, B) => imp(imp(A, B), imp(neg(A), neg(B))),
   (A, B) => imp(and(imp(A, B), imp(neg(A), B)), B), (A, B) => iff(neg(and(A, B)), or(neg(A), neg(B))), (A, B) => and(or(A, neg(B)), and(neg(A), B)),
   (A, B) => imp(B, and(A, B)), (A, B) => iff(or(neg(A), B), imp(A, B)),
+];
+// 3-letter tautology candidates from the past papers and Book of Problems 3.3 / 3.9 (about half are tautologies)
+const TAUT3_SEEDS = [
+  (A, B, C) => imp(imp(and(A, B), C), imp(A, or(neg(B), C))), (A, B, C) => iff(imp(A, imp(B, C)), imp(and(A, B), C)),
+  (A, B, C) => iff(imp(A, imp(B, C)), imp(imp(A, B), C)), (A, B, C) => iff(imp(and(A, B), C), imp(imp(A, B), C)),
+  (A, B, C) => iff(imp(A, or(B, C)), or(imp(A, B), imp(A, C))), (A, B, C) => iff(iff(A, iff(B, C)), iff(iff(A, B), C)),
+  (A, B, C) => imp(and(imp(A, B), imp(B, C)), imp(A, C)), (A, B, C) => imp(and(imp(A, C), imp(B, C)), imp(or(A, B), C)),
+  (A, B, C) => imp(imp(or(A, B), C), imp(A, C)), (A, B, C) => imp(imp(A, C), imp(or(A, B), C)),
+  (A, B, C) => imp(imp(imp(A, B), C), imp(A, imp(B, C))), (A, B, C) => imp(imp(A, imp(B, C)), imp(imp(A, B), C)),
+  (A, B, C) => imp(and(imp(and(A, B), C), imp(A, or(B, C))), and(A, neg(C))), (A, B, C) => iff(and(imp(A, B), imp(A, C)), imp(A, and(B, C))),
+  (A, B, C) => iff(and(A, or(B, C)), or(and(A, B), and(A, C))), (A, B, C) => iff(or(A, and(B, C)), and(or(A, B), C)),
+  (A, B, C) => imp(imp(A, B), imp(imp(B, C), imp(A, C))), (A, B, C) => imp(and(or(A, B), or(neg(A), C)), or(B, C)),
+  (A, B, C) => imp(and(or(A, B), imp(A, C)), C), (A, B, C) => or(A, or(B, and(A, C))), (A, B, C) => imp(and(imp(A, B), imp(B, C)), imp(C, A)),
+  (A, B, C) => imp(imp(A, or(B, C)), or(imp(A, B), C)), (A, B, C) => imp(or(imp(A, B), imp(A, C)), imp(A, and(B, C))),
+];
+// 3-letter equivalence candidates (Book of Problems 3.3 (iv), (ix), 3.9 (iii), 4.4 (x)-(xvii)); about half are equivalent
+const EQUIV3_SEEDS = [
+  (A, B, C) => [imp(and(A, B), C), imp(A, imp(B, C))], (A, B, C) => [imp(imp(A, B), C), imp(A, imp(B, C))],
+  (A, B, C) => [imp(A, or(B, C)), or(imp(A, B), imp(A, C))], (A, B, C) => [imp(A, and(B, C)), and(imp(A, B), imp(A, C))],
+  (A, B, C) => [imp(or(A, B), C), and(imp(A, C), imp(B, C))], (A, B, C) => [imp(or(A, B), C), or(imp(A, C), imp(B, C))],
+  (A, B, C) => [imp(and(A, B), C), or(imp(A, C), imp(B, C))], (A, B, C) => [imp(and(A, B), C), and(imp(A, C), imp(B, C))],
+  (A, B, C) => [and(A, or(B, C)), or(and(A, B), and(A, C))], (A, B, C) => [and(A, or(B, C)), or(and(A, B), C)],
+  (A, B, C) => [or(A, and(B, C)), and(or(A, B), or(A, C))], (A, B, C) => [or(A, and(B, C)), and(or(A, B), C)],
+  (A, B, C) => [neg(and(and(A, B), C)), or(or(neg(A), neg(B)), neg(C))], (A, B, C) => [neg(and(and(A, B), C)), and(and(neg(A), neg(B)), neg(C))],
+  (A, B, C) => [neg(imp(A, or(B, C))), and(and(A, neg(B)), neg(C))], (A, B, C) => [neg(imp(A, or(B, C))), or(neg(A), and(neg(B), neg(C)))],
+  (A, B, C) => [iff(A, iff(B, C)), iff(iff(A, B), C)], (A, B, C) => [imp(A, imp(B, C)), imp(B, imp(A, C))],
+  (A, B, C) => [and(imp(A, B), imp(B, C)), imp(A, C)], (A, B, C) => [imp(A, imp(B, C)), imp(imp(A, B), imp(A, C))],
 ];
 const EQUIV_SEEDS = [
   (A, B) => [imp(A, B), imp(neg(B), neg(A))], (A, B) => [imp(A, B), imp(B, A)], (A, B) => [imp(A, B), or(neg(A), B)],
