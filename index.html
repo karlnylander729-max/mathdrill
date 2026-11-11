@@ -735,8 +735,13 @@ const TYPES = [
   { id: 'seq-maxmin', name: 'Max / min of a set', par: 7, cat: 'seq', week: 4, weight: 1, gen() {
     return balanced(() => boundsQuestion(['max', 'min']), q => !Array.isArray(q.a));
   }},
-  { id: 'seq-supinf', name: 'Sup / inf of a set', par: 7, cat: 'seq', week: 5, weight: 1, gen() {
-    return balanced(() => boundsQuestion(['sup', 'inf']), q => !Array.isArray(q.a));
+  { id: 'seq-supinf', name: 'Sup / inf of a set', par: 7, cat: 'seq', week: 5, weight: 1, levels: 3, gen(L = 3) {
+    // L3 benchmark: Exercises5.pdf Q2(a),(c) and Q3(a): {x : x²−6x+5 < 0}, {(−1)^n − 1/n²}, {(2√n+1)/√n}
+    if (L < 3) return balanced(() => { const q = boundsQuestion(['sup', 'inf']); return q && (L === 2 || !q.q.includes('mathbb N')) ? q : null; },
+                               q => !Array.isArray(q.a));   // L1: intervals only; L2: intervals and {c + d/n}
+    const [tex, sup, inf] = pick(SS_SUPINF3)(), ask = pick(['sup', 'inf']), v = ask === 'sup' ? sup : inf;
+    return { q: T`$${'\\' + ask}\,${tex}$`, a: v === null ? ['none', 'dne', 'does not exist'] : String(v), kind: 'text', keys: ['none', '-'],
+             hint: 'a number, or none if it does not exist', show: v === null ? T`\text{none}` : String(v) };
   }},
   { id: 'seq-negation', name: 'Correct negation?', par: 10, cat: 'seq', week: 2, weight: 1, gen() {
     const st = pick(NEG_TEMPLATES)(), right = Math.random() < 0.5, cand = right ? negateStatement(st) : pick(NEG_DISTRACTORS)(st);
@@ -939,8 +944,10 @@ const TYPES = [
     const n = ri(2, 5), [tex, d] = pick(LA_MAT_SPACES)(n);
     return { q: T`$\dim\{A \in M_{${n}}(\mathbb R) : ${tex}\}$`, a: String(d), kind: 'num' };
   }},
-  { id: 'la-linmap', name: 'Linear map?', par: 8, cat: 'la', week: 6, weight: 1, gen() {
-    const q = balanced(() => pick(LA_LIN_FAMILIES)(), x => x.a);
+  { id: 'la-linmap', name: 'Linear map?', par: 8, cat: 'la', week: 6, weight: 1, levels: 3, gen(L = 3) {
+    // L3 benchmark: LAG1 - ProblemSet6.pdf Q1 and past CT2 (R³→R: 2x+y−1, xy+z; R³→R²: (x+1, y−1), (2^x, 3^y))
+    const make = [LA_linMap1, () => pick(LA_LIN_FAMILIES)(), () => Math.random() < 0.5 ? LA_linMulti() : pick(LA_LIN_FAMILIES)()][L - 1];
+    const q = balanced(make, x => x.a);
     return q && { q: T`Linear? $\ ${q.tex}$`, a: q.a, kind: 'bool', labels: ['Yes', 'No'] };
   }},
   { id: 'la-matT', name: 'Matrix of T from a formula', par: 20, cat: 'la', week: 7, weight: 1, gen() {
@@ -1064,28 +1071,32 @@ const TYPES = [
     return q && { q: T`Diagonalisable over $\mathbb R$? $\ ${matTeX(q.A)}$`, a: q.a, kind: 'bool', labels: ['Yes', 'No'] };
   }},
   // ---------- Sequences and series: limits, ε–n0, monotone, subsequences, series (notes §9–15) ----------
-  { id: 'seq-convdiv', name: 'Converges or diverges?', par: 6, cat: 'seq', week: 5, weight: 1, gen() {
-    const f = pick(SS_CONVDIV)();
+  { id: 'seq-convdiv', name: 'Converges or diverges?', par: 6, cat: 'seq', week: 5, weight: 1, levels: 3, gen(L = 3) {
+    // L3 benchmark: Exercises6.pdf Q9 ((5/3)^n, n² − n, (1/5)^n − 3n: +∞, −∞ or neither)
+    const f = pick([SS_CONVDIV1, SS_CONVDIV, SS_CONVDIV3][L - 1])();
     if (!f) return null;
     return { q: T`$s_n = ${f[0]}$. $\ \displaystyle\lim_{n\to\infty} s_n = ?$`, ...SS_lim(f[1]), hint: SS_HINT };
   }},
-  { id: 'seq-epsdist', name: '|s_n − ℓ| in closed form', par: 15, cat: 'seq', week: 5, weight: 1, gen() {
-    const v = Math.random() < 0.3 ? 'n^2' : 'n', a = nz(-5, 5), b = ri(-6, 6), c = ri(1, 4), d = ri(0, 6);
-    const K = Math.abs(b * c - a * d), g = gcd(K, gcd(c * c, c * d)), L = frac(a, c);
+  { id: 'seq-epsdist', name: '|s_n − ℓ| in closed form', par: 15, cat: 'seq', week: 5, weight: 1, levels: 3, gen(L = 3) {
+    // L3 benchmark: Exercises6.pdf Q1(e) (n/(3n+1) → 1/3); L2 drops n², L1 also has c = 1 (integer limit)
+    const v = L === 3 && Math.random() < 0.3 ? 'n^2' : 'n', a = nz(-5, 5), b = ri(-6, 6), c = L === 1 ? 1 : ri(1, 4), d = ri(0, 6);
+    const K = Math.abs(b * c - a * d), g = gcd(K, gcd(c * c, c * d)), ell = frac(a, c);
     if (K === 0) return null;
     const [num, A, B] = [K / g, c * c / g, c * d / g];
-    return { q: T`$s_n = \dfrac{${poly([[a, v], [b, '']])}}{${poly([[c, v], [d, '']])}} \to \ell = ${L.tex}$. $\ |s_n - \ell| = ?$`,
+    return { q: T`$s_n = \dfrac{${poly([[a, v], [b, '']])}}{${poly([[c, v], [d, '']])}} \to \ell = ${ell.tex}$. $\ |s_n - \ell| = ?$`,
              a: `${num}/(${A}*${v}+${B})`, kind: 'expr', show: T`\dfrac{${num}}{${poly([[A, v], [B, '']])}}`,
              pattern: /^\d+\/[\dn*+()^]+$/, keys: N_KEYS, hint: 'one fraction in n, no modulus, e.g. 5/(n+3)' };
   }},
-  { id: 'seq-n0', name: 'n₀(ε) for a null sequence', par: 12, cat: 'seq', week: 5, weight: 1, gen() {
-    const [tex, u, v, n0] = SS_n0Draw();
+  { id: 'seq-n0', name: 'n₀(ε) for a null sequence', par: 12, cat: 'seq', week: 5, weight: 1, levels: 3, gen(L = 3) {
+    // L3 benchmark: Exercises6.pdf Q1(a),(c),(e),(f) (3/n³, 2/(−5)^n, n/(3n+1) → 1/3, 2/√(n²+1))
+    const [tex, u, v, n0] = [SS_n0Draw1, SS_n0Draw, SS_n0Draw3][L - 1]();
     if (n0 < 2) return null;
     return { q: T`Smallest $n_0 \in \mathbb N$ with $${tex} < ${SS_epsTeX(u, v)}$ for all $n \ge n_0$`, a: String(n0), kind: 'num' };
   }},
-  { id: 'seq-bddseq', name: 'Bounded sequence?', par: 5, cat: 'seq', week: 5, weight: 1, gen() {
+  { id: 'seq-bddseq', name: 'Bounded sequence?', par: 5, cat: 'seq', week: 5, weight: 1, levels: 3, gen(L = 3) {
+    // L3 benchmark: Exercises6.pdf Q8 (n^{2(−1)^n}, ((−1)^n n − 2^{−n})/n, √n cos(πn/2))
     return balanced(() => {
-      const f = pick(SS_BDD)();
+      const f = pick([SS_BDD1, SS_BDD, SS_BDD3][L - 1])();
       return f && { q: T`Is $s_n = ${f[0]}$ bounded?`, a: f[1], kind: 'bool', labels: ['Bounded', 'Unbounded'] };
     }, q => q.a);
   }},
@@ -2928,6 +2939,31 @@ const LA_LIN_FAMILIES = [
       T`${poly([[1, "f'(t)"], [k, 't^2']])}`, T`f(t)\,f(${k})`, T`${poly([[k, 't\\,f(t)^2']])}`]);
     return { tex: T`T:P\to P,\ Tf(t) = ${f}`, a: false }; },
 ];
+// Linear? level 1: one formula R^2 -> R; a constant or a product/square breaks it
+function LA_linMap1() {
+  const a = nz(-4, 4), b = ri(-4, 4), u = Math.random();
+  const extra = u < 0.5 ? [0, ''] : u < 0.75 ? [nz(-5, 5), ''] : [nz(-3, 3), pick(['xy', 'x^2', 'y^2'])];
+  return { tex: T`T:\mathbb R^2\to\mathbb R,\ T(x, y) = ${poly([[a, 'x'], [b, 'y'], extra])}`, a: extra[0] === 0 };
+}
+// One component of an R^n -> R^m map that may break linearity (vars shuffled, length >= 2)
+const LA_linTrap = ([v, w, u = v]) => pick([
+  () => ({ tex: poly([[nz(-3, 3), v], [nz(-5, 5), '']]), a: false }),   // T(0) != 0
+  () => ({ tex: poly([[1, `${v} ${w}`], [nz(-3, 3), u]]), a: false }),
+  () => ({ tex: poly([[nz(-3, 3), v], [1, `${w}^2`]]), a: false }),
+  () => ({ tex: T`\lvert ${v} \rvert`, a: false }),
+  () => ({ tex: T`${pick([2, 3])}^{${v}}`, a: false }),
+  () => ({ tex: T`(${v} + ${w})^2 - (${v} - ${w})^2`, a: false }),   // = 4vw
+  () => ({ tex: T`(${v} + 1)^2 - ${v}^2 - 1`, a: true }),   // = 2v: linear in disguise
+])();
+// Linear? level 3 (CT2 style): T: R^n -> R^m with several components, at most one of them a trap
+function LA_linMulti() {
+  const [n, m] = pick([[3, 1], [3, 2], [2, 3], [4, 3], [3, 3], [2, 2]]), xs = n === 4 ? ['x_1', 'x_2', 'x_3', 'x_4'] : ['x', 'y', 'z'].slice(0, n);
+  const comps = Array.from({ length: m }, () => poly(shuffle(xs).slice(0, ri(1, 2)).map(v => [nz(-3, 3), v])));
+  const trap = Math.random() < 0.6 ? LA_linTrap(shuffle(xs)) : null;
+  if (trap) comps[ri(0, m - 1)] = trap.tex;
+  const out = m === 1 ? comps[0] : T`(${comps.join(T`,\ `)})`, to = m === 1 ? T`\mathbb R` : T`\mathbb R^${m}`;
+  return { tex: T`T:\mathbb R^${n}\to ${to},\ T(${xs.join(', ')}) = ${out}`, a: !trap || trap.a };
+}
 // Polynomial maps on P_2 in the monomial basis: img(j) = coefficients of T(t^j) (Example 3.2.6, May 2026 A8)
 const LA_POLY_MAPS = [
   () => { const k = pick([2, 3, -1, -2]); return { tex: T`Tf(t) = f(${poly([[k, 't']])})`, to: 2, img: j => [0, 1, 2].map(i => i === j ? k ** j : 0) }; },
@@ -3021,6 +3057,36 @@ const SS_CONVDIV = [
   () => { const c = nz(-5, 5), k = ri(1, 2); return [T`${c} + \frac{(-1)^n}{${SS_pw('n', k)}}`, frac(c, 1)]; },
   () => { const c = ri(1, 3); return [T`${SS_coef(c)}\left(1 + (-1)^n\right)n`, 'div']; },
 ];
+const SS_infOf = c => c > 0 ? 'inf' : '-inf';
+// Level 1: one term, small numbers
+const SS_CONVDIV1 = [
+  () => { const c = nz(-5, 5), k = ri(1, 2); return [poly([[c, SS_pw('n', k)]]), SS_infOf(c)]; },
+  () => { const c = nz(-5, 5), k = ri(1, 2); return [T`\frac{${c}}{${SS_pw('n', k)}}`, frac(0, 1)]; },
+  () => { const c = nz(-5, 5); return [T`${c} + \frac{1}{n}`, frac(c, 1)]; },
+  () => { const k = ri(2, 4); return Math.random() < 0.5 ? [`${k}^n`, 'inf'] : [T`\left(\frac{1}{${k}}\right)^n`, frac(0, 1)]; },
+  () => [T`${SS_coef(nz(-3, 3))}(-1)^n`, 'div'],
+];
+// Level 3 (Exercises 6 Q9): two competing terms; the faster one decides
+const SS_CONVDIV3 = [
+  () => { const g = SS_geoTerm(), c = nz(-4, 4), k = ri(1, 2);   // r^n + c n^k
+    if (!g) return null;
+    const lim = Math.abs(g.p) < g.q || g.p === -1 ? SS_infOf(c) : g.p > 0 ? 'inf' : 'div';
+    return [poly([[1, `${g.base}^n`], [c, SS_pw('n', k)]]), lim]; },
+  () => { const a = nz(-4, 4); return [SS_poly3([a, -Math.sign(a) * ri(1, 9), ri(-9, 9)]), SS_infOf(a)]; },
+  () => { const d = nz(-4, 4); return [poly([[-Math.sign(d) * ri(1, 6), T`\sqrt n`], [d, 'n']]), SS_infOf(d)]; },
+  () => { const A = ri(2, 4), s = pick([1, -1]), k = ri(1, 3); return [poly([[s, `${A}^n`], [-s * ri(1, 9), SS_pw('n', k)]]), SS_infOf(s)]; },
+  () => { const [a, b] = shuffle([pick([2, 3, 4]), pick([-2, -3, -4])]), s = pick([1, -1]), big = Math.abs(a) > Math.abs(b) ? [1, a] : [s, b];
+    if (Math.abs(a) === Math.abs(b)) return null;
+    const base = x => x < 0 ? `(${x})` : String(x);
+    return [poly([[1, `${base(a)}^n`], [s, `${base(b)}^n`]]), big[1] < 0 ? 'div' : SS_infOf(big[0])]; },
+  () => { const k = ri(1, 2), j = ri(1, 2), c = nz(-3, 3);   // (-1)^n n^k + c n^j
+    const lim = j > k ? SS_infOf(c) : j < k || Math.abs(c) === 1 ? 'div' : SS_infOf(c);
+    return [T`(-1)^n ${SS_pw('n', k)}${c < 0 ? ' - ' : ' + '}${poly([[Math.abs(c), SS_pw('n', j)]])}`, lim]; },
+  () => { const g = SS_geoTerm(), c = nz(-5, 5);   // r^n + c, |r| < 1
+    return g && Math.abs(g.p) < g.q ? [poly([[1, `${g.base}^n`], [c, '']]), frac(c, 1)] : null; },
+  () => { const a = nz(-4, 4), d = ri(1, 6), sq = Math.random() < 0.5;
+    return [T`(-1)^n\frac{${poly([[a, 'n']])}}{${sq ? 'n^2' : 'n'} + ${d}}`, sq ? frac(0, 1) : 'div']; },
+];
 
 // Growth classes (notes §11): [TeX, rank]; a lower rank is o(higher rank)
 const SS_GROWTH = [
@@ -3059,6 +3125,25 @@ function SS_n0Draw() {
             return [T`\frac{${K}}{n + ${d}}`, u, vv, SS_first(n => u * (n + d) > K * vv, K * vv / u - d)]; },
   ])();
 }
+// Level 1: c/n below ε = 1/v, so n_0 = cv + 1
+function SS_n0Draw1() {
+  const c = ri(1, 9), v = pick([2, 4, 5, 10, 20]);
+  return [T`\frac{${c}}{n}`, 1, v, c * v + 1];
+}
+// Level 3 (Exercises 6 Q1): c/n^3, |c/(-k)^n|, |s_n - ℓ| for a rational s_n, c/sqrt(n^2+1); all decreasing in n
+function SS_n0Draw3() {
+  const [u, v] = pick([[1, 10], [1, 20], [1, 50], [1, 100], [3, 10], [2, 5], [1, 25]]);
+  return pick([
+    () => { const c = ri(2, 9); return [T`\frac{${c}}{n^3}`, u, v, SS_first(n => u * n ** 3 > c * v, Math.cbrt(c * v / u))]; },
+    () => { const c = ri(1, 9), k = ri(2, 5);
+            return [T`\left|\frac{${c}}{(-${k})^n}\right|`, u, v, SS_first(n => u * k ** n > c * v, Math.log(c * v / u) / Math.log(k))]; },
+    () => { const c = ri(1, 9); return [T`\frac{${c}}{\sqrt{n^2 + 1}}`, u, v, SS_first(n => u * u * (n * n + 1) > c * c * v * v, c * v / u)]; },
+    () => { const a = nz(-4, 4), b = ri(-5, 5), c = ri(2, 4), d = ri(0, 5), K = Math.abs(b * c - a * d);   // |s_n - a/c| = K/(c(cn+d))
+            if (K === 0) return [T`0`, u, v, 1];   // rejected by the caller (n_0 < 2)
+            const s = T`\frac{${poly([[a, 'n'], [b, '']])}}{${poly([[c, 'n'], [d, '']])}} ${a > 0 ? '-' : '+'} ${frac(Math.abs(a), c).tex}`;
+            return [T`\left|${s}\right|`, u, v, SS_first(n => u * c * (c * n + d) > K * v, (K * v / (u * c) - d) / c)]; },
+  ])();
+}
 
 // Bounded sequence? (notes §9.5): [TeX, bounded]
 const SS_BDD = [
@@ -3072,6 +3157,44 @@ const SS_BDD = [
   () => { const k = ri(1, 3), a = ri(2, 4); return [T`\frac{${SS_pw('n', k)}}{${a}^n}`, true]; },
   () => { const c = ri(1, 5); return [T`${SS_coef(c)}n^{(-1)^n}`, false]; },
   () => { const a = nz(-4, 4), d = ri(1, 6); return [T`${SS_coef(a)}(-1)^n\frac{n}{n + ${d}}`, true]; },
+];
+// Level 1: one plain term
+const SS_BDD1 = [
+  () => { const c = nz(-5, 5), k = ri(1, 2); return [poly([[c, SS_pw('n', k)]]), false]; },
+  () => { const c = nz(-5, 5), k = ri(1, 2); return [T`\frac{${c}}{${SS_pw('n', k)}}`, true]; },
+  () => [T`${SS_coef(nz(-5, 5))}(-1)^n`, true],
+  () => [poly([[nz(-5, 5), T`\sqrt n`]]), false],
+  () => { const k = ri(2, 4); return Math.random() < 0.5 ? [`${k}^n`, false] : [T`\left(\frac{1}{${k}}\right)^n`, true]; },
+];
+// Level 3 (Exercises 6 Q8): a growing factor against an oscillating or vanishing one
+const SS_BDD3 = [
+  () => { const k = ri(1, 3); return [T`n^{${SS_coef(k)}(-1)^n}`, false]; },
+  () => { const a = ri(2, 4), c = nz(-3, 3), k = ri(1, 2);   // ((-1)^n n^k + c a^{-n})/n
+          return [T`\frac{(-1)^n ${SS_pw('n', k)} ${c < 0 ? '-' : '+'} ${Math.abs(c) === 1 ? '' : Math.abs(c) + T`\cdot `}${a}^{-n}}{n}`, k === 1]; },
+  () => { const [f, zero] = pick([[T`\cos\left(\frac{\pi n}{2}\right)`, false], [T`\sin\left(\frac{\pi n}{2}\right)`, false], [T`\cos(\pi n)`, false],
+            [T`\sin(\pi n)`, true], [T`\left(1 - \cos(2\pi n)\right)`, true]]);
+          const [g, grows] = pick([[T`\sqrt n`, true], ['n', true], ['n^2', true], [T`\frac{1}{\sqrt n}`, false]]);
+          return [T`${g}\,${f}`, zero || !grows]; },
+  () => { const a = ri(2, 4), k = ri(1, 3), up = Math.random() < 0.5;
+          return [up ? T`\frac{${a}^n}{${SS_pw('n', k)}}` : T`\frac{${SS_pw('n', k)}}{${a}^n}`, !up]; },
+  () => { const [a, b, c, d] = [nz(-5, 5), ri(-6, 6), ri(1, 4), ri(1, 6)], top = ri(1, 2);
+          return [T`(-1)^n\frac{${poly([[a, SS_pw('n', top)], [b, '']])}}{${poly([[c, 'n'], [d, '']])}}`, top === 1]; },
+  () => { const k = ri(1, 2); return [T`${SS_pw('n', k)}\sin\left(\frac{1}{n}\right)`, k === 1]; },
+  () => { const a = ri(2, 4), b = ri(2, 4), d = ri(1, 5); return [T`\frac{(-${a})^n}{${b}^n + ${d}}`, a <= b]; },
+];
+
+// Sup / inf level 3 (Exercises 5 Q2–3): [TeX of the set, sup, inf], null = does not exist
+const SS_inN = body => T`\left\{${body} : n \in \mathbb N\right\}`;
+const SS_SUPINF3 = [
+  () => { const p = ri(-5, 4), q = p + ri(1, 6), rel = pick(['<', '<', '\\le', '>']), out = rel === '>';   // (x-p)(x-q) vs 0
+          return [T`\{x \in \mathbb R : ${poly([[1, 'x^2'], [-(p + q), 'x'], [p * q, '']])} ${rel} 0\}`, out ? null : q, out ? null : p]; },
+  () => { const a = ri(-5, 5), r = ri(1, 6), out = Math.random() < 0.25;
+          return [T`\{x \in \mathbb R : \lvert ${poly([[1, 'x'], [-a, '']])} \rvert ${out ? '>' : pick(['<', '\\le'])} ${r}\}`, out ? null : a + r, out ? null : a - r]; },
+  () => { const a = ri(1, 3), k = ri(1, 2), c = 2 ** k * nz(-3, 3), v = [-a + c, a + c / 2 ** k, a, -a];   // extremes: n = 1, n = 2, the limits ±a
+          return [SS_inN(T`${SS_coef(a)}(-1)^n${SS_fracTerm(c, SS_pw('n', k))}`), Math.max(...v), Math.min(...v)]; },
+  () => { const a = ri(-3, 3), b = nz(-5, 5), body = pick(['n', 'n^2', T`\sqrt n`]);   // a + b/body: n = 1 and the limit a
+          return [SS_inN(T`\frac{${poly([[a, body], [b, '']])}}{${body}}`), Math.max(a, a + b), Math.min(a, a + b)]; },
+  () => { const k = ri(1, 4); return [SS_inN(T`n + \frac{${k * k}}{n}`), null, 2 * k]; },   // least at n = k, unbounded above
 ];
 
 // Monotone? (notes §12): [TeX, s(n)]; classified numerically by SS_monotone
