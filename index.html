@@ -5020,11 +5020,13 @@ function masteryStatus(log, par) {
 }
 // ---- difficulty ladders: laddered types (levels: 3) serve level 1–3 questions; the level moves invisibly with fluency ----
 const isLaddered = t => t?.levels === 3;
-const levelOf = id => isLaddered(TYPE_BY_ID[id]) ? RS[id]?.lvl ?? 1 : 3;
+// A type mastered before ladders existed starts at the top level; any other new laddered type starts at level 1
+const levelOf = id => isLaddered(TYPE_BY_ID[id]) ? RS[id]?.lvl ?? (RS[id]?.mastered ? 3 : 1) : 3;
 // Laddered types count only level-3 answers towards mastery: mastered means exam level
-const masteryLog = (t, log) => isLaddered(t) ? log.filter(e => e.l === 3) : log;
+// (entries from before ladders carry no level; they came from the old generator and count as top level)
+const masteryLog = (t, log) => isLaddered(t) ? log.filter(e => e.l === 3 || e.l === undefined) : log;
 function levelStep(st, ok, ms, par) {
-  const { up, down } = CONFIG.ladder, lvl = st.lvl ?? 1;
+  const { up, down } = CONFIG.ladder, lvl = st.lvl ?? (st.mastered ? 3 : 1);
   st.llog = [...(st.llog || []), { ok, ms }].slice(-up[1]);
   const recent = st.llog.slice(-down[1]), good = st.llog.filter(e => e.ok);
   let step = null;
@@ -6106,6 +6108,11 @@ function ladderTests() {
     applyAnswer(fx, true, 1000, levelOf('fxL'));
     if (levelOf('fxL') !== 1) f.push('old state without lvl/llog did not load at level 1');
     if (levelOf('la-dot') !== 3) f.push('an unladdered type does not report level 3');
+    // Mastered before ladders existed: starts at level 3 and keeps mastery on the next answer
+    RS.fxL = { r: 1500, last: Date.now(), mastered: true, log: Array.from({ length: 30 }, (_, i) => ({ d: `2026-11-0${1 + i % 5}`, ok: true, ms: 1000 })) };
+    if (levelOf('fxL') !== 3) f.push(`type mastered before ladders starts at level ${levelOf('fxL')}, want 3`);
+    const { change } = applyAnswer(fx, true, 1000, levelOf('fxL'));
+    if (change === 'lost' || !RS.fxL.mastered) f.push('type mastered before ladders lost mastery on its next answer');
   } catch (e) { f.push('ladder test threw: ' + e.message); }
   finally {
     TYPES.splice(TYPES.indexOf(fx), 1); delete TYPE_BY_ID.fxL;
