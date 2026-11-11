@@ -526,8 +526,11 @@ const TYPES = [
     return { q: T`$f(x) = \begin{cases} ${poly([[p, 'x^2'], [q, '']])} & x < ${c} \\ ${poly([[1, 'k x'], [r, '']])} & x \ge ${c} \end{cases}$ is continuous. $\ k = ?$`,
              a: String(k), kind: 'num' };
   }},
-  { id: 'calc-deriv', name: 'Derivative', par: 10, cat: 'calc', week: 6, weight: 1, gen() {
+  // L3 benchmark: Calculus_1_2026-27.pdf Example 7.3 (polynomial by linearity), widened to x^(-m) and sqrt(x) terms as in Exercises6.pdf Q3(d)
+  { id: 'calc-deriv', name: 'Derivative', par: 10, cat: 'calc', week: 6, weight: 1, levels: 3, gen(L = 3) {
     const a = nz(-6, 6), n = ri(2, 5), b = nz(-6, 6), m = ri(0, n - 1);
+    if (L === 1) return { q: T`$\frac{d}{dx}\left(${poly([[a, xPow(n)], [b, '']])}\right)$`, a: `${a * n}x^${n - 1}`, kind: 'expr', show: poly([[a * n, xPow(n - 1)]]) };
+    if (L === 3) return CAL_deriv3(a, n);
     return { q: T`$\frac{d}{dx}\left(${poly([[a, xPow(n)], [b, xPow(m)]])}\right)$`,
              a: `${a * n}x^${n - 1} + ${b * m}x^${Math.max(m - 1, 0)}`, kind: 'expr', show: poly([[a * n, xPow(n - 1)], [b * m, xPow(m - 1)]]) };
   }},
@@ -579,26 +582,38 @@ const TYPES = [
     const top = poly([[1, 'x^2'], [-(a + b), 'x'], [a * b, '']]), bot = poly([[1, 'x'], [-a, '']]);
     return { q: T`$\displaystyle\lim_{x\to ${a}} \frac{${top}}{${bot}}$`, a: String(a - b), kind: 'num', val: ((x) => (x * x - (a + b) * x + a * b) / (x - a))(a + 1e-7) };
   }},
-  { id: 'calc-dstd', name: 'Standard derivatives', par: 4, cat: 'calc', week: 6, weight: 1, gen() {
-    const [tex, ans, sh, dom] = pick([[T`\sin x`, 'cos(x)', T`\cos x`], [T`\cos x`, '-sin(x)', T`-\sin x`], [T`\tan x`, '1/cos(x)^2', T`\sec^2 x`, [0.1, 1.2]],
-      ['e^x', 'e^x', 'e^x'], [T`\ln x`, '1/x', T`\frac1x`], [T`\arcsin x`, '1/sqrt(1-x^2)', T`\frac{1}{\sqrt{1-x^2}}`, [0.1, 0.9]],
-      [T`\arctan x`, '1/(1+x^2)', T`\frac{1}{1+x^2}`], [T`\sinh x`, 'cosh(x)', T`\cosh x`], [T`\cosh x`, 'sinh(x)', T`\sinh x`],
-      [T`\sqrt x`, '1/(2*sqrt(x))', T`\frac{1}{2\sqrt x}`], ['2^x', 'ln(2)*2^x', T`2^x\ln 2`]]);
+  // L3 benchmark: Exercises6.pdf Q1(d) arcsin(x^2) and Q3(b) 3^(sin x) need the full table: inverse trig and a^x for any base
+  { id: 'calc-dstd', name: 'Standard derivatives', par: 4, cat: 'calc', week: 6, weight: 1, levels: 3, gen(L = 3) {
+    const b = pick([2, 3, 5, 10]);
+    const table = [[T`\sin x`, 'cos(x)', T`\cos x`], [T`\cos x`, '-sin(x)', T`-\sin x`], ['e^x', 'e^x', 'e^x'], [T`\ln x`, '1/x', T`\frac1x`],
+      [T`\sqrt x`, '1/(2*sqrt(x))', T`\frac{1}{2\sqrt x}`],   // L1: the first five
+      [T`\tan x`, '1/cos(x)^2', T`\sec^2 x`, [0.1, 1.2]], [T`\arctan x`, '1/(1+x^2)', T`\frac{1}{1+x^2}`],
+      [T`\sinh x`, 'cosh(x)', T`\cosh x`], [T`\cosh x`, 'sinh(x)', T`\sinh x`],   // L2: up to here
+      [T`\arcsin x`, '1/sqrt(1-x^2)', T`\frac{1}{\sqrt{1-x^2}}`, [0.1, 0.9]], [T`\arccos x`, '-1/sqrt(1-x^2)', T`-\frac{1}{\sqrt{1-x^2}}`, [0.1, 0.9]],
+      [`${b}^x`, `ln(${b})*${b}^x`, T`${b}^x\ln ${b}`]];
+    const [tex, ans, sh, dom] = pick(table.slice(0, [5, 9, 12][L - 1]));
     return { q: T`$\dfrac{d}{dx}\,${tex}$`, a: ans, kind: 'expr', show: sh, ...(dom && { dom }) };
   }},
-  { id: 'calc-dchain', name: 'Chain rule (simple)', par: 8, cat: 'calc', week: 6, weight: 1, gen() {
-    const a = nz(-5, 5), b = ri(1, 6), n = ri(2, 5), A = Math.abs(a), lin = poly([[A, 'x'], [b, '']]);
+  // L3 benchmark: Exercises6.pdf Q1(a),(b),(d),(e),(f): e^(-x^2), ln(tan x), arcsin(x^2), arctan(e^x), e^(sin x)
+  { id: 'calc-dchain', name: 'Chain rule (simple)', par: 8, cat: 'calc', week: 6, weight: 1, levels: 3, gen(L = 3) {
+    if (L === 3) return CAL_dchain3();
+    const a = L === 1 ? ri(2, 5) : nz(-5, 5), b = ri(1, 6), n = ri(2, 5), A = Math.abs(a), lin = poly([[A, 'x'], [b, '']]), ax = poly([[a, 'x']]);
     const [tex, ans, sh, dom] = pick([
-      [`e^{${poly([[a, 'x']])}}`, `${a}*e^(${a}x)`, T`${a}e^{${poly([[a, 'x']])}}`],
-      [T`\sin(${poly([[a, 'x']])})`, `${a}*cos(${a}x)`, T`${a}\cos(${poly([[a, 'x']])})`],
-      [T`(${lin})^{${n}}`, `${n * A}*(${A}x+${b})^${n - 1}`, T`${n * A}(${lin})` + (n - 1 > 1 ? `^{${n - 1}}` : '')],
-      [T`\ln(${lin})`, `${A}/(${A}x+${b})`, T`\frac{${A}}{${lin}}`],
+      [`e^{${ax}}`, `${a}*e^(${a}x)`, T`${a}e^{${ax}}`],
+      [T`\sin(${ax})`, `${a}*cos(${a}x)`, T`${a}\cos(${ax})`],
+      ...(L === 1 ? [[T`\cos(${ax})`, `${-a}*sin(${a}x)`, T`${-a}\sin(${ax})`]] : [
+        [T`(${lin})^{${n}}`, `${n * A}*(${A}x+${b})^${n - 1}`, T`${n * A}(${lin})` + (n - 1 > 1 ? `^{${n - 1}}` : '')],
+        [T`\ln(${lin})`, `${A}/(${A}x+${b})`, T`\frac{${A}}{${lin}}`]]),
     ]);
     return { q: T`$\dfrac{d}{dx}\,${tex}$`, a: ans, kind: 'expr', show: sh.replace(/^1(?=\D)/, '').replace(/^-1(?=\D)/, '-'), ...(dom && { dom }) };
   }},
-  { id: 'calc-dprod', name: 'Product rule (simple)', par: 12, cat: 'calc', week: 6, weight: 1, gen() {
+  // L3 benchmark: Exercises6.pdf Q1(g) x e^(arctan x) and Q1(c) x ln x - x: one factor needs the chain rule
+  { id: 'calc-dprod', name: 'Product rule (simple)', par: 12, cat: 'calc', week: 6, weight: 1, levels: 3, gen(L = 3) {
+    if (L === 3) return CAL_dprod3();
     const n = ri(2, 4);
-    const [tex, ans, sh] = pick([[`x^{${n}}e^x`, `(${n}x^${n - 1} + x^${n})*e^x`, T`(${n}x^{${n - 1}} + x^{${n}})e^x`],
+    const [tex, ans, sh] = pick(L === 1 ? [['xe^x', '(1 + x)*e^x', '(1 + x)e^x'], [T`x\sin x`, 'sin(x) + x*cos(x)', T`\sin x + x\cos x`],
+      [T`x\cos x`, 'cos(x) - x*sin(x)', T`\cos x - x\sin x`], [T`x\ln x`, 'ln(x) + 1', T`\ln x + 1`]]
+      : [[`x^{${n}}e^x`, `(${n}x^${n - 1} + x^${n})*e^x`, T`(${n}x^{${n - 1}} + x^{${n}})e^x`],
       [T`x^{${n}}\sin x`, `${n}x^${n - 1}*sin(x) + x^${n}*cos(x)`, T`${n}x^{${n - 1}}\sin x + x^{${n}}\cos x`],
       [T`x\ln x`, 'ln(x) + 1', T`\ln x + 1`], [T`e^x\sin x`, 'e^x*(sin(x) + cos(x))', T`e^x(\sin x + \cos x)`]]);
     return { q: T`$\dfrac{d}{dx}\,${tex}$`, a: ans, kind: 'expr', show: sh.replace(/x\^\{1\}/g, 'x') };
@@ -1168,38 +1183,48 @@ const TYPES = [
              keys: ['absolutely', 'conditionally', 'diverges'], hint: 'absolutely, conditionally or diverges' };
   }},
   // ---------- Calculus II (limits II, differentiation II, integration, series) ----------
-  { id: 'calc-growth', name: 'Growth: ln vs power vs exp', par: 5, cat: 'calc', week: 5, weight: 1, gen() {
-    const [r1, r2] = shuffle([0, 1, 2]).slice(0, 2);
-    const q = T`$\displaystyle\lim_{x\to\infty} \frac{${CAL_growthTerm(r1)}}{${CAL_growthTerm(r2)}}$`;
+  // L3 benchmark: Exercises5.pdf Q5(e) ln(x)/(x^2 + 1): sums on top and bottom, the dominant terms decide
+  { id: 'calc-growth', name: 'Growth: ln vs power vs exp', par: 5, cat: 'calc', week: 5, weight: 1, levels: 3, gen(L = 3) {
+    if (L === 3) return CAL_growth3();
+    const [r1, r2] = shuffle([0, 1, 2]).slice(0, 2), term = r => L === 2 ? CAL_growthTerm(r) : [T`\ln x`, xPow(ri(1, 3)), 'e^{x}'][r];
+    const q = T`$\displaystyle\lim_{x\to\infty} \frac{${term(r1)}}{${term(r2)}}$`;
     return r1 < r2 ? { q, a: '0', kind: 'num', hint: 'a number, or inf' } : { q, a: INF_ALIASES, kind: 'text', show: T`\infty`, hint: 'a number, or inf' };
   }},
-  { id: 'calc-limtrick', name: 'x ln x, x sin(a/x), x(e^(a/x) − 1)', par: 7, cat: 'calc', week: 5, weight: 1, gen() {
-    const a = nz(-5, 5), b = ri(1, 3), p = ri(1, 3), A = T`${a < 0 ? '-' : ''}\frac{${Math.abs(a)}}{x}`;
+  // L3 benchmark: Calculus_1_2026-27.pdf Example 5.23 (adapted from the 2021 January exam) cos(ln x / tan(7x^2 - 7)); Exercises5.pdf Q5(f),(i); Exercises4.pdf Q2(b), Q3
+  { id: 'calc-limtrick', name: 'x ln x, x sin(a/x), x(e^(a/x) − 1)', par: 7, cat: 'calc', week: 5, weight: 1, levels: 3, gen(L = 3) {
+    if (L === 3) return CAL_limtrick3();
+    const a = L === 1 ? ri(1, 5) : nz(-5, 5), b = L === 1 ? 1 : ri(1, 3), p = ri(1, 3), A = T`${a < 0 ? '-' : ''}\frac{${Math.abs(a)}}{x}`;
     return pick([
-      { q: T`$\displaystyle\lim_{x\to 0^+} ${pick([xPow(p), T`\sqrt{x}`])}\ln x$`, a: '0', kind: 'num' },
-      { q: T`$\displaystyle\lim_{x\to 0^+} x^{${poly([[p, 'x']])}}$`, a: '1', kind: 'num' },
+      { q: T`$\displaystyle\lim_{x\to 0^+} ${L === 1 ? 'x' : pick([xPow(p), T`\sqrt{x}`])}\ln x$`, a: '0', kind: 'num' },
+      ...(L === 1 ? [] : [{ q: T`$\displaystyle\lim_{x\to 0^+} x^{${poly([[p, 'x']])}}$`, a: '1', kind: 'num' }]),
       { q: T`$\displaystyle\lim_{x\to\infty} ${CAL_co(b)}x\sin\left(${A}\right)$`, a: String(a * b), kind: 'num' },
       { q: T`$\displaystyle\lim_{x\to\infty} ${CAL_co(b)}x\left(e^{${a}/x} - 1\right)$`, a: String(a * b), kind: 'num' },
     ]);
   }},
-  { id: 'calc-squeeze', name: 'Sandwich theorem limit', par: 7, cat: 'calc', week: 5, weight: 1, gen() {
-    const k = ri(1, 4), a = ri(1, 5), c = ri(-5, 5), f = '\\' + pick(['sin', 'cos']), hint = 'a number, or DNE';
+  // L3 benchmark: Exercises5.pdf Q3 (4x - 9 <= f(x) <= x^2 - 4x + 7, lim at 4), tutor's example x^2 sin(1/x^2), Q1 x^4 cos(2/x), Q5(a),(b)
+  { id: 'calc-squeeze', name: 'Sandwich theorem limit', par: 7, cat: 'calc', week: 5, weight: 1, levels: 3, gen(L = 3) {
+    if (L === 3) return CAL_squeeze3();
+    const k = ri(1, 4), a = ri(1, 5), c = L === 1 ? 0 : ri(-5, 5), f = '\\' + pick(['sin', 'cos']), hint = 'a number, or DNE';
     const pre = c ? `${c} + ` : '', ax = poly([[a, 'x']]);
     return pick([
       { q: T`$\displaystyle\lim_{x\to 0} \left(${pre}${xPow(k)}${f}\left(\frac{${a}}{x}\right)\right)$`, a: String(c), kind: 'num', hint },
       { q: T`$\displaystyle\lim_{x\to\infty} \left(${pre}\frac{${f}(${ax})}{${xPow(k)}}\right)$`, a: String(c), kind: 'num', hint },
-      { q: T`$\displaystyle\lim_{x\to\infty} ${xPow(k)}${f}(${ax})$`, a: CAL_DNE, kind: 'text', show: T`\text{DNE}`, hint },
+      ...(L === 1 ? [] : [{ q: T`$\displaystyle\lim_{x\to\infty} ${xPow(k)}${f}(${ax})$`, a: CAL_DNE, kind: 'text', show: T`\text{DNE}`, hint }]),
     ]);
   }},
-  { id: 'calc-bigo', name: 'Big-O: dominant power', par: 7, cat: 'calc', week: 5, weight: 1, gen() {
-    const pw = shuffle([0, 1, 2, 3, 4, 5]).slice(0, ri(2, 3)), toInf = Math.random() < 0.5;
-    const n = toInf ? Math.max(...pw) : Math.min(...pw), f = poly(pw.map(p => [nz(-7, 7), xPow(p)]));
+  // L3 benchmark: Calculus_1_2026-27.pdf Examples 5.13-5.14 (1/(1-x) = 1 + x + O(x^2), sin x = x + O(x^3)) and Example 5.12 (dominant term for large x)
+  { id: 'calc-bigo', name: 'Big-O: dominant power', par: 7, cat: 'calc', week: 5, weight: 1, levels: 3, gen(L = 3) {
+    const toInf = Math.random() < 0.5;
+    const pw = L === 1 ? shuffle([0, 1, 2, 3]).slice(0, 2) : shuffle([0, 1, 2, 3, 4, 5]).slice(0, ri(2, 3));
+    const [f, n] = L === 3 ? CAL_bigo3(toInf) : [poly(pw.map(p => [nz(-7, 7), xPow(p)])), toInf ? Math.max(...pw) : Math.min(...pw)];
     return { q: T`As $x\to ${toInf ? T`\infty` : '0'}$: $\ ${f} = O(\,?\,)$, the sharpest power of $x$`, a: n === 0 ? '1' : n === 1 ? 'x' : `x^${n}`,
              kind: 'expr', pattern: /^(1|x(\^\d+)?)$/, show: n === 0 ? '1' : xPow(n), hint: 'a single power, e.g. x^3 (or 1)' };
   }},
-  { id: 'calc-quot', name: "Quotient rule: f'(p)", par: 15, cat: 'calc', week: 6, weight: 1, gen() {
-    const [a, b, c, d] = [nz(-5, 5), ri(-6, 6), nz(-4, 4), nz(-6, 6)], p = ri(-3, 3);
-    if (Math.random() < 0.5) {   // (ax + b)/(cx + d): f' = (ad - bc)/(cx + d)^2
+  // L3 benchmark: Exercises6.pdf Q7 rational f = (4x^2 - 1)/(x^3 - x^2 - 2x) and Calculus_1_2026-27.pdf Example 7.12 (sin/cos quotient)
+  { id: 'calc-quot', name: "Quotient rule: f'(p)", par: 15, cat: 'calc', week: 6, weight: 1, levels: 3, gen(L = 3) {
+    if (L === 3) return CAL_quot3();
+    const [a, b, c, d] = [nz(-5, 5), ri(-6, 6), L === 1 ? 1 : nz(-4, 4), nz(-6, 6)], p = L === 1 ? ri(-1, 1) : ri(-3, 3);
+    if (L === 1 || Math.random() < 0.5) {   // (ax + b)/(cx + d): f' = (ad - bc)/(cx + d)^2
       if (c * p + d === 0 || a * d === b * c) return null;
       const f = frac(a * d - b * c, (c * p + d) ** 2);
       return { q: T`$f(x) = \dfrac{${poly([[a, 'x'], [b, '']])}}{${poly([[c, 'x'], [d, '']])}}$. $\ f'(${p}) = ?$`, a: f.s, show: f.tex, kind: 'num' };
@@ -1209,21 +1234,26 @@ const TYPES = [
     const f = frac(p * p - 2 * r * p - k, (p - r) ** 2);
     return { q: T`$f(x) = \dfrac{${poly([[1, 'x^2'], [k, '']])}}{${poly([[1, 'x'], [-r, '']])}}$. $\ f'(${p}) = ?$`, a: f.s, show: f.tex, kind: 'num' };
   }},
-  { id: 'calc-chain2', name: 'Chain rule (harder)', par: 12, cat: 'calc', week: 6, weight: 1, gen() {
-    const f = pick(CAL_OUTER), g = CAL_inner();
-    if (CAL_CHAIN_SKIP.includes(`${f.id}-${g.id}`)) return null;
+  // L3 benchmark: Exercises6.pdf Q5 sin(e^(arcsin x)), tutor's example ln|arcsin x|, Q3(a) arcsin((1-x)/(1+x)), Q3(c), Q3(h): three links or chain with a quotient
+  { id: 'calc-chain2', name: 'Chain rule (harder)', par: 12, cat: 'calc', week: 6, weight: 1, levels: 3, gen(L = 3) {
+    if (L === 3) return CAL_chain3();
+    const f = pick(L === 1 ? CAL_OUTER.slice(0, 4) : CAL_OUTER), g = CAL_inner();
+    if (CAL_CHAIN_SKIP.includes(`${f.id}-${g.id}`) || (L === 1 && g.id === 'lin')) return null;
     return { q: T`$\dfrac{d}{dx}\,${f.tex(g.tex)}$`, a: `(${g.ds})*${f.ds(g.s)}`, kind: 'expr', dom: [0.2, 1.4],
              show: f.sh(g.k * (f.sign || 1), g.rest, g.tex) };
   }},
-  { id: 'calc-logdiff', name: 'Logarithmic differentiation', par: 15, cat: 'calc', week: 6, weight: 1, gen() {
-    const k = ri(1, 3), c = ri(1, 5), n = ri(2, 3), kx = poly([[k, 'x']]);
+  // L3 benchmark: Exercises6.pdf Q3(f) x^(x sin x) and Q6 x^x; Calculus_1_2026-27.pdf Example 7.15 (current generator kept as L3)
+  { id: 'calc-logdiff', name: 'Logarithmic differentiation', par: 15, cat: 'calc', week: 6, weight: 1, levels: 3, gen(L = 3) {
+    const k = ri(1, 3), c = ri(1, 5), n = ri(2, 3), kx = poly([[k, 'x']]), b = pick([2, 3, 5]);
+    const xkx = [`x^{${kx}}`, `x^(${k}x)*${k}*(ln(x)+1)`, T`${CAL_co(k)}x^{${kx}}(\ln x + 1)`];
+    const xxn = [`x^{x^{${n}}}`, `x^(x^${n})*x^${n - 1}*(${n}*ln(x)+1)`, T`x^{x^{${n}}}\,${xPow(n - 1)}(${n}\ln x + 1)`];
     const [tex, a, show] = pick([
-      [`x^{${kx}}`, `x^(${k}x)*${k}*(ln(x)+1)`, T`${CAL_co(k)}x^{${kx}}(\ln x + 1)`],
-      [T`x^{\sin ${kx}}`, `x^(sin(${k}x))*(${k}*cos(${k}x)*ln(x) + sin(${k}x)/x)`,
+      [xkx, [T`${b}^{\sin x}`, `${b}^sin(x)*ln(${b})*cos(x)`, T`\ln ${b}\,\cos x\,${b}^{\sin x}`], [`${b}^{x^2}`, `${b}^(x^2)*ln(${b})*2x`, T`2x\ln ${b}\,${b}^{x^2}`]],
+      [xkx, xxn, [T`x^{\ln x}`, 'x^(ln(x))*2*ln(x)/x', T`\frac{2\ln x}{x}\,x^{\ln x}`]],
+      [xkx, [T`x^{\sin ${kx}}`, `x^(sin(${k}x))*(${k}*cos(${k}x)*ln(x) + sin(${k}x)/x)`,
        T`x^{\sin ${kx}}\left(${CAL_co(k)}\cos(${kx})\ln x + \frac{\sin(${kx})}{x}\right)`],
-      [`(x^2 + ${c})^{x}`, `(x^2+${c})^x*(ln(x^2+${c}) + 2x^2/(x^2+${c}))`, T`(x^2 + ${c})^{x}\left(\ln(x^2 + ${c}) + \frac{2x^2}{x^2 + ${c}}\right)`],
-      [`x^{x^{${n}}}`, `x^(x^${n})*x^${n - 1}*(${n}*ln(x)+1)`, T`x^{x^{${n}}}\,${xPow(n - 1)}(${n}\ln x + 1)`],
-    ]);
+      [`(x^2 + ${c})^{x}`, `(x^2+${c})^x*(ln(x^2+${c}) + 2x^2/(x^2+${c}))`, T`(x^2 + ${c})^{x}\left(\ln(x^2 + ${c}) + \frac{2x^2}{x^2 + ${c}}\right)`], xxn],
+    ][L - 1]);
     return { q: T`$\dfrac{d}{dx}\,${tex}\quad (x > 0)$`, a, show, kind: 'expr' };
   }},
   { id: 'calc-dval', name: "Derivative at a point", par: 15, cat: 'calc', week: 6, weight: 1, gen() {
@@ -1238,16 +1268,17 @@ const TYPES = [
     if (ans.startsWith('0*')) return null;
     return { q: T`$f(x) = ${tex}$. $\ f'(${pt}) = ?$`, a: ans, show, kind: 'num' };
   }},
-  { id: 'calc-dstd2', name: 'More standard derivatives', par: 5, cat: 'calc', week: 6, weight: 1, gen() {
+  // L3 benchmark: Exercises6.pdf Q3(c) ln|x + sqrt(x^2 - a^2)| (an arccosh form) and Q3(g): the full table (current generator kept as L3)
+  { id: 'calc-dstd2', name: 'More standard derivatives', par: 5, cat: 'calc', week: 6, weight: 1, levels: 3, gen(L = 3) {
     const [tex, a, show, dom] = pick([
-      [T`\operatorname{arcsinh} x`, '1/sqrt(1+x^2)', T`\frac{1}{\sqrt{1+x^2}}`],
+      [T`\tanh x`, '1/cosh(x)^2', T`\frac{1}{\cosh^2 x}`],
+      [T`\sec x`, 'sec(x)*tan(x)', T`\sec x\tan x`, [0.1, 1.2]],
+      [T`\cot x`, '-csc(x)^2', T`-\csc^2 x`],   // L1: the first three
+      [T`\csc x`, '-csc(x)*cot(x)', T`-\csc x\cot x`],
+      [T`\operatorname{arcsinh} x`, '1/sqrt(1+x^2)', T`\frac{1}{\sqrt{1+x^2}}`],   // L2: up to here
       [T`\operatorname{arccosh} x`, '1/sqrt(x^2-1)', T`\frac{1}{\sqrt{x^2-1}}`, [1.2, 3]],
       [T`\operatorname{arctanh} x`, '1/(1-x^2)', T`\frac{1}{1-x^2}`, [0.1, 0.9]],
-      [T`\sec x`, 'sec(x)*tan(x)', T`\sec x\tan x`, [0.1, 1.2]],
-      [T`\csc x`, '-csc(x)*cot(x)', T`-\csc x\cot x`],
-      [T`\cot x`, '-csc(x)^2', T`-\csc^2 x`],
-      [T`\tanh x`, '1/cosh(x)^2', T`\frac{1}{\cosh^2 x}`],
-    ]);
+    ].slice(0, [3, 5, 7][L - 1]));
     return { q: T`$\dfrac{d}{dx}\,${tex}$`, a, show, kind: 'expr', ...(dom && { dom }) };
   }},
   { id: 'calc-invder', name: 'Inverse function derivative', par: 12, cat: 'calc', week: 7, weight: 1, gen() {
@@ -3205,6 +3236,142 @@ function CAL_inner() {
 }
 // Pairs already drilled by calc-dchain, trivial, or with ugly answers
 const CAL_CHAIN_SKIP = ['exp-lin', 'sin-lin', 'ln-lin', 'sq-lin', 'sq-x2', 'sq-exp', 'ln-exp'];
+
+// ---- Level-3 (exam level) generators for the laddered calculus types ----
+// Growth piece for x -> inf: rank -1 constant, 0 (ln x)^a, 1 x^p, 2 e^(kx); a larger key grows faster
+function CAL_growthPiece(rank) {
+  if (rank < 0) return { tex: '', key: -1 };
+  if (rank === 0) { const a = ri(1, 2); return { tex: a === 1 ? T`\ln x` : T`(\ln x)^{2}`, key: a }; }
+  if (rank === 1) { const p = pick([0.5, 1, 2, 3, 4, 5]); return { tex: p === 0.5 ? T`\sqrt{x}` : xPow(p), key: 10 + p }; }
+  const k = ri(1, 3);
+  return { tex: CAL_eTex(k), key: 20 + k };
+}
+// Two-term sums on top and bottom: the dominant terms decide (0, inf, or the ratio of their coefficients)
+function CAL_growth3() {
+  const hint = 'a number, or inf', ranks = () => shuffle([-1, 0, 1, 2]).slice(0, 2).sort((a, b) => b - a);
+  const top = ranks(), lead = CAL_growthPiece(top[0]), same = top[0] > 0 && Math.random() < 0.4;
+  const bot = same ? [top[0], ri(-1, top[0] - 1)] : ranks(), blead = same ? lead : CAL_growthPiece(bot[0]);
+  if (!same && blead.key === lead.key) return null;
+  const cN = ri(1, 5), cD = ri(1, 5), side = (c, P, low) => poly(shuffle([[c, P.tex], [nz(-5, 5), CAL_growthPiece(low).tex]]));
+  const q = T`$\displaystyle\lim_{x\to\infty} \frac{${side(cN, lead, top[1])}}{${side(cD, blead, bot[1])}}$`;
+  if (same) { const f = frac(cN, cD); return { q, a: f.s, show: f.tex, kind: 'num', hint }; }
+  return lead.key < blead.key ? { q, a: '0', kind: 'num', hint } : { q, a: INF_ALIASES, kind: 'text', show: T`\infty`, hint };
+}
+// Substitution to a standard limit: x ln(1 + a/x), (1 + a/x)^(bx), (u^x - v^x)/x, (x^(kx) - 1)/(x ln x), x sin(1/(px)), ln x / tan(k(x^2 - 1))
+function CAL_limtrick3() {
+  const a = nz(-4, 4), b = ri(1, 3), k = ri(2, 7), j = ri(1, 4), p = ri(2, 6), s = nz(-3, 3), [u, v] = shuffle([2, 3, 5, 7]).slice(0, 2);
+  const A = T`1 ${a < 0 ? '-' : '+'} \frac{${Math.abs(a)}}{x}`, lim = T`\displaystyle\lim`, g = frac(u, v), h = frac(s, p), w = frac(1, 2 * k);
+  const jan = T`\frac{\ln x}{\tan(${k}x^2 - ${k})}`;
+  return pick([
+    { q: T`$${lim}_{x\to\infty} ${CAL_co(b)}x\ln\left(${A}\right)$`, a: String(a * b), kind: 'num' },
+    { q: T`$${lim}_{x\to\infty} \left(${A}\right)^{${poly([[b, 'x']])}}$`, a: `e^(${a * b})`, show: `e^{${a * b}}`, kind: 'num' },
+    { q: T`$${lim}_{x\to 0} \frac{${u}^x - ${v}^x}{x}$`, a: `ln(${g.s})`, show: T`\ln\left(${g.tex}\right)`, kind: 'num' },
+    { q: T`$${lim}_{x\to 0^+} \frac{x^{${poly([[j, 'x']])}} - 1}{x\ln x}$`, a: String(j), kind: 'num' },
+    { q: T`$${lim}_{x\to -\infty} ${CAL_co(s)}x\sin\left(\frac{1}{${p}x}\right)$`, a: h.s, show: h.tex, kind: 'num' },
+    pick([{ q: T`$${lim}_{x\to 1} ${jan}$`, a: w.s, show: w.tex, kind: 'num' },
+      { q: T`$${lim}_{x\to 1} \cos\left(${jan}\right)$`, a: `cos(${w.s})`, show: T`\cos${w.tex}`, kind: 'num' }]),
+    { q: T`$${lim}_{x\to 0^+} x^{\sin(${poly([[b, 'x']])})}$`, a: '1', kind: 'num' },
+  ]);
+}
+// Sandwich: given bounds (tangent line below a parabola), x^k f(a/x^m), (A x^n + sin)/(d x^n + e), or DNE
+function CAL_squeeze3() {
+  const hint = 'a number, or DNE', p = ri(-3, 3), b = ri(-5, 5), c = ri(-5, 5), k = ri(1, 4), m = ri(1, 3), a = ri(1, 5), n = ri(1, 3);
+  const A = nz(-6, 6), d = ri(1, 5), e = ri(1, 6), [f, g] = shuffle([T`\sin`, T`\cos`]), ax = poly([[a, 'x']]), pre = c ? `${c} + ` : '', r = frac(A, d);
+  return pick([
+    { q: T`$${poly([[2 * p + b, 'x'], [c - p * p, '']])} \le f(x) \le ${poly([[1, 'x^2'], [b, 'x'], [c, '']])}$ for all $x$. $\ \displaystyle\lim_{x\to ${p}} f(x) = ?$`,
+      a: String(p * p + b * p + c), kind: 'num', hint },
+    { q: T`$\displaystyle\lim_{x\to 0} \left(${pre}${xPow(k)}${f}\left(\frac{${a}}{${xPow(m)}}\right)\right)$`, a: String(c), kind: 'num', hint },
+    { q: T`$\displaystyle\lim_{x\to\infty} \frac{${poly([[A, xPow(n)], [pick([1, -1]), `${f}(${ax})`]])}}{${poly([[d, xPow(n)], [e, `${g} x`]])}}$`, a: r.s, show: r.tex, kind: 'num', hint },
+    { q: pick([T`$\displaystyle\lim_{x\to\infty} ${xPow(k)}${f}(${ax})$`, T`$\displaystyle\lim_{x\to 0} ${f}\left(\frac{${a}}{${xPow(m)}}\right)$`]),
+      a: CAL_DNE, kind: 'text', show: T`\text{DNE}`, hint },
+  ]);
+}
+// Big-O: series remainders as x -> 0 (Examples 5.13-5.14), rational plus a bounded term as x -> inf. Returns [TeX, power]
+function CAL_bigo3(toInf) {
+  const k = ri(1, 3), c = nz(-5, 5);
+  if (!toInf) return pick([[T`\sin x - x`, 3], [T`\sinh x - x`, 3], ['e^{x} - 1', 1], ['e^{x} - 1 - x', 2], [T`1 - \cos x`, 2],
+    [T`\cos x - 1 + \frac{x^2}{2}`, 4], [T`\ln(1 + x) - x`, 2], [T`\frac{1}{1 - x} - 1 - x`, 2], [T`${xPow(k)}\sin x`, k + 1],
+    [T`${xPow(k)}(e^{x} - 1)`, k + 1], [T`${xPow(k)}(1 - \cos x)`, k + 2], [T`${poly([[c, `x^{${k + 2}}`]])} + \sin x`, 1]]);
+  const n = ri(2, 6), j = ri(0, n - 1), m = ri(1, n), e = ri(1, 5), bd = pick([T`\sin x`, T`\cos x`, 'e^{-x}', T`\arctan x`]);
+  return [T`\frac{${poly([[nz(-7, 7), xPow(n)], [nz(-7, 7), xPow(j)]])}}{${poly([[1, xPow(m)], [e, '']])}} ${c < 0 ? '-' : '+'} ${Math.abs(c) === 1 ? '' : Math.abs(c)}${bd}`, n - m];
+}
+// Quotient rule at a point: quadratic over quadratic, e^(kx)/(x + d) at 0, (a + sin x)/(b + cos x) at pi/2
+function CAL_quot3() {
+  const r = Math.random();
+  if (r < 0.2) {   // f'(0) = (kd - 1)/d^2
+    const k = nz(-3, 3), d = nz(-4, 4), f = frac(k * d - 1, d * d);
+    return { q: T`$f(x) = \dfrac{${CAL_eTex(k)}}{${poly([[1, 'x'], [d, '']])}}$. $\ f'(0) = ?$`, a: f.s, show: f.tex, kind: 'num' };
+  }
+  if (r < 0.4) {   // f' = (b cos x + a sin x + 1)/(b + cos x)^2, so f'(pi/2) = (a + 1)/b^2
+    const a = ri(1, 5), b = ri(2, 5), f = frac(a + 1, b * b);
+    return { q: T`$f(x) = \dfrac{${a} + \sin x}{${b} + \cos x}$. $\ f'\left(\frac{\pi}{2}\right) = ?$`, a: f.s, show: f.tex, kind: 'num' };
+  }
+  const N = [ri(-3, 3), nz(-5, 5), ri(-6, 6)], D = [1, ri(-4, 4), ri(1, 6)], p = ri(-2, 2);
+  const at = (c, x) => c[0] * x * x + c[1] * x + c[2], dAt = (c, x) => 2 * c[0] * x + c[1], Dp = at(D, p);
+  if (Dp === 0 || (N[1] === N[0] * D[1] && N[2] === N[0] * D[2])) return null;
+  const f = frac(dAt(N, p) * Dp - at(N, p) * dAt(D, p), Dp * Dp), P = c => poly([[c[0], 'x^2'], [c[1], 'x'], [c[2], '']]);
+  return { q: T`$f(x) = \dfrac{${P(N)}}{${P(D)}}$. $\ f'(${p}) = ?$`, a: f.s, show: f.tex, kind: 'num' };
+}
+// Power rule with negative and fractional powers: a x^n + b/x^m + c sqrt(x), with c even so c/2 is whole
+function CAL_deriv3(a, n) {
+  const b = nz(-6, 6), m = ri(1, 3), h = nz(-4, 4), sg = v => v < 0 ? '-' : '+';
+  return { q: T`$\frac{d}{dx}\left(${poly([[a, xPow(n)]])} ${sg(b)} \frac{${Math.abs(b)}}{${xPow(m)}} ${sg(h)} ${Math.abs(2 * h)}\sqrt{x}\right)$`,
+           a: `${a * n}*x^${n - 1} + (${-b * m})/x^${m + 1} + (${h})/sqrt(x)`, kind: 'expr',
+           show: T`${poly([[a * n, xPow(n - 1)]])} ${sg(-b * m)} \frac{${Math.abs(b * m)}}{x^{${m + 1}}} ${sg(h)} \frac{${Math.abs(h)}}{\sqrt{x}}` };
+}
+// Chain rule, one link with a non-linear inner function (Exercises 6 Q1)
+function CAL_dchain3() {
+  const c = nz(-3, 3), n = ri(2, 3), k = ri(1, 3), m = ri(1, 9), p = ri(2, 4), kx = poly([[k, 'x']]), cx2 = poly([[c, 'x^2']]);
+  const [tex, a, show, dom] = pick([
+    [`e^{${cx2}}`, `${2 * c}*x*e^(${c}*x^2)`, `${2 * c}xe^{${cx2}}`],
+    [T`\arcsin(x^{${n}})`, `${n}*x^${n - 1}/sqrt(1-x^${2 * n})`, T`\frac{${n}${xPow(n - 1)}}{\sqrt{1-x^{${2 * n}}}}`, [0.1, 0.9]],
+    [T`\arctan(x^{${n}})`, `${n}*x^${n - 1}/(1+x^${2 * n})`, T`\frac{${n}${xPow(n - 1)}}{1+x^{${2 * n}}}`],
+    [T`\arctan(${CAL_eTex(k)})`, `${k}*e^(${k}x)/(1+e^(${2 * k}x))`, T`\frac{${CAL_co(k)}${CAL_eTex(k)}}{1+${CAL_eTex(2 * k)}}`],
+    pick([[T`e^{\sin(${kx})}`, `${k}*cos(${k}x)*e^(sin(${k}x))`, T`${CAL_co(k)}\cos(${kx})\,e^{\sin(${kx})}`],
+      [T`e^{\cos(${kx})}`, `${-k}*sin(${k}x)*e^(cos(${k}x))`, T`${CAL_co(-k)}\sin(${kx})\,e^{\cos(${kx})}`]]),
+    pick([[T`\ln(\sin x)`, 'cos(x)/sin(x)', T`\cot x`, [0.1, 1.2]], [T`\ln(\cos x)`, '-sin(x)/cos(x)', T`-\tan x`, [0.1, 1.2]],
+      [T`\ln(\tan x)`, '1/(sin(x)*cos(x))', T`\frac{1}{\sin x\cos x}`, [0.1, 1.2]]]),
+    [T`\sqrt{x^2 + ${m}}`, `x/sqrt(x^2+${m})`, T`\frac{x}{\sqrt{x^2 + ${m}}}`],
+    [T`(x^2 + ${m})^{${p}}`, `${2 * p}*x*(x^2+${m})^${p - 1}`, T`${2 * p}x(x^2 + ${m})` + (p > 2 ? `^{${p - 1}}` : '')],
+  ]);
+  return { q: T`$\dfrac{d}{dx}\,${tex}$`, a, show, kind: 'expr', ...(dom && { dom }) };
+}
+// Chain rule with three links, or through a quotient or a sum (Exercises 6 Q3, Q5, tutor's example)
+function CAL_chain3() {
+  const k = ri(1, 3), n = ri(2, 3), p = ri(2, 3), m = ri(1, 9), c = ri(1, 3), r = ri(1, 3), kx = poly([[k, 'x']]), k2 = poly([[k * k, 'x^2']]);
+  const [arc, fn, d, dt] = pick([[T`\arcsin`, 'asin', '1/sqrt(1-x^2)', T`\sqrt{1-x^2}`], [T`\arctan`, 'atan', '1/(1+x^2)', '1+x^2']]);
+  const E = T`e^{${arc} x}`, Es = `e^(${fn}(x))`, X = `x^{${n}}`;
+  const [tex, a, show, dom] = pick([
+    pick([[T`\sin\left(${E}\right)`, `cos(${Es})*${Es}*${d}`, T`\frac{${E}\cos\left(${E}\right)}{${dt}}`, [0.1, 0.9]],
+      [T`\cos\left(${E}\right)`, `-sin(${Es})*${Es}*${d}`, T`-\frac{${E}\sin\left(${E}\right)}{${dt}}`, [0.1, 0.9]]]),
+    pick([[T`\ln\left(\arcsin(${kx})\right)`, `${k}/(asin(${k}x)*sqrt(1-${k * k}x^2))`, T`\frac{${k}}{\arcsin(${kx})\sqrt{1 - ${k2}}}`, [0.05, 0.3]],
+      [T`\ln\left(\arctan(${kx})\right)`, `${k}/(atan(${k}x)*(1+${k * k}x^2))`, T`\frac{${k}}{\arctan(${kx})(1 + ${k2})}`, [0.05, 0.3]]]),
+    pick([[T`e^{\sin(${X})}`, `${n}*x^${n - 1}*cos(x^${n})*e^(sin(x^${n}))`, T`${n}${xPow(n - 1)}\cos(${X})\,e^{\sin(${X})}`],
+      [T`e^{\cos(${X})}`, `-${n}*x^${n - 1}*sin(x^${n})*e^(cos(x^${n}))`, T`-${n}${xPow(n - 1)}\sin(${X})\,e^{\cos(${X})}`]]),
+    [T`\sin^{${p}}(x^2)`, `${2 * p}*x*sin(x^2)^${p - 1}*cos(x^2)`, T`${2 * p}x\sin${p > 2 ? `^{${p - 1}}` : ''}(x^2)\cos(x^2)`],
+    [T`\sqrt{${m} + \sin^2 x}`, `sin(x)*cos(x)/sqrt(${m}+sin(x)^2)`, T`\frac{\sin x\cos x}{\sqrt{${m} + \sin^2 x}}`],
+    [T`\arcsin\left(\frac{${r * r} - x}{${r * r} + x}\right)`, `-${r}/((${r * r}+x)*sqrt(x))`, T`-\frac{${r}}{(${r * r} + x)\sqrt{x}}`],
+    [T`\ln\sqrt{\frac{${c} + x^2}{${c} - x^2}}`, `${2 * c}*x/(${c * c}-x^4)`, T`\frac{${2 * c}x}{${c * c} - x^4}`, [0.1, 0.9]],
+    [T`\ln\left(x + \sqrt{x^2 + ${m}}\right)`, `1/sqrt(x^2+${m})`, T`\frac{1}{\sqrt{x^2 + ${m}}}`],
+  ]);
+  return { q: T`$\dfrac{d}{dx}\,${tex}$`, a, show, kind: 'expr', ...(dom && { dom }) };
+}
+// Product rule where one factor needs the chain rule (Exercises 6 Q1(c),(g))
+function CAL_dprod3() {
+  const n = ri(1, 3), n2 = ri(1, 2), a = nz(-3, 3), b = ri(2, 4), m = ri(1, 9), bx = poly([[b, 'x']]), nx = CAL_co(n) + xPow(n - 1), e = CAL_eTex(a);
+  const sb = T`\sin(${bx})`, cb = T`\cos(${bx})`;
+  const [tex, ans, show, dom] = pick([
+    [`${xPow(n)}${e}`, `(${n}*x^${n - 1} + (${a})*x^${n})*e^(${a}x)`, T`(${poly([[n, xPow(n - 1)], [a, xPow(n)]])})${e}`],
+    [T`${xPow(n2)}e^{\arctan x}`, `(${n2}*x^${n2 - 1} + x^${n2}/(1+x^2))*e^(atan(x))`, T`e^{\arctan x}\left(${n2 === 1 ? '1' : '2x'} + \frac{${xPow(n2)}}{1+x^2}\right)`],
+    pick([[`${e}${sb}`, `e^(${a}x)*(${a}*sin(${b}x) + ${b}*cos(${b}x))`, T`${e}\left(${poly([[a, sb], [b, cb]])}\right)`],
+      [`${e}${cb}`, `e^(${a}x)*(${a}*cos(${b}x) - ${b}*sin(${b}x))`, T`${e}\left(${poly([[a, cb], [-b, sb]])}\right)`]]),
+    pick([[T`${xPow(n)}\arctan x`, `${n}*x^${n - 1}*atan(x) + x^${n}/(1+x^2)`, T`${nx}\arctan x + \frac{${xPow(n)}}{1+x^2}`],
+      [T`${xPow(n)}\arcsin x`, `${n}*x^${n - 1}*asin(x) + x^${n}/sqrt(1-x^2)`, T`${nx}\arcsin x + \frac{${xPow(n)}}{\sqrt{1-x^2}}`, [0.1, 0.9]]]),
+    [T`${xPow(n)}\ln(x^2 + ${m})`, `${n}*x^${n - 1}*ln(x^2+${m}) + 2*x^${n + 1}/(x^2+${m})`, T`${nx}\ln(x^2 + ${m}) + \frac{2${xPow(n + 1)}}{x^2 + ${m}}`],
+    [T`x\sqrt{x^2 + ${m}}`, `sqrt(x^2+${m}) + x^2/sqrt(x^2+${m})`, T`\frac{2x^2 + ${m}}{\sqrt{x^2 + ${m}}}`],
+  ]);
+  return { q: T`$\dfrac{d}{dx}\,${tex}$`, a: ans, show, kind: 'expr', ...(dom && { dom }) };
+}
 
 // Parametric curve coordinates: tex, derivative string ds and TeX dt
 function CAL_paramFamily(i) {
