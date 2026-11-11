@@ -34,7 +34,7 @@
 <script>
 const CONFIG = {
   conceptCoverage: 'full',   // 'pilot': only some types have a concept; 'full': every TYPES id must (self-test enforced)
-  currentWeek: { la: 5, calc: 4, seq: 4, logic: 5, basics: 4 },   // per course: courses move at different speeds
+  currentWeek: { la: 6, calc: 6, seq: 5, logic: 6, basics: 4 },   // per course: courses move at different speeds
   categories: {
     la:    { label: 'Linear algebra',       weight: 1 },
     calc:  { label: 'Calculus',             weight: 1.2 },
@@ -109,6 +109,7 @@ const CONFIG = {
   weakness: { pull: 1, pointsBonus: 0.5 },   // weakest types drawn up to (1 + pull)×; weakest category scores up to (1 + bonus)×
   decay: { afterDays: 21, perDay: 2, maxLoss: 40 },
   skipUnlockSeconds: 5,
+  ladder: { up: [5, 6], down: [2, 4] },   // laddered types: 5 of the last 6 correct at ≤ par → level up; 2 misses in the last 4 → level down
   scratchParFactor: 2,   // a question answered with written working scores its time ÷ this: writing steps out takes longer (retune after real runs)
   resurfaceAfter: [3, 6],                    // a skipped question returns after this many other questions
   combo: { step: 0.1, max: 20 },             // points multiplier 1 + step × (streak − 1), capped at max
@@ -4637,11 +4638,28 @@ function masteryStatus(log, par) {
   const progress = met ? 1 : Math.min(n / M.window, acc / M.accuracy, isFinite(med) ? par / med : 0, days / M.days, 0.99);
   return { met, progress, n, acc, med, days };
 }
-function applyAnswer(type, ok, ms) {
+// ---- difficulty ladders: laddered types (levels: 3) serve level 1–3 questions; the level moves invisibly with fluency ----
+const isLaddered = t => t?.levels === 3;
+const levelOf = id => isLaddered(TYPE_BY_ID[id]) ? RS[id]?.lvl ?? 1 : 3;
+// Laddered types count only level-3 answers towards mastery: mastered means exam level
+const masteryLog = (t, log) => isLaddered(t) ? log.filter(e => e.l === 3) : log;
+function levelStep(st, ok, ms, par) {
+  const { up, down } = CONFIG.ladder, lvl = st.lvl ?? 1;
+  st.llog = [...(st.llog || []), { ok, ms }].slice(-up[1]);
+  const recent = st.llog.slice(-down[1]), good = st.llog.filter(e => e.ok);
+  let step = null;
+  if (lvl > 1 && recent.filter(e => !e.ok).length >= down[0]) step = 'down';
+  else if (lvl < 3 && good.length >= up[0] && median(good.map(e => e.ms)) / 1000 <= par) step = 'up';
+  if (step) { st.lvl = lvl + (step === 'up' ? 1 : -1); st.llog = []; }
+  else st.lvl = lvl;
+  return step;
+}
+function applyAnswer(type, ok, ms, level = 3) {
   const st = RS[type.id] || (RS[type.id] = { r: RC.start, last: Date.now(), log: [], mastered: false });
   const r = decayed(st), delta = ratingDelta(r, ok, ms, type.par);
-  Object.assign(st, { r: r + delta, last: Date.now(), log: [...st.log, { d: dayKey(), ok, ms }].slice(-CONFIG.mastery.window) });
-  const met = masteryStatus(st.log, type.par).met, change = met === st.mastered ? null : met ? 'mastered' : 'lost';
+  Object.assign(st, { r: r + delta, last: Date.now(), log: [...st.log, { d: dayKey(), ok, ms, l: level }].slice(-CONFIG.mastery.window) });
+  if (isLaddered(type) && level === levelOf(type.id)) levelStep(st, ok, ms, type.par);
+  const met = masteryStatus(masteryLog(type, st.log), type.par).met, change = met === st.mastered ? null : met ? 'mastered' : 'lost';
   st.lost = change === 'lost' || (!met && !!st.lost);   // lost mastery and not yet regained: the concept is slipping
   st.mastered = met;
   localStorage.setItem(RATINGS_KEY, JSON.stringify(RS));
@@ -4704,8 +4722,8 @@ function drawType(mod, drill) {
 }
 function draw(recent, mod, drill) {
   for (let tries = 0; tries < 200; tries++) {
-    const type = drawType(mod, drill), q = type.gen();
-    if (q && !recent.includes(q.q)) return { ...q, type: type.id, cat: type.cat, golden: q.kind !== 'bool' && Math.random() < (mod.golden ?? CONFIG.golden.rate) };
+    const type = drawType(mod, drill), level = levelOf(type.id), q = type.gen(level);
+    if (q && !recent.includes(q.q)) return { ...q, type: type.id, cat: type.cat, level, golden: q.kind !== 'bool' && Math.random() < (mod.golden ?? CONFIG.golden.rate) };
   }
   throw new Error('no question could be drawn');
 }
@@ -4816,7 +4834,7 @@ function record(ok, skipped = false, attempt = '') {
   const scored = work ? ms / CONFIG.scratchParFactor : ms;   // written working: the time counts at a reduced weight
   S.streak = ok ? S.streak + 1 : 0;
   const ctx = { combo: comboMult(S.streak, S.mod.comboStep ?? CONFIG.combo.step), weak: weakMult(q.cat), golden: q.golden };
-  const pts = points(ok, scored, type.par, ctx), { delta, change } = applyAnswer(type, ok, scored);
+  const pts = points(ok, scored, type.par, ctx), { delta, change } = applyAnswer(type, ok, scored, q.level ?? 3);
   S.points += pts;
   if (ok) S.correct++;
   S.log.push({ cat: q.cat, type: type.id, ok, ms, q: q.q, ans: answerTeX(q), delta, attempt, skipped, bool: q.kind === 'bool', again: !!q.resurfaced, work });
@@ -5146,7 +5164,7 @@ function dashboard(types, hist) {
   }).join('');
 }
 function typeRow(t, hist) {
-  const st = RS[t.id], m = masteryStatus(st?.log || [], t.par);
+  const st = RS[t.id], m = masteryStatus(masteryLog(t, st?.log || []), t.par);
   const tip = `${m.n}/${CONFIG.mastery.window} answers · ${Math.round(100 * m.acc)}% · median ${isFinite(m.med) ? m.med.toFixed(1) : '–'} s (par ${t.par} s) · ${m.days}/${CONFIG.mastery.days} days`;
   const trend = hist.filter(r => r.ratings?.[t.id] !== undefined).slice(-20).map(r => ({ y: ratingY(r.ratings[t.id]), r }));
   const prog = st?.mastered ? '<span class="up">✓</span>' : `<span class="prog" title="${tip}"><i style="width:${Math.round(100 * m.progress)}%"></i></span>`;
@@ -5408,8 +5426,8 @@ function init() {
 ===================================================================== -->
 <script>
 function runSelfTest() {
-  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests(), askClaude: askClaudeTextTest(), scratch: scratchTests(), focus: homeFocusTest() };
-  out.ok = out.focus.length === 0 && out.scratch.length === 0 && out.concepts.length === 0 && out.entry.length === 0 && out.askClaude.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests(), askClaude: askClaudeTextTest(), scratch: scratchTests(), focus: homeFocusTest(), ladder: ladderTests() };
+  out.ok = out.ladder.length === 0 && out.focus.length === 0 && out.scratch.length === 0 && out.concepts.length === 0 && out.entry.length === 0 && out.askClaude.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
   const pre = $('selftest');
   pre.style.display = 'block';
   pre.textContent = JSON.stringify(out, null, 1);
@@ -5683,6 +5701,38 @@ function whyLinkTest() {
   return f;
 }
 // Queue one question of each given type so the next nextQuestion() calls show them
+// ---- difficulty ladders: invisible level per type, promotion/demotion, mastery only at level 3 ----
+function ladderTests() {
+  const f = [];
+  if (typeof levelOf !== 'function' || typeof levelStep !== 'function') return ['levelOf / levelStep not defined'];
+  const W = { la: 6, calc: 6, seq: 5, logic: 6, basics: 4 };
+  if (JSON.stringify(CONFIG.currentWeek) !== JSON.stringify(W)) f.push(`currentWeek ${JSON.stringify(CONFIG.currentWeek)}, want ${JSON.stringify(W)}`);
+  const fx = { id: 'fxL', name: 'Fixture ladder', cat: 'la', week: 1, weight: 1, par: 10, levels: 3, hub: false, gen: L => ({ q: `L${L}`, a: String(L), kind: 'num' }) };
+  const savedRS = JSON.parse(JSON.stringify(RS)), savedKey = localStorage.getItem(RATINGS_KEY);
+  TYPES.push(fx); TYPE_BY_ID.fxL = fx; delete RS.fxL;
+  try {
+    if (levelOf('fxL') !== 1) f.push(`new laddered type starts at level ${levelOf('fxL')}, want 1`);
+    for (let i = 0; i < 5; i++) applyAnswer(fx, true, 3000, levelOf('fxL'));
+    if (levelOf('fxL') !== 2) f.push(`5 fast correct at level 1 → level ${levelOf('fxL')}, want 2`);
+    if ((RS.fxL.llog || []).length !== 0) f.push('promotion did not reset the level log');
+    for (const ok of [true, false, true, false]) applyAnswer(fx, ok, 3000, levelOf('fxL'));
+    if (levelOf('fxL') !== 1) f.push(`2 misses in 4 at level 2 → level ${levelOf('fxL')}, want 1`);
+    const q = draw([], CONFIG.modifiers[0], { id: 'fxD', name: 'fx', types: ['fxL'] });
+    if (q.level !== levelOf('fxL') || q.q !== 'L' + q.level) f.push(`draw gave level ${q.level} / "${q.q}", want level ${levelOf('fxL')}`);
+    RS.fxL = { r: 1000, last: Date.now(), log: Array.from({ length: 30 }, (_, i) => ({ d: `2026-11-0${1 + i % 5}`, ok: true, ms: 1000, l: 2 })), mastered: false };
+    applyAnswer(fx, true, 1000, 2);
+    if (RS.fxL.mastered) f.push('30 fast level-2 answers counted as mastery');
+    RS.fxL = { r: 1000, last: Date.now(), log: [{ d: '2026-11-01', ok: true, ms: 1000 }], mastered: false };
+    applyAnswer(fx, true, 1000, levelOf('fxL'));
+    if (levelOf('fxL') !== 1) f.push('old state without lvl/llog did not load at level 1');
+    if (levelOf('la-dot') !== 3) f.push('an unladdered type does not report level 3');
+  } catch (e) { f.push('ladder test threw: ' + e.message); }
+  finally {
+    TYPES.splice(TYPES.indexOf(fx), 1); delete TYPE_BY_ID.fxL;
+    RS = savedRS; savedKey === null ? localStorage.removeItem(RATINGS_KEY) : localStorage.setItem(RATINGS_KEY, savedKey);
+  }
+  return f;
+}
 // ---- single-focus home: the soonest unfinished class test, else the main round; everything else folded away ----
 function homeFocusTest() {
   const f = [], realNow = Date.now, at = t => { Date.now = () => Date.parse(t); };
@@ -6047,20 +6097,21 @@ function checkerTests() {
 
 const answerInput = q => q.kind === 'vec' ? q.a.join(',') : q.kind === 'mat' ? q.a.map(r => r.join(',')).join(';') : [].concat(q.a)[0];
 function generatorTests() {
-  return TYPES.map(t => {
+  const runs = TYPES.flatMap(t => isLaddered(t) ? [1, 2, 3].map(L => ({ t, L, id: `${t.id}@${L}`, n: 100 })) : [{ t, L: undefined, id: t.id, n: 300 }]);
+  return runs.map(({ t, L, id, n }) => {
     const errors = [], seen = new Set();
     let bools = 0, made = 0, nulls = 0;
-    for (let i = 0; i < 300 && errors.length < 3; i++) {
+    for (let i = 0; i < n && errors.length < 3; i++) {
       let q;
-      try { q = t.gen(); } catch (e) { errors.push('throws: ' + e.message); continue; }
+      try { q = t.gen(L); } catch (e) { errors.push('throws: ' + e.message); continue; }
       if (!q) { nulls++; continue; }
       made++;
       seen.add(q.q);
       errors.push(...validateQuestion(q));
       if (q.kind === 'bool') bools += q.a ? 1 : 0;
     }
-    if (made < 30) errors.push(`only ${made}/300 draws accepted`);
-    const res = { id: t.id, week: t.week, distinct: seen.size, errors };
+    if (made < 30) errors.push(`only ${made}/${n} draws accepted`);
+    const res = { id, week: t.week, distinct: seen.size, errors };
     if (made && TYPES.length && bools) res.trueRatio = +(bools / made).toFixed(2);
     return res;
   });
