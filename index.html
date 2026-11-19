@@ -34,7 +34,7 @@
 <script>
 const CONFIG = {
   conceptCoverage: 'full',   // 'pilot': only some types have a concept; 'full': every TYPES id must (self-test enforced)
-  currentWeek: { la: 6, calc: 6, seq: 5, logic: 6, basics: 4 },   // per course: courses move at different speeds
+  currentWeek: { la: 6, calc: 7, seq: 7, logic: 6, basics: 4 },   // per course: courses move at different speeds
   categories: {
     la:    { label: 'Linear algebra',       weight: 1 },
     calc:  { label: 'Calculus',             weight: 1.2 },
@@ -46,16 +46,19 @@ const CONFIG = {
   // Types marked hub: false appear only here (not in the main round, not in the overall rating).
   drills: [
     // Class-test drills: every drillable type on the test. `ends` (local time) is when the test is over; until then the soonest one is the home focus. Delete after the test.
-    // LA CT1 scope assumed weeks 1–5 (KEATS gives no scope); revise after Karl's past-test mocks.
-    { id: 'ct1-la',   name: 'LA Class Test 1',      ends: '2026-11-11T10:00', when: 'Wed 11 Nov, 09:00', types: [
-      'calc-recip', 'calc-cxsym',                                   // Q1: Re/Im of 1/z, z², e^(...) in a and b
-      'la-dotexp', 'la-cdist', 'la-linept', 'la-normsq', 'la-distsq', 'la-alpha',   // Q2: dot expansion, ℂ² distance, lines
-      'la-inspan', 'la-indep', 'la-basis',                          // Q3: span select-all
-      'la-subspace', 'la-consist'] },                               // Q4: subspace select-all; consistency
-    // Logic in-class problem set: propositional logic, course weeks 1–5 (validity, L1 syntax, truth tables, ND for L1, formalisation in L1)
-    { id: 'ps-logic', name: 'Logic Problem Set',    ends: '2026-11-13T17:20', when: 'Fri 13 Nov, 16:20, Strand LG305', types: ['logic-famous', 'logic-name', 'logic-main', 'logic-sentence', 'logic-official', 'logic-restore', 'logic-drop',
-      'logic-formalise', 'logic-connective', 'logic-value', 'logic-column', 'logic-forced', 'logic-rows', 'logic-truerows', 'logic-taut', 'logic-valid', 'logic-consistent',
-      'logic-equiv', 'logic-counter', 'logic-negin', 'logic-ndrule', 'logic-goalrule', 'logic-ndassume'] },
+    // Calc CT2: 4 STACK questions × 25, 30 min. Scope assumed weeks 4–7 (CT1 was weeks 1–3; KEATS gives no scope); revise after the mocks.
+    { id: 'ct2-calc', name: 'Calculus Class Test 2', ends: '2026-11-25T09:50', when: 'Wed 25 Nov, 09:00', types: [
+      'calc-lim-std', 'calc-lim-inf', 'calc-lim-cancel', 'calc-onesided', 'calc-liminfty', 'calc-xalpha',   // wk 4 limits
+      'calc-contcheck', 'calc-piecewise', 'calc-ivt',                                                        // wk 4 continuity
+      'calc-growth', 'calc-limtrick', 'calc-squeeze', 'calc-bigo',                                           // wk 5 standard limits, sandwich
+      'calc-dstd', 'calc-dstd2', 'calc-dchain', 'calc-chain2', 'calc-dprod', 'calc-quot', 'calc-logdiff', 'calc-deriv', 'calc-dval',   // wk 6
+      'calc-invder', 'calc-implicit', 'calc-param', 'calc-stat', 'calc-maxmin', 'calc-mvt'] },              // wk 7
+    // S&S CT2: 4 MCQ, +5/−1, the same four slots in 2023-24, 2024-25, 2025-26. Time assumed 10:00 like CT1.
+    { id: 'ct2-seq', name: 'S&S Class Test 2', ends: '2026-11-25T11:00', when: 'Wed 25 Nov, 10:00 (time assumed)', types: [
+      'seq-epscons',                                                    // Q1: what aₙ → ℓ guarantees
+      'seq-implic', 'seq-bddseq', 'seq-convdiv',                        // Q2: convergent / bounded / divergent implications
+      'seq-domexp', 'seq-ratlim', 'seq-growth', 'seq-boundlim', 'seq-rootlim',   // Q3: dominant-term limit
+      'seq-altset', 'seq-supinf', 'seq-maxmin'] },                      // Q4: sup / inf / min / membership of a (−1)ⁿ set
     { id: 'matmul',      name: 'Matrix multiplication', types: ['la-rowcol', 'la-entry', 'la-product', 'la-product23', 'la-Av', 'la-size'] },
     { id: 'rowred',      name: 'Row reduction',         types: ['la-rowop', 'la-elimk', 'la-elementary', 'la-soltype'] },
     { id: 'subspaces',   name: 'Subspaces & span',      types: ['la-subspace', 'la-inspan', 'la-indep', 'la-basis'] },
@@ -1202,6 +1205,29 @@ const TYPES = [
     return { q: T`$\displaystyle\lim_{n\to\infty} \frac{${SS_dotPoly([[p, m + X], [q, '']])}}{${SS_dotPoly([[r, m + Y], [s, '']])}}$`,
              a: ans.s, show: ans.tex, kind: 'num', val: sn(1e12) };
   }},
+  // Class Test 2 slots (past tests 2023-24 to 2025-26): Q1 what aₙ → ℓ guarantees, Q2 implications, Q3 dominant term, Q4 (−1)ⁿ set
+  { id: 'seq-epscons', name: 'What does aₙ → ℓ guarantee?', par: 12, cat: 'seq', week: 5, weight: 1, gen() {
+    const l = ri(1, 4), [stmt, must] = pick(SS_EPSCONS)(l);
+    return { q: T`$a_n \to ${l}$ and $b_n \to 0$. Must this hold?<br>$${stmt}$`, a: must, kind: 'bool', labels: ['Must hold', 'Not necessarily'] };
+  }},
+  { id: 'seq-implic', name: 'Sequence implication: true?', par: 10, cat: 'seq', week: 6, weight: 1, gen() {
+    return balanced(() => { const [s, t] = pick(SS_IMPLIC)(); return { q: T`$a_n, b_n$ non-zero sequences.<br>${s}`, a: t, kind: 'bool', labels: ['True', 'False'] }; }, q => q.a);
+  }},
+  { id: 'seq-domexp', name: 'Dominant-term limit', par: 12, cat: 'seq', week: 6, weight: 1, levels: 3, gen(L = 3) {
+    // L3 benchmark: 2025-26 Class Test 2 Q3 (n3^{n+2} + n2^n + sin n)/(n3^n + 5n + 4) → 9; 2024-25 Q3 → 16
+    const A = ri(3, 5), B = ri(2, A - 1), j = ri(0, 2), c = ri(1, 5), d = ri(1, 5), k = L === 1 ? 0 : ri(L - 1, L);
+    const kt = Math.random() < 0.8 ? k : k + pick([-1, 1]);
+    if (kt < 0) return null;
+    const noise = SS_DOMNOISE[L - 1], lead = (m, p, e) => (p ? T`${SS_coef(m)}${SS_pw('n', p)}\,` : m === 1 ? '' : T`${m}\cdot `) + T`${A}^{${e}}`;
+    const top = [lead(c, kt, j ? `n+${j}` : 'n'), pick(noise)(B, k)].join(' + '), bot = [lead(d, k, 'n'), pick(noise)(B, k), String(ri(1, 9))].join(' + ');
+    const r = kt < k ? frac(0, 1) : kt > k ? 'inf' : frac(c * A ** j, d);
+    return { q: T`$\displaystyle\lim_{n\to\infty} \frac{${top}}{${bot}}$`, ...SS_lim(r), hint: SS_HINT };
+  }},
+  { id: 'seq-altset', name: '(−1)ⁿ set: true?', par: 12, cat: 'seq', week: 5, weight: 1, gen() {
+    // 2025-26 Q4 {(−1)ⁿ(2n²+1)/n²}, 2024-25 Q4 {(−1)ⁿ(3n+1)/n}: even n give p + q/nᵏ (max at n = 2), odd n give −(p + q/nᵏ) (min at n = 1)
+    const p = ri(1, 4), q = ri(1, 4), k = ri(1, 2), nk = SS_pw('n', k), at = n => frac((-1) ** n * (p * n ** k + q), n ** k);
+    return balanced(() => { const [s, t] = pick(SS_ALTSET)(p, q, k, at); return { q: T`$A = \left\{(-1)^n\left(\dfrac{${p}${nk} + ${q}}{${nk}}\right) : n \in \mathbb N\right\}$<br>${s}`, a: t, kind: 'bool', labels: ['True', 'False'] }; }, x => x.a);
+  }},
   { id: 'seq-mono', name: 'Monotone?', par: 7, cat: 'seq', week: 8, weight: 1, gen() {
     const f = pick(SS_MONO)(), cls = f && SS_monotone(f[1]);
     if (!cls) return null;
@@ -1390,6 +1416,11 @@ const TYPES = [
       return { q: T`$f(x) = ${C.tex}$ has a stationary point at $x = ${r}$. Local max or local min?`, a: C.k * (r - other) < 0,
                kind: 'bool', labels: ['Local max', 'Local min'] };
     }, q => q.a);
+  }},
+  { id: 'calc-mvt', name: 'Mean value theorem: find c', par: 18, cat: 'calc', week: 7, weight: 1, levels: 3, gen(L = 3) {
+    // L3 benchmark: Exercises7.pdf Q4(a) (2x³ + 5x² − 23x + 10 on [1, 2]: c is a surd). L1 quadratic (c = midpoint), L2 cubic with rational c
+    for (let i = 0; i < 80; i++) { const q = CAL_mvt(L); if (q) return q; }
+    return null;
   }},
   { id: 'calc-ftc', name: 'FTC part 1: d/dx of ∫', par: 10, cat: 'calc', week: 8, weight: 1, gen() {
     const f = pick(CAL_FTC), u = CAL_ftcUpper(), lo = ri(0, 1), flip = Math.random() < 0.3;
@@ -2011,6 +2042,14 @@ const CONCEPTS = [
       alt: 'Graph of y = x³/3 − kx with a slider for k; for k > 0 it has a local max at −√k and a local min at √k, for k ≤ 0 neither.' },
     algebra: String.raw`Solve $f'(x) = 0$. For a cubic, $f'$ is a quadratic: factor it. Then $f''$ decides:<br>$f''(x_0) < 0 \Rightarrow \text{local max},\quad f''(x_0) > 0 \Rightarrow \text{local min}$<br>Shortcut: with a positive $x^3$ coefficient the smaller root is the max, the larger the min. A negative one swaps them.`,
     originText: String.raw`Built from the derivative as slope: a smooth peak or valley has slope $0$ (Def 8.7). Feeds: graph sketching (§8), where stationary points mark the extreme values.` },
+  { id: 'mean-value-theorem', name: 'Mean value theorem', cat: 'calc', week: 7,
+    source: 'Week 7.pdf pp. 22–23 (The Mean Value Theorem); Exercises7.pdf Q4 (find all c), Q5',
+    types: ['calc-mvt'], origin: ['stationary-points'], feeds: [],
+    picture: { template: 'graphSlider', params: { expr: 'x^3 - k^2*x', k: [2, 0.5, 3], xr: [0, 3.2], yr: [-6, 4], label: 'b' },
+      caption: 'x³ minus its chord from 0 to b. Both ends are 0, so it turns at c = b/√3, where f′(c) = b².',
+      alt: 'Graph of x³ − b²x for x from 0 to 3.2 with a slider for b; the curve is 0 at x = 0 and x = b and has a minimum between them.' },
+    algebra: String.raw`$f$ continuous on $[a, b]$, differentiable on $(a, b)$: some $c \in (a, b)$ has slope equal to the chord.<br>$f'(c) = \dfrac{f(b) - f(a)}{b - a}$<br>Routine: compute the chord slope, set $f'(c)$ equal to it, solve, keep the root inside $(a, b)$. Quadratic $f$: $c = \frac{a+b}{2}$ always. Cubic $\alpha x^3 + \beta x^2 + \dots$: $3\alpha c^2 + 2\beta c = \alpha(a^2 + ab + b^2) + \beta(a + b)$; the $x$ and constant terms drop out.`,
+    originText: String.raw`Built from Rolle's theorem: subtract the chord, so both ends match, and a stationary point must lie between them. Feeds: proofs that a function has exactly one root (with the IVT).` },
   { id: 'ftc', name: 'Fundamental theorem of calculus', cat: 'calc', week: 8,
     source: 'Calculus_1_2026-27.pdf Thm 12.3 p. 99 (FTC part 1), Thm 12.5 p. 101 (FTC part 2), Notation 12.7 p. 102, Ex 12.10–12.12 pp. 102–103',
     types: ['calc-ftc', 'calc-defint'], origin: ['derivative-definition', 'antiderivatives'], feeds: ['improper-integral'],
@@ -2187,9 +2226,25 @@ const CONCEPTS = [
       alt: 'Graph of k cos(πn) for n from 1 to 14 with a slider for k; the curve oscillates between −k and k, and is flat at 0 when k = 0.' },
     algebra: String.raw`Three outcomes: $s_n \to \ell$, or $s_n \to \pm\infty$ (Def 9.4.2), or neither, like $(-1)^n$. Convergent implies bounded (Thm 9.5.2), so unbounded means divergent. The converse fails: $(-1)^n$ is bounded and diverges. For $r^n$: $0$ if $|r|<1$, $\infty$ if $r>1$, diverges if $r\le -1$. Unbounded with no sign, like $(-1)^n n$, diverges but is not $\pm\infty$.<br>$s_n \to \ell \implies \exists M:\ |s_n| \le M\ \ \forall n$`,
     originText: String.raw`Built from the definition of a limit: $|s_n - \ell| < \varepsilon$ eventually (Def 9.2.1), and from bounds of a set (Def 8.1.1). Feeds: the algebra of limits and monotone sequences.` },
+  { id: 'limit-consequences', name: 'What a limit does and does not give', cat: 'seq', week: 6,
+    source: 'Sequences and series class test 2 2023-24, 2024-25, 2025-26 Q1–Q2; 115lecturenotes(2026).pdf Def 9.2.1, Thm 9.5.2, Thm 10.1.1',
+    types: ['seq-epscons', 'seq-implic'], origin: ['sequence-convergence'], feeds: [],
+    picture: { template: 'graphSlider', params: { expr: '2 + k*cos(pi*x)/x', k: [1, -2, 2], xr: [1, 20], yr: [0, 4], label: 'k', level: '2' },
+      caption: 'aₙ = 2 + k(−1)ⁿ/n → 2. Each band around 2 holds the tail. Early terms and the side of approach are free.',
+      alt: 'Graph of 2 + k cos(πn)/n for n from 1 to 20 with a slider for k and a dashed line at the limit 2.' },
+    algebra: String.raw`$a_n \to \ell$ fixes only the tail: any open band around $\ell$ holds all $a_n$ from some $n_0$ on. It fixes no early term and no side.<br>$\ell + \tfrac1n,\ (-1)^n,\ (-1)^n n,\ n \text{ and } -n$<br>To refute a claim, try these counterexamples. Convergent implies bounded; the converse fails.`,
+    originText: String.raw`Built from the ε–n₀ definition (Def 9.2.1) and boundedness (Thm 9.5.2). Feeds: the multiple-choice slots of Class Test 2.` },
+  { id: 'alternating-set', name: 'Sup and inf of a (−1)ⁿ set', cat: 'seq', week: 5,
+    source: 'Sequences and series class test 2 2024-25 Q4 {(−1)ⁿ(3n+1)/n}, 2025-26 Q4 {(−1)ⁿ(2n²+1)/n²}; 115lecturenotes(2026).pdf Def 8.2.1, 8.4.1',
+    types: ['seq-altset'], origin: ['max-min-sup-inf'], feeds: [],
+    picture: { template: 'graphSlider', params: { expr: 'cos(pi*x)*(2 + k/x)', k: [1, 0, 3], xr: [1, 12], yr: [-5, 5], label: 'q' },
+      caption: '(−1)ⁿ(2 + q/n): even terms fall towards 2 from above, odd terms rise towards −2 from below.',
+      alt: 'Graph of cos(πn)(2 + q/n) for n from 1 to 12 with a slider for q; it swings between values above 2 and below −2.' },
+    algebra: String.raw`Split by parity. Even $n$ give $p + \frac{q}{n^k}$, largest at $n = 2$. Odd $n$ give $-(p + \frac{q}{n^k})$, smallest at $n = 1$.<br>$\max A = p + \tfrac{q}{2^k},\quad \min A = -(p + q)$<br>No element lies in $[-p, p]$. Positive elements come only from even $n$.`,
+    originText: String.raw`Built from max, min, sup and inf (Def 8.2.1, 8.4.1) applied to two monotone halves of one set. Feeds: Class Test 2 Q4.` },
   { id: 'rational-sequence-limit', name: 'Limit of a rational sequence', cat: 'seq', week: 6,
     source: '115lecturenotes(2026).pdf Thm 10.1.1 p. 50 (algebra of limits), §10.1 examples 1–4 p. 51 (divide by the fastest-growing term), Thm 10.4.1–10.4.2 p. 53 and examples p. 54 (limit ∞)',
-    types: ['seq-ratlim'], origin: ['sequence-convergence'], feeds: [],
+    types: ['seq-ratlim', 'seq-domexp'], origin: ['sequence-convergence'], feeds: [],
     picture: { template: 'graphSlider', params: { expr: '(k*x^2 + 2*x)/(x^2 + 5)', k: [2, -2, 2], xr: [1, 40], yr: [-3, 3], label: 'k', level: 'k' },
       caption: 'Drag k. For (kn² + 2n)/(n² + 5) the n² terms decide: the curve levels off at k. The 2n and the 5 fade.',
       alt: 'Graph of (kn² + 2n)/(n² + 5) for n from 1 to 40 with a slider for k and a dashed line at the limit k.' },
@@ -3285,6 +3340,96 @@ const SS_SUPINF3 = [
   () => { const a = ri(-3, 3), b = nz(-5, 5), body = pick(['n', 'n^2', T`\sqrt n`]);   // a + b/body: n = 1 and the limit a
           return [SS_inN(T`\frac{${poly([[a, body], [b, '']])}}{${body}}`), Math.max(a, a + b), Math.min(a, a + b)]; },
   () => { const k = ri(1, 4); return [SS_inN(T`n + \frac{${k * k}}{n}`), null, 2 * k]; },   // least at n = k, unbounded above
+];
+
+// Mean value theorem: one try at f on [a, b] with exactly one c in (a, b); null to retry (calc-mvt)
+function CAL_mvt(L) {
+  const a = ri(-3, 3), b = a + ri(1, 3), al = L === 1 ? nz(-3, 3) : L === 2 ? 1 : ri(1, 2), be = ri(-5, 5), tex = poly(L === 1
+    ? [[al, 'x^2'], [be, 'x'], [ri(-9, 9), '']] : [[al, 'x^3'], [be, 'x^2'], [ri(-9, 9), 'x'], [ri(-9, 9), '']]);
+  const ask = T`$f(x) = ${tex}$ on $[${a}, ${b}]$. $\ c \in (${a}, ${b})$ with $f'(c) = \frac{f(b) - f(a)}{b - a}$?`;
+  if (L === 1) { const c = frac(a + b, 2); return { q: ask, a: c.s, show: c.tex, kind: 'num' }; }
+  // 3αc² + 2βc = α(a² + ab + b²) + β(a + b)  ⇒  c = (−β ± √D)/(3α), D = β² + 3αS
+  const S = al * (a * a + a * b + b * b) + be * (a + b), D = be * be + 3 * al * S, r = Math.sqrt(D);
+  if (D <= 0) return null;
+  const roots = [1, -1].map(s => ({ s, v: (-be + s * r) / (3 * al) })).filter(x => x.v > a + 1e-9 && x.v < b - 1e-9);
+  if (roots.length !== 1 || Number.isInteger(r) !== (L === 2)) return null;
+  const { s, v } = roots[0];
+  if (L === 2) { const c = frac(-be + s * r, 3 * al); return { q: ask, a: c.s, show: c.tex, kind: 'num' }; }
+  const top = T`${be ? -be : ''} ${s > 0 ? (be ? '+' : '') : '-'} \sqrt{${D}}`;
+  return { q: ask, a: `(${-be}${s > 0 ? '+' : '-'}sqrt(${D}))/${3 * al}`, show: T`\frac{${top}}{${3 * al}}`, kind: 'num', val: v,
+           hint: 'exact, e.g. (-1+sqrt(13))/3' };
+}
+
+// Class Test 2 Q1: given aₙ → ℓ and bₙ → 0, does the statement follow? [TeX, must hold]
+const SS_E = T`\exists n_0 \in \mathbb N\ \forall n \ge n_0:\ `, SS_FE = T`\forall \varepsilon > 0\ ` + SS_E;
+const SS_EPSCONS = [
+  l => [T`${SS_FE}|a_n - ${l}| < ${pick(['2', '3', T`\tfrac12`])}\varepsilon`, true],
+  l => [T`${SS_FE}|a_n - ${l}| < \varepsilon^2`, true],
+  l => [T`${SS_FE}${l} - \varepsilon < a_n`, true],
+  l => [T`${SS_E}a_n \in \left(${frac(4 * l - 1, 4).tex}, ${frac(4 * l + 1, 4).tex}\right)`, true],
+  l => [T`${SS_E}|a_n - ${l}| < \pi`, true],
+  () => [T`${SS_E}b_n < a_n`, true],
+  () => [T`${SS_E}|b_n| < |a_n|`, true],
+  l => [T`${SS_E}${l - 1} < a_n + b_n < ${l + 1}`, true],
+  () => [T`\exists M > 0\ \forall n \in \mathbb N:\ |a_n| \le M`, true],
+  l => [T`${SS_E}a_n ${pick(['<', '>'])} ${l}`, false],
+  () => [T`\forall n \in \mathbb N:\ b_n \le a_n`, false],
+  l => [T`\forall n \in \mathbb N:\ |a_n - ${l}| < 1`, false],
+  l => [T`${SS_E}a_n = ${l}`, false],
+  l => [T`\exists n_0 \in \mathbb N\ \forall \varepsilon > 0\ \forall n \ge n_0:\ |a_n - ${l}| < \varepsilon`, false],
+  l => [T`${SS_FE}|a_n - ${l}| < \frac{\varepsilon}{n}`, false],
+  l => [T`${SS_E}a_n \in (${l}, ${l + 1})`, false],
+  l => [T`${SS_E}|a_n - ${l + 2}| < 1`, false],
+  () => [T`${SS_E}a_n b_n > 0`, false],
+];
+// Class Test 2 Q2: implications between convergent, bounded, divergent: [statement, true?]
+const SS_IMPLIC = [
+  () => [T`If $a_n$ converges, then it is bounded.`, true],
+  () => [T`If $a_n$ is bounded, then it cannot diverge to ${pick([T`$+\infty$`, T`$-\infty$`])}.`, true],
+  () => [T`If $a_n \to +\infty$, then $\frac{1}{a_n}$ converges.`, true],
+  () => [T`If $a_n$ and $b_n$ converge, then $${ri(2, 5)}a_n^{${ri(2, 3)}} - ${ri(2, 5)}b_n$ converges.`, true],
+  () => [T`If $a_n$ and $b_n$ are bounded, then $a_n + b_n^2$ is bounded.`, true],
+  () => [T`If $a_n$ is unbounded, then it diverges.`, true],
+  () => [T`If $a_n \to +\infty$, then $a_n$ is unbounded.`, true],
+  () => [T`If $a_n \to \ell$, then $|a_n| \to |\ell|$.`, true],
+  () => [T`If $a_n$ converges and $b_n$ diverges, then $a_n + b_n$ diverges.`, true],
+  () => [T`If $a_n \to +\infty$ and $b_n$ is bounded, then $a_n + b_n \to +\infty$.`, true],
+  () => [T`If $a_n \to 0$ and $b_n$ is bounded, then $a_n b_n \to 0$.`, true],
+  () => [T`If $a_n \le b_n$ for all $n$ and both converge, then $\lim a_n \le \lim b_n$.`, true],
+  () => [T`If $a_n$ does not converge, then it is unbounded.`, false],
+  () => [T`If $a_n$ does not converge, then it diverges to $+\infty$ or $-\infty$.`, false],
+  () => [T`If $a_n$ is unbounded, then it diverges to $+\infty$ or $-\infty$.`, false],
+  () => [T`If $a_n$ diverges, then $a_n^2$ diverges.`, false],
+  () => [T`If $\frac{1}{a_n}$ converges, then $a_n$ diverges to $+\infty$ or $-\infty$.`, false],
+  () => [T`If $a_n$ is bounded, then it converges.`, false],
+  () => [T`If $a_n$ and $b_n$ diverge, then $a_n + b_n$ diverges.`, false],
+  () => [T`If $a_n b_n$ converges, then $a_n$ and $b_n$ converge.`, false],
+  () => [T`If $|a_n|$ converges, then $a_n$ converges.`, false],
+  () => [T`If $a_n < b_n$ for all $n$ and both converge, then $\lim a_n < \lim b_n$.`, false],
+  () => [T`If $a_n \to 0$, then $a_n b_n \to 0$.`, false],
+  () => [T`If $a_n \to +\infty$ and $b_n \to +\infty$, then $a_n - b_n \to 0$.`, false],
+];
+// Class Test 2 Q3: slower terms beside the dominant n^k A^n, per level: (B, k) -> TeX (positive)
+const SS_DOMNOISE = [
+  [B => T`${ri(2, 5)}\cdot ${B}^n`, () => 'n^2', () => T`${ri(2, 6)}n`],
+  [B => T`${ri(2, 5)}\cdot ${B}^n`, B => T`n\,${B}^n`, (B, k) => SS_pw('n', k + 2)],
+  [B => T`n\,${B}^n`, (B, k) => T`${SS_pw('n', k + 1)}\,${B}^n`, () => T`\sin(n)`, () => T`\log(n)`, () => T`n^4`],
+];
+// Class Test 2 Q4: statements about A = {(−1)ⁿ(p nᵏ + q)/nᵏ}; at(n) is the n-th element as a frac
+const SS_ALTSET = [
+  (p, q, k, at) => [T`$\sup A = ${at(2).tex}$`, true],
+  (p, q, k, at) => [T`$\sup A = ${pick([p, p + q])}$`, false],
+  (p, q) => [T`$\inf A = ${-(p + q)}$`, true],
+  (p, q) => [T`$\inf A = ${pick([-p, -2 * p - q])}$`, false],
+  () => [T`$A$ has a minimum element.`, true],
+  () => [T`$A$ has no maximum element.`, false],
+  (p, q, k, at) => [T`$${at(ri(3, 6)).tex} \in A$`, true],
+  (p, q, k, at) => [T`$-${at(2 * ri(1, 3)).tex} \in A$`, false],   // even n give positive elements only
+  p => [T`$${pick([p, -p])} \in A$`, false],
+  () => [T`$0 \notin A$`, true],
+  p => [T`$A \cap (${-p}, ${p}) = \emptyset$`, true],
+  (p, q) => [T`$A \cap (${-p - q - 1}, ${p + q + 1})$ is infinite.`, true],
+  () => [T`$A$ is unbounded below.`, false],
 ];
 
 // Monotone? (notes §12): [TeX, s(n)]; classified numerically by SS_monotone
@@ -6087,7 +6232,7 @@ function whyLinkTest() {
 function ladderTests() {
   const f = [];
   if (typeof levelOf !== 'function' || typeof levelStep !== 'function') return ['levelOf / levelStep not defined'];
-  const W = { la: 6, calc: 6, seq: 5, logic: 6, basics: 4 };
+  const W = { la: 6, calc: 7, seq: 7, logic: 6, basics: 4 };
   if (JSON.stringify(CONFIG.currentWeek) !== JSON.stringify(W)) f.push(`currentWeek ${JSON.stringify(CONFIG.currentWeek)}, want ${JSON.stringify(W)}`);
   const fx = { id: 'fxL', name: 'Fixture ladder', cat: 'la', week: 1, weight: 1, par: 10, levels: 3, hub: false, gen: L => ({ q: `L${L}`, a: String(L), kind: 'num' }) };
   const savedRS = JSON.parse(JSON.stringify(RS)), savedKey = localStorage.getItem(RATINGS_KEY);
@@ -6125,12 +6270,12 @@ function homeFocusTest() {
   const f = [], realNow = Date.now, at = t => { Date.now = () => Date.parse(t); };
   try {
     if (typeof focusPick !== 'function') return ['focusPick is not defined'];
-    at('2026-11-10T22:00'); if (focusPick()?.id !== 'ct1-la') f.push(`22:00 the night before: focus ${focusPick()?.id}, want ct1-la`);
-    at('2026-11-11T10:30'); if (focusPick()?.id !== 'ps-logic') f.push(`after the LA test: focus ${focusPick()?.id}, want ps-logic`);
-    at('2026-11-14T09:00'); if (focusPick() !== null) f.push(`after both tests: focus ${focusPick()?.id}, want the main round (null)`);
-    at('2026-11-10T22:00'); showHome();
+    at('2026-11-24T22:00'); if (focusPick()?.id !== 'ct2-calc') f.push(`22:00 the night before: focus ${focusPick()?.id}, want ct2-calc`);
+    at('2026-11-25T09:55'); if (focusPick()?.id !== 'ct2-seq') f.push(`after the calculus test: focus ${focusPick()?.id}, want ct2-seq`);
+    at('2026-11-25T11:30'); if (focusPick() !== null) f.push(`after both tests: focus ${focusPick()?.id}, want the main round (null)`);
+    at('2026-11-24T22:00'); showHome();
     const focus = $('homeFocus'), rest = $('everythingElse');
-    if (!focus || !focus.textContent.includes('LA Class Test 1') || !focus.querySelector('button')) f.push('home focus does not show LA Class Test 1 with a Start button');
+    if (!focus || !focus.textContent.includes('Calculus Class Test 2') || !focus.querySelector('button')) f.push('home focus does not show Calculus Class Test 2 with a Start button');
     if (!rest || rest.open || !rest.contains($('homeStats'))) f.push('everything else is not folded away under one closed section');
   } finally { Date.now = realNow; showHome(); }
   return f;
