@@ -530,7 +530,7 @@ const TYPES = [
     const q = T`$\displaystyle\lim_{x\to\infty} \frac{${p(top)}}{${p(bot)}}$`, hint = 'a number, inf or -inf';
     if (dt > d) return top[0] * bot[0] > 0 ? { q, a: INF_ALIASES, kind: 'text', show: T`\infty`, hint } : { q, a: INF_ALIASES.map(x => '-' + x), kind: 'text', show: T`-\infty`, hint };
     const f = dt < d ? frac(0, 1) : frac(top[0], bot[0]);
-    return { q, a: f.s, show: f.tex, kind: 'num', val: h(top, 1e7) / h(bot, 1e7), hint };
+    return { q, a: f.s, show: f.tex, kind: 'num', val: h(top, 1e9) / h(bot, 1e9), hint };
   }},
   { id: 'calc-limexp', name: 'Exponential limit at ±∞', par: 10, cat: 'calc', week: 4, weight: 1, gen() {
     // CT2 Mock 1 Q2: (3e^{2y} + e^y + 4)/(5e^{2y} + 7) as y → −∞ is 4/7: put x = e^y, so x → 0⁺ (y → −∞) or x → ∞ (y → ∞)
@@ -2688,6 +2688,7 @@ const wordCount = s => s.split(/\s+/).filter(Boolean).length;
   .trykeys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .trykeys button { flex: 1 0 calc(14% - 6px); min-width: 40px; padding: 10px 8px; font-size: 18px; background: #262a32; }
   #tryMsg { min-height: 26px; margin-top: 8px; }
+  #learn .bar { flex-direction: column; align-items: flex-start; gap: 2px; } #learn ol.lens { padding-left: 22px; } #learn ol.lens li { margin: 4px 0; }
   #concept .row { margin-top: 18px; } #concept .row button { flex: 1; padding: 12px 8px; font-size: 15px; }
   svg .pt { fill: var(--accent); } svg .ln { stroke: var(--accent); stroke-width: 2; fill: none; } svg .base { stroke: #2c313a; }
 </style>
@@ -2731,6 +2732,12 @@ const wordCount = s => s.split(/\s+/).filter(Boolean).length;
   <div class="tabs" id="cTabs"><button data-tab="picture" onclick="conceptTab('picture')">Picture</button><button data-tab="algebra" onclick="conceptTab('algebra')">Algebra</button><button data-tab="origin" onclick="conceptTab('origin')">Origin</button><button data-tab="try" onclick="conceptTab('try')">Try</button></div>
   <div id="cBody"></div>
   <div class="row"><button id="askBtn" onclick="askClaude()">Ask Claude about this</button><button onclick="closeConcept()">Back to drilling</button></div>
+</div>
+<!-- Learn first: one page per test question shape, read before the drill -->
+<div id="learn" class="screen">
+  <div class="bar"><span class="big" id="lName"></span><span class="muted" id="lStep"></span></div>
+  <div id="lBody"></div>
+  <div class="row" id="lNav"></div>
 </div>
 <div id="keys" style="display:none"></div>
 <pre id="selftest" style="display:none"></pre>
@@ -3382,6 +3389,111 @@ const SS_SUPINF3 = [
           return [SS_inN(T`\frac{${poly([[a, body], [b, '']])}}{${body}}`), Math.max(a, a + b), Math.min(a, a + b)]; },
   () => { const k = ri(1, 4); return [SS_inN(T`n + \frac{${k * k}}{n}`), null, 2 * k]; },   // least at n = k, unbounded above
 ];
+
+// ---- Learn first: per class-test drill, one page per question shape (routine, worked real question, trap) ----
+// Sources: calculus CT2 Mock 1 and Mock 2 (taken 2026-11-21); S&S class test 2 papers 2024-25 and 2025-26.
+const LEARN = {
+  'ct2-calc': [
+    { name: 'Finite, infinite or none?', concept: 'one-sided-limits',
+      shape: T`Every limit question asks first: exists and finite, exists and infinite, or does not exist (10 of 25 marks). Then the value.`,
+      steps: [T`Find the value first. Then pick the label.`, T`A number: <b>finite</b>.`, T`$+\infty$ or $-\infty$: <b>exists and infinite</b>.`,
+              T`<b>Does not exist</b> only when the two sides disagree, or the function keeps oscillating ($\sin x$ as $x \to \infty$).`],
+      example: { from: 'standard', q: T`$\displaystyle\lim_{x\to 0}\frac{|x|}{x}$`, work: [T`Left: $-1$. Right: $+1$. The sides disagree.`, T`Does not exist. Leave the value blank.`] },
+      trap: T`$\infty$ is not "does not exist". In this course a limit of $\infty$ exists and is infinite.` },
+    { name: 'Rational function at ∞', concept: 'rational-limit-infinity',
+      shape: T`$\displaystyle\lim_{x\to\infty}\frac{\text{polynomial}}{\text{polynomial}}$`,
+      steps: [T`Find the highest power in the denominator.`, T`Divide every term by it. Each $c/x^k$ goes to 0.`,
+              T`Top degree lower: 0. Equal: ratio of leading coefficients. Higher: $\pm\infty$.`],
+      example: { from: 'Mock 1 Q1', q: T`$\displaystyle\lim_{x\to\infty}\frac{7x^3+2x^2+5}{2x^3+5x+3}$`,
+                 work: [T`$\dfrac{7+2x^{-1}+5x^{-3}}{2+5x^{-2}+3x^{-3}} \to \dfrac{7}{2}$`, 'Exists and finite: 7/2.'] },
+      trap: T`Big powers on both sides cancel. You typed $\infty$ here; equal degrees always give a number.` },
+    { name: 'Exponentials at ±∞', concept: 'rational-limit-infinity',
+      shape: T`$\displaystyle\lim_{y\to\pm\infty}\frac{a e^{2y}+b e^{y}+c}{d e^{2y}+f}$`,
+      steps: [T`Put $x = e^y$. Then $e^{2y} = x^2$.`, T`$y \to +\infty$ means $x \to \infty$: use the rational routine.`,
+              T`$y \to -\infty$ means $x \to 0^+$: put $x = 0$, so the constants decide.`],
+      example: { from: 'Mock 1 Q2', q: T`$\displaystyle\lim_{y\to-\infty}\frac{3e^{2y}+e^y+4}{5e^{2y}+7}$`,
+                 work: [T`$x = e^y \to 0^+$: $\ \dfrac{3x^2+x+4}{5x^2+7} \to \dfrac{4}{7}$`] },
+      trap: T`The $e^y$ terms vanish, not the whole fraction. You typed 0; the constants $4$ and $7$ remain.` },
+    { name: 'Factor and cancel', concept: 'factor-cancel-limit',
+      shape: T`$\displaystyle\lim_{x\to a}\frac{p(x)}{q(x)}$ where putting in $a$ gives $\frac00$`,
+      steps: [T`Put in $x = a$. A number: done.`, T`$\frac00$: factor top and bottom. Both contain $(x - a)$.`, T`Cancel $(x - a)$, then put in $a$.`,
+              T`Non-zero over 0: infinite or none. Check both sides.`],
+      example: { from: 'Mock 2 Q1', q: T`$\displaystyle\lim_{x\to2}\frac{x^2+x-6}{x^2-2x}$`,
+                 work: [T`$\dfrac{(x+3)(x-2)}{x(x-2)} = \dfrac{x+3}{x} \to \dfrac{5}{2}$`] },
+      trap: T`Factor the bottom too: $x^2 - 2x = x(x-2)$. You typed 1.` },
+    { name: 'Standard trig limits', concept: 'standard-limits',
+      shape: T`$\displaystyle\lim_{x\to0}$ of $\sin$, $\tan$, $\csc$ or $\cot$ of $ax$`,
+      steps: [T`Rewrite $\csc = \frac{1}{\sin}$ and $\cot = \frac{\cos}{\sin}$ first.`,
+              T`Use $\dfrac{\sin ax}{bx} \to \dfrac ab$ and $\dfrac{\tan ax}{bx} \to \dfrac ab$. So $\dfrac{\sin ax}{\sin bx} \to \dfrac ab$.`,
+              T`$\dfrac{1-\cos ax}{x^2} \to \dfrac{a^2}{2}$.`],
+      example: { from: 'Mock 2 Q3', q: T`$\displaystyle\lim_{x\to0}\frac{\csc 4x}{\csc x}$`,
+                 work: [T`$= \dfrac{\sin x}{\sin 4x} \to \dfrac14$`] },
+      trap: T`$\csc$ alone blows up, but the ratio is finite. Reciprocals flip the ratio. You typed $\infty$.` },
+    { name: 'Sandwich', concept: 'squeeze-theorem',
+      shape: T`A bounded part ($\sin$, $\cos$, $(-1)^n$) times something that goes to 0`,
+      steps: [T`Bound it: $-1 \le \sin x \le 1$.`, T`Divide by the positive part: $-\frac{1}{x^4} \le \frac{\sin x}{x^4} \le \frac{1}{x^4}$.`,
+              T`Both bounds go to 0, so the limit is 0.`],
+      example: { from: 'Mock 2 Q2 (you got this)', q: T`$\displaystyle\lim_{x\to\infty}\frac{\sin x}{x^4}$`, work: ['Exists and finite: 0.'] },
+      trap: T`At $x \to 0$, $\frac{\sin x}{x} \to 1$: a standard limit, not a sandwich. Check where $x$ goes.` },
+    { name: 'Continuity constant', concept: 'continuity',
+      shape: T`Find $k$ so a piecewise $f$ is continuous at the join $x = c$.`,
+      steps: [T`Value at $c$: use the branch with $\ge$ or $\le$.`, T`Limit from the other side: put $c$ into the other branch.`,
+              T`Set them equal. Solve for $k$. Type $e$ as %e.`],
+      example: { from: 'Mock 1 Q3 (you got this)', q: T`$f(x) = x^2+2x+k$ for $x \ge 1$, $\ e^{2x}$ for $x < 1$`,
+                 work: [T`$f(1) = 3 + k$, left limit $e^2$.`, T`$3 + k = e^2 \Rightarrow k = e^2 - 3$, typed %e^2-3`] },
+      trap: 'STACK needs %e, not e. The syntax sheet is allowed in the test.' },
+    { name: 'Derivative (multiple choice)', concept: 'product-rule',
+      shape: T`Six options for $f'(x)$: a quotient, or a chain of functions.`,
+      steps: [T`Work it out on paper first. Then match an option.`, T`Over $x^n$: $\dfrac{d}{dx}\dfrac{g}{x^n} = \dfrac{g'x - ng}{x^{n+1}}$.`,
+              T`Chain: $\dfrac{d}{dx}f(u) = f'(u)\,u'$. The inside derivative always appears.`,
+              T`Check the denominator power: $x^{n+1}$ after cancelling.`],
+      example: { from: 'Mock 1 Q4', q: T`$\dfrac{d}{dx}\dfrac{\cos x}{x^2}$`,
+                 work: [T`$= \dfrac{-x^2\sin x - 2x\cos x}{x^4}$`, T`$= -\dfrac{x\sin x + 2\cos x}{x^3}$`, 'Option C.'] },
+      trap: T`Option E has $x^4$: that is the uncancelled form with a wrong top. Cancel one $x$ before matching.` },
+    { name: 'Use the 30 minutes',
+      shape: T`4 questions, 30 minutes. Your mocks took 52 s and 2 min 20 s. Every miss was a routine you know.`,
+      steps: [T`Write each step on the rough paper.`, T`Check each limit with a number: $x = 1000$, $y = -10$, or $x = a + 0.001$.`,
+              T`Check the label (finite, infinite, none) against the value.`],
+      example: { from: 'check', q: T`Mock 1 Q1 at $x = 1000$:`, work: [T`$\dfrac{7\cdot10^9 + \dots}{2\cdot10^9 + \dots} \approx 3.5 = \dfrac72$, not $\infty$.`] },
+      trap: 'Speed wins in the drill. Accuracy wins in the test.' },
+  ],
+  'ct2-seq': [
+    { name: 'Q1: what aₙ → ℓ guarantees', concept: 'limit-consequences',
+      shape: T`Given $a_n \to \ell$ (and maybe $b_n \to 0$), which statement is NOT necessarily true?`,
+      steps: [T`True claims speak about the tail: "$\exists n_0\ \forall n \ge n_0$", inside a band around $\ell$.`,
+              T`$2\varepsilon$, $\frac\varepsilon2$, $\varepsilon^2$ in place of $\varepsilon$: still true, since $\varepsilon$ is any positive number.`,
+              T`False claims: "for all $n$" (early terms are free), a side ($a_n < \ell$), $\frac\varepsilon n$, or the quantifiers swapped.`],
+      example: { from: '2025-26 Q1', q: T`$a_n \to 2$, $b_n \to 0$. Not necessarily true:`,
+                 work: [T`(c) $\forall n:\ b_n \le a_n$. It fails if $b_1 = 100$. The tail claims (b), (d), (e) all hold.`] },
+      trap: T`$|a_n - 2| < \varepsilon^2$ looks wrong but holds.` },
+    { name: 'Q2: implications', concept: 'limit-consequences',
+      shape: T`Which statement about convergent, bounded or divergent sequences is true?`,
+      steps: [T`True facts: convergent ⇒ bounded. Bounded ⇒ not $\pm\infty$. $a_n \to \pm\infty$ ⇒ $\frac{1}{a_n} \to 0$.`,
+              T`Test each other claim against the kit: $(-1)^n$ (bounded, diverges), $(-1)^n n$ (unbounded, not $\pm\infty$), $n$ and $-n$, constant $1$.`],
+      example: { from: '2025-26 Q2', q: T`True: (b) bounded ⇒ cannot diverge to $-\infty$.`,
+                 work: [T`(a), (d): $(-1)^n$ refutes. (e): $(-1)^n n$ refutes. (c): $a_n = 1$ refutes.`] },
+      trap: T`"Does not converge" is not "diverges to $\pm\infty$". $(-1)^n$ does neither.` },
+    { name: 'Q3: dominant term', concept: 'rational-sequence-limit',
+      shape: T`$\dfrac{n\,3^{n+2} + n\,2^n + \sin n}{n\,3^n + 5n + 4}$: which limit?`,
+      steps: [T`Find the fastest term below: $n\,3^n$.`, T`Split shifts: $3^{n+2} = 9 \cdot 3^n$.`,
+              T`Divide everything by $n\,3^n$. Slower terms ($n\,2^n$, $n^4$, $\sin n$, $\log n$) go to 0.`],
+      example: { from: '2025-26 Q3 and 2024-25 Q3', q: T`$\to \dfrac{9}{1} = 9$`,
+                 work: [T`$\dfrac{4^{n+1} + n^4 + n\,4^{n+2}}{n\,4^n + 5n + \log n} \to 16$`] },
+      trap: T`$n\,4^n$ beats $4^{n+1}$. The factor $n$ decides which term leads.` },
+    { name: 'Q4: the (−1)ⁿ set', concept: 'alternating-set',
+      shape: T`$A = \left\{(-1)^n\left(\dfrac{2n^2+1}{n^2}\right) : n \in \mathbb N\right\}$: which statement is NOT true?`,
+      steps: [T`Write $n = 1, 2, 3, 4$: $-3,\ \frac94,\ -\frac{19}9,\ \frac{33}{16}$.`, T`Even terms fall to 2, odd terms rise to $-2$.`,
+              T`So max $=$ sup $= \frac94$ (at $n = 2$), min $=$ inf $= -3$ (at $n = 1$).`],
+      example: { from: '2025-26 Q4', q: T`Not true: (c) $\inf A = -2$.`, work: [T`$-3 \in A$ is smaller, so $\inf A = -3$.`] },
+      trap: T`The limits $\pm2$ are not the sup and inf when the first terms lie beyond them.` },
+    { name: 'Scoring: +5 / −1',
+      shape: T`5 options, +5 right, −1 wrong, 0 blank.`,
+      steps: [T`A blind guess earns $\tfrac15 \cdot 5 - \tfrac45 \cdot 1 = +0.2$ on average.`, T`So never leave a question blank.`,
+              T`Remove options with the counterexample kit first. Each removal raises the expected score.`],
+      example: { from: 'arithmetic', q: T`Two options left: $\tfrac12 \cdot 5 - \tfrac12 \cdot 1 = +2$.`, work: [] },
+      trap: 'A blank scores 0. Even a pure guess beats it.' },
+  ],
+};
 
 // Mean value theorem: one try at f on [a, b] with exactly one c in (a, b); null to retry (calc-mvt)
 function CAL_mvt(L) {
@@ -5692,14 +5804,15 @@ function focusBlock() {
     <div class="muted">everything lectured so far · rating ${Math.round(headline())}</div><button class="start" onclick="startRound()">Start</button></div>`;
   const ts = drillTypes(d), done = ts.filter(t => RS[t.id]?.mastered).length;
   return `<div class="focus"><div class="muted">Now</div><div class="focusName">${d.name}</div>
-    <div class="muted">test ${d.when} · ${done}/${ts.length} types mastered</div><button class="start" onclick="startRound('${d.id}')">Start</button></div>`;
+    <div class="muted">test ${d.when} · ${done}/${ts.length} types mastered</div>${LEARN[d.id] ? `<button onclick="openLearn('${d.id}')">Learn first</button>` : ''}<button class="start" onclick="startRound('${d.id}')">Start</button></div>`;
 }
 function examBlock() {
   const ds = CONFIG.drills.filter(examActive);
   if (!ds.length) return '';
   const days = d => Math.round((new Date(d.ends.slice(0, 10)) - new Date(dayKey())) / 864e5);
   const row = d => { const ts = drillTypes(d), done = ts.filter(t => RS[t.id]?.mastered).length;
-    return drillButton(d).replace('</span></button>', ` · ${done}/${ts.length} mastered · ${days(d) ? `${days(d)} day${days(d) === 1 ? '' : 's'} left` : 'today'}</span></button>`); };
+    return drillButton(d).replace('</span></button>', ` · ${done}/${ts.length} mastered · ${days(d) ? `${days(d)} day${days(d) === 1 ? '' : 's'} left` : 'today'}</span></button>`)
+      + (LEARN[d.id] ? `<button onclick="openLearn('${d.id}')">Learn first: ${d.name}</button>` : ''); };
   return `<h2>Class tests · every drillable type on the test</h2><div class="drills">${ds.map(row).join('')}</div>`;
 }
 function drillsBlock() {
@@ -5861,6 +5974,25 @@ function openConcept(id, context = {}) {
   showScreen('concept');
   conceptTab('picture');
 }
+// ---- Learn first: walk a class-test drill's LEARN pages in order, then start the drill ----
+let LV = null;
+function openLearn(id) { LV = { d: DRILL_BY_ID[id], i: 0 }; showLearn(); showScreen('learn'); }
+function learnGo(step) { LV.i += step; showLearn(); window.scrollTo(0, 0); }
+function learnPage(p) {
+  const sec = (head, html) => `<h2>${head}</h2>${html}`;
+  return sec('On the test', lensHTML(p.shape)) + sec('Routine', `<ol class="lens">${p.steps.map(s => `<li>${renderMath(s)}</li>`).join('')}</ol>`)
+    + sec(`Worked · ${p.example.from}`, lensHTML([p.example.q, ...p.example.work].join('<br>')))
+    + sec('Trap', lensHTML(p.trap));
+}
+function showLearn() {
+  const pages = LEARN[LV.d.id], p = pages[LV.i], last = LV.i === pages.length - 1;
+  $('lName').textContent = p.name;
+  $('lStep').textContent = `${LV.d.name} · ${LV.i + 1}/${pages.length}`;
+  $('lBody').innerHTML = learnPage(p);
+  $('lNav').innerHTML = (LV.i ? '<button onclick="learnGo(-1)">Back</button>' : '<button onclick="showHome()">Home</button>')
+    + (p.concept ? `<button onclick="openConcept('${p.concept}')">Picture</button>` : '')
+    + (last ? `<button class="start" onclick="startRound('${LV.d.id}')">Start drill</button>` : '<button class="start" onclick="learnGo(1)">Next</button>');
+}
 function closeConcept() {
   const prev = CV.prev;
   CV = null;
@@ -5994,11 +6126,31 @@ function init() {
 ===================================================================== -->
 <script>
 function runSelfTest() {
-  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests(), askClaude: askClaudeTextTest(), scratch: scratchTests(), focus: homeFocusTest(), ladder: ladderTests() };
-  out.ok = out.ladder.length === 0 && out.focus.length === 0 && out.scratch.length === 0 && out.concepts.length === 0 && out.entry.length === 0 && out.askClaude.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests(), askClaude: askClaudeTextTest(), scratch: scratchTests(), focus: homeFocusTest(), ladder: ladderTests(), learn: learnTests() };
+  out.ok = out.learn.length === 0 && out.ladder.length === 0 && out.focus.length === 0 && out.scratch.length === 0 && out.concepts.length === 0 && out.entry.length === 0 && out.askClaude.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
   const pre = $('selftest');
   pre.style.display = 'block';
   pre.textContent = JSON.stringify(out, null, 1);
+}
+
+// ---- Learn first: data points at real drills and concepts, every formula renders, the walk ends on Start drill ----
+function learnTests() {
+  const f = [], tex = s => s.split('$').filter((_, i) => i % 2);
+  for (const [id, pages] of Object.entries(LEARN)) {
+    if (!DRILL_BY_ID[id]) f.push(`LEARN ${id}: no such drill`);
+    pages.forEach((p, i) => {
+      if (p.concept && !CONCEPTS.some(c => c.id === p.concept)) f.push(`LEARN ${id}[${i}]: unknown concept ${p.concept}`);
+      for (const s of [p.shape, ...p.steps, p.example.q, ...p.example.work, p.trap])
+        for (const m of tex(s)) { try { katex.renderToString(m, { throwOnError: true }); } catch (e) { f.push(`LEARN ${id}[${i}]: KaTeX ${m}`); } }
+    });
+    if (!DRILL_BY_ID[id]) continue;
+    openLearn(id);
+    if (!$('learn').classList.contains('on') || !$('lBody').innerHTML.includes('Routine')) f.push(`LEARN ${id}: first page not shown`);
+    for (let i = 1; i < pages.length; i++) learnGo(1);
+    if (!$('lNav').innerHTML.includes(`startRound('${id}')`)) f.push(`LEARN ${id}: last page has no Start drill`);
+  }
+  showHome();
+  return f;
 }
 
 // ---- concept registry checks ----
