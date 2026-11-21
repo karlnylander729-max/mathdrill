@@ -46,13 +46,13 @@ const CONFIG = {
   // Types marked hub: false appear only here (not in the main round, not in the overall rating).
   drills: [
     // Class-test drills: every drillable type on the test. `ends` (local time) is when the test is over; until then the soonest one is the home focus. Delete after the test.
-    // Calc CT2: 4 STACK questions × 25, 30 min. Scope assumed weeks 4–7 (CT1 was weeks 1–3; KEATS gives no scope); revise after the mocks.
+    // Calc CT2: 4 STACK questions × 25, 30 min. Both mocks (taken 2026-11-21): Q1–Q3 limits (finite / infinite / DNE + value,
+    // one may be a continuity constant), Q4 derivative MCQ. Weeks 4–6 only; nothing from week 7. ~70% limits to match.
     { id: 'ct2-calc', name: 'Calculus Class Test 2', ends: '2026-11-25T09:50', when: 'Wed 25 Nov, 09:00', types: [
-      'calc-lim-std', 'calc-lim-inf', 'calc-lim-cancel', 'calc-onesided', 'calc-liminfty', 'calc-xalpha',   // wk 4 limits
-      'calc-contcheck', 'calc-piecewise', 'calc-ivt',                                                        // wk 4 continuity
-      'calc-growth', 'calc-limtrick', 'calc-squeeze', 'calc-bigo',                                           // wk 5 standard limits, sandwich
-      'calc-dstd', 'calc-dstd2', 'calc-dchain', 'calc-chain2', 'calc-dprod', 'calc-quot', 'calc-logdiff', 'calc-deriv', 'calc-dval',   // wk 6
-      'calc-invder', 'calc-implicit', 'calc-param', 'calc-stat', 'calc-maxmin', 'calc-mvt'] },              // wk 7
+      'calc-lim-inf', 'calc-limexp', 'calc-lim-cancel', 'calc-lim-std',          // the four limit shapes the mocks used
+      'calc-squeeze', 'calc-limtrick', 'calc-onesided', 'calc-liminfty', 'calc-growth',
+      'calc-piecewise', 'calc-contcheck',                                         // continuity constant
+      'calc-quotsym', 'calc-chain2', 'calc-dchain', 'calc-dprod'] },              // Q4: derivative as a formula
     // S&S CT2: 4 MCQ, +5/−1, the same four slots in 2023-24, 2024-25, 2025-26. Time assumed 10:00 like CT1.
     { id: 'ct2-seq', name: 'S&S Class Test 2', ends: '2026-11-25T11:00', when: 'Wed 25 Nov, 10:00 (time assumed)', types: [
       'seq-epscons',                                                    // Q1: what aₙ → ℓ guarantees
@@ -513,19 +513,43 @@ const TYPES = [
       [T`\frac{\sin ${a}x}{\sin ${b}x}`, frac(a, b), x => Math.sin(a * x) / Math.sin(b * x)],
       [T`\frac{\arcsin ${a}x}{${b}x}`, frac(a, b), x => Math.asin(a * x) / (b * x)],
       [T`\frac{1 - \cos ${a}x}{${b}x^2}`, frac(a * a, 2 * b), x => (1 - Math.cos(a * x)) / (b * x * x)],
+      // CT2 Mock 2 Q3: csc(4x)/csc(x) → 1/4. Reciprocal trig flips the ratio: rewrite as sin/sin first
+      [T`\frac{\csc ${a}x}{\csc ${b}x}`, frac(b, a), x => Math.sin(b * x) / Math.sin(a * x)],
+      [T`\frac{\cot ${a}x}{\cot ${b}x}`, frac(b, a), x => Math.tan(b * x) / Math.tan(a * x)],
+      [T`${SS_coef(a)}x\csc ${b}x`, frac(a, b), x => a * x / Math.sin(b * x)],
+      [T`\frac{\tan ${a}x}{\sin ${b}x}`, frac(a, b), x => Math.tan(a * x) / Math.sin(b * x)],
     ]);
     return { q: T`$\displaystyle\lim_{x\to 0} ${tex.replace(/(\D)1x/g, '$1x')}$`, a: ans.s, show: ans.tex, kind: 'num', val: fn(1e-4) };
   }},
   { id: 'calc-lim-inf', name: 'Limit at ∞', par: 5, cat: 'calc', week: 4, weight: 1, gen() {
-    const top = [nz(-6, 6), ri(-5, 5), ri(-9, 9)], bot = [nz(-6, 6), ri(-5, 5), ri(-9, 9)];
-    if (Math.random() < 0.25) top[0] = 0;
-    const p = c => poly([[c[0], 'x^2'], [c[1], 'x'], [c[2], '']]), f = frac(top[0], bot[0]);
-    const h = (c, x) => c[0] * x * x + c[1] * x + c[2];
-    if (top.every(c => c === 0)) return null;
-    return { q: T`$\displaystyle\lim_{x\to\infty} \frac{${p(top)}}{${p(bot)}}$`, a: f.s, show: f.tex, kind: 'num', val: h(top, 1e7) / h(bot, 1e7) };
+    // CT2 Mock 1 Q1: (7x³ + 2x² + 5)/(2x³ + 5x + 3) → 7/2. Degrees 2–3; top degree one lower (0) or one higher (±∞) sometimes
+    const d = pick([2, 3]), dt = d + pick([0, 0, 0, 0, -1, 1]);
+    const co = deg => Array.from({ length: deg + 1 }, (_, i) => i === 0 ? nz(-7, 7) : Math.random() < 0.4 ? 0 : ri(-9, 9));   // [leading, …, constant]
+    const top = co(dt), bot = co(d), p = c => poly(c.map((v, i) => [v, xPow(c.length - 1 - i)])), h = (c, x) => c.reduce((s, v) => s * x + v, 0);
+    if (bot.filter(x => x).length < 2) return null;
+    const q = T`$\displaystyle\lim_{x\to\infty} \frac{${p(top)}}{${p(bot)}}$`, hint = 'a number, inf or -inf';
+    if (dt > d) return top[0] * bot[0] > 0 ? { q, a: INF_ALIASES, kind: 'text', show: T`\infty`, hint } : { q, a: INF_ALIASES.map(x => '-' + x), kind: 'text', show: T`-\infty`, hint };
+    const f = dt < d ? frac(0, 1) : frac(top[0], bot[0]);
+    return { q, a: f.s, show: f.tex, kind: 'num', val: h(top, 1e7) / h(bot, 1e7), hint };
+  }},
+  { id: 'calc-limexp', name: 'Exponential limit at ±∞', par: 10, cat: 'calc', week: 4, weight: 1, gen() {
+    // CT2 Mock 1 Q2: (3e^{2y} + e^y + 4)/(5e^{2y} + 7) as y → −∞ is 4/7: put x = e^y, so x → 0⁺ (y → −∞) or x → ∞ (y → ∞)
+    const k = pick([2, 3]), a = nz(-6, 6), b = ri(-5, 5), c = ri(-9, 9), d = ri(1, 6), f = ri(1, 9), up = Math.random() < 0.5;
+    const kt = up && Math.random() < 0.25 ? k + 1 : k, E = m => m === 1 ? 'e^{y}' : `e^{${m}y}`;
+    const q = T`$\displaystyle\lim_{y\to ${up ? '' : '-'}\infty} \frac{${poly([[a, E(kt)], [b, E(1)], [c, '']])}}{${poly([[d, E(k)], [f, '']])}}$`;
+    if (kt > k) return a > 0 ? { q, a: INF_ALIASES, kind: 'text', show: T`\infty`, hint: 'a number, inf or -inf' }
+                             : { q, a: INF_ALIASES.map(x => '-' + x), kind: 'text', show: T`-\infty`, hint: 'a number, inf or -inf' };
+    const r = up ? frac(a, d) : frac(c, f), y = up ? 40 : -40, X = Math.exp(y);
+    return { q, a: r.s, show: r.tex, kind: 'num', val: (a * X ** kt + b * X + c) / (d * X ** k + f), hint: 'a number, inf or -inf' };
   }},
   { id: 'calc-piecewise', name: 'Continuity constant', par: 12, cat: 'calc', week: 4, weight: 1, gen() {
     const c = pick([-2, -1, 1, 2, 3]), k = ri(-5, 5), p = nz(-4, 4), q = ri(-5, 5), r = p * c * c + q - k * c;
+    if (Math.random() < 0.4) {   // CT2 Mock 1 Q3: e^{2x} for x < 1, x² + 2x + k for x ≥ 1 → k = e² − 3
+      const m = nz(-2, 2), mc = m * c, P = c * c + p * c, E = mc === 1 ? 'e' : `e^{${mc}}`;
+      return { q: T`$f(x) = \begin{cases} ${poly([[1, 'x^2'], [p, 'x'], [1, 'k']])} & x \ge ${c} \\ e^{${poly([[m, 'x']])}} & x < ${c} \end{cases}$ is continuous. $\ k = ?$`,
+               a: `e^(${mc})${P > 0 ? '-' : '+'}${Math.abs(P)}`, show: P ? T`${E} ${P > 0 ? '-' : '+'} ${Math.abs(P)}` : E, kind: 'num',
+               val: Math.exp(mc) - P, hint: 'exact, e.g. %e^2-3' };
+    }
     return { q: T`$f(x) = \begin{cases} ${poly([[p, 'x^2'], [q, '']])} & x < ${c} \\ ${poly([[1, 'k x'], [r, '']])} & x \ge ${c} \end{cases}$ is continuous. $\ k = ?$`,
              a: String(k), kind: 'num' };
   }},
@@ -582,8 +606,14 @@ const TYPES = [
   { id: 'calc-lim-cancel', name: 'Factor and cancel limit', par: 10, cat: 'calc', week: 4, weight: 1, gen() {
     const a = nz(-5, 5), b = ri(-6, 6);
     if (a === b) return null;
-    const top = poly([[1, 'x^2'], [-(a + b), 'x'], [a * b, '']]), bot = poly([[1, 'x'], [-a, '']]);
-    return { q: T`$\displaystyle\lim_{x\to ${a}} \frac{${top}}{${bot}}$`, a: String(a - b), kind: 'num', val: ((x) => (x * x - (a + b) * x + a * b) / (x - a))(a + 1e-7) };
+    const top = poly([[1, 'x^2'], [-(a + b), 'x'], [a * b, '']]);
+    if (Math.random() < 0.5) return { q: T`$\displaystyle\lim_{x\to ${a}} \frac{${top}}{${poly([[1, 'x'], [-a, '']])}}$`, a: String(a - b), kind: 'num',
+                                      val: ((x) => (x * x - (a + b) * x + a * b) / (x - a))(a + 1e-7) };
+    // CT2 Mock 2 Q1: (x² + x − 6)/(x² − 2x) → 5/2 at x = 2. Both sides quadratic: factor both, cancel (x − a)
+    const c = ri(-5, 5), r = frac(a - b, a - c);
+    if (c === a || c === b) return null;
+    return { q: T`$\displaystyle\lim_{x\to ${a}} \frac{${top}}{${poly([[1, 'x^2'], [-(a + c), 'x'], [a * c, '']])}}$`, a: r.s, show: r.tex, kind: 'num',
+             val: ((x) => (x - b) / (x - c))(a + 1e-7) };
   }},
   // L3 benchmark: Exercises6.pdf Q1(d) arcsin(x^2) and Q3(b) 3^(sin x) need the full table: inverse trig and a^x for any base
   { id: 'calc-dstd', name: 'Standard derivatives', par: 4, cat: 'calc', week: 6, weight: 1, levels: 3, gen(L = 3) {
@@ -1327,6 +1357,17 @@ const TYPES = [
     const f = frac(p * p - 2 * r * p - k, (p - r) ** 2);
     return { q: T`$f(x) = \dfrac{${poly([[1, 'x^2'], [k, '']])}}{${poly([[1, 'x'], [-r, '']])}}$. $\ f'(${p}) = ?$`, a: f.s, show: f.tex, kind: 'num' };
   }},
+  { id: 'calc-quotsym', name: "Quotient over xⁿ: f'(x)", par: 20, cat: 'calc', week: 6, weight: 1, gen() {
+    // CT2 Mock 1 Q4: d/dx cos(x)/x² = −(x sin x + 2 cos x)/x³. Rule: (g′x − n g)/x^{n+1}
+    const n = ri(1, 3), N = SS_coef(n), xn = xPow(n), x1 = xPow(n + 1);
+    const [g, a, show] = pick([
+      [T`\sin x`, `(x*cos(x) - ${n}*sin(x))/x^${n + 1}`, T`\dfrac{x\cos x - ${N}\sin x}{${x1}}`],
+      [T`\cos x`, `-(x*sin(x) + ${n}*cos(x))/x^${n + 1}`, T`-\dfrac{x\sin x + ${N}\cos x}{${x1}}`],
+      ['e^x', `e^x*(x - ${n})/x^${n + 1}`, T`\dfrac{e^x(x - ${n})}{${x1}}`],
+      [T`\ln x`, `(1 - ${n}*ln(x))/x^${n + 1}`, T`\dfrac{1 - ${N}\ln x}{${x1}}`],
+    ]);
+    return { q: T`$\dfrac{d}{dx}\,\dfrac{${g}}{${xn}} = ?$`, a, show, kind: 'expr', dom: [0.5, 3], hint: 'one fraction, e.g. (x*cos(x)-2*sin(x))/x^3' };
+  }},
   // L3 benchmark: Exercises6.pdf Q5 sin(e^(arcsin x)), tutor's example ln|arcsin x|, Q3(a) arcsin((1-x)/(1+x)), Q3(c), Q3(h): three links or chain with a quotient
   { id: 'calc-chain2', name: 'Chain rule (harder)', par: 12, cat: 'calc', week: 6, weight: 1, levels: 3, gen(L = 3) {
     if (L === 3) return CAL_chain3();
@@ -1996,7 +2037,7 @@ const CONCEPTS = [
     originText: String.raw`Built from composition $f(g(x))$ and the standard derivatives. Feeds: log differentiation, implicit and parametric slopes, and integration by substitution, which runs the rule backwards.` },
   { id: 'product-rule', name: 'Product and quotient rules', cat: 'calc', week: 6,
     source: 'Calculus_1_2026-27.pdf Thm 7.4 pp. 75–76 (Leibniz or product rule), Ex 7.5–7.6 p. 76, Prop 7.11 p. 78 (quotient rule)',
-    types: ['calc-dprod', 'calc-quot', 'calc-dval'], origin: ['standard-derivatives', 'chain-rule'], feeds: ['integration-by-parts'],
+    types: ['calc-dprod', 'calc-quot', 'calc-dval', 'calc-quotsym'], origin: ['standard-derivatives', 'chain-rule'], feeds: ['integration-by-parts'],
     picture: { template: 'graphSlider', params: { expr: 'x^k*exp(x)', k: [2, 1, 4], xr: [0, 2], yr: [0, 30], label: 'k' },
       caption: 'y = xᵏeˣ. Its slope has two parts: k xᵏ⁻¹eˣ and xᵏeˣ. Each factor is differentiated while the other waits.',
       alt: 'Graph of y = x^k e^x for x from 0 to 2 with a slider for k; the slope is the sum of two terms, one for each factor.' },
@@ -2501,11 +2542,11 @@ const CONCEPTS = [
     originText: String.raw`Built from exact trig values, read backwards, and from inverting a function on a stretch where it is injective. Feeds: the derivative of arcsin (Example 9.3), where the window makes $\cos(\arcsin x) \ge 0$.` },
   { id: 'rational-limit-infinity', name: 'Rational function as x → ∞', cat: 'calc', week: 4,
     source: 'Calculus_1_2026-27.pdf Example 5.4 and the Helpful hint after it, p. 56',
-    types: ['calc-lim-inf'], origin: [], feeds: [],
+    types: ['calc-lim-inf', 'calc-limexp'], origin: [], feeds: [],
     picture: { template: 'graphSlider', params: { expr: '(k*x^2 + 5*x - 3)/(2*x^2 + x + 1)', k: [3, -4, 4], xr: [0, 40], yr: [-3, 3], label: 'k', level: 'k/2' },
       caption: 'Drag k. Far to the right the curve levels off at k/2: only the x² terms survive. At k = 0 it sinks to 0.',
       alt: 'Graph of (kx² + 5x − 3)/(2x² + x + 1) for x from 0 to 40, with a slider for k; the curve levels off at k/2.' },
-    algebra: String.raw`Divide top and bottom by the highest power in the denominator (Example 5.4):<br>$\dfrac{x^2 + 7x - 3}{3x^2 - 18x + 24} = \dfrac{1 + \frac7x - \frac3{x^2}}{3 - \frac{18}x + \frac{24}{x^2}} \to \dfrac13$<br>Every $c/x^k$ term goes to 0, so the leading coefficients decide. No $x^2$ on top: the limit is 0.`,
+    algebra: String.raw`Divide top and bottom by the highest power in the denominator (Example 5.4):<br>$\dfrac{x^2 + 7x - 3}{3x^2 - 18x + 24} = \dfrac{1 + \frac7x - \frac3{x^2}}{3 - \frac{18}x + \frac{24}{x^2}} \to \dfrac13$<br>Every $c/x^k$ term goes to 0, so the leading coefficients decide. With $e^y$: put $x = e^y$. As $y \to -\infty$, $x \to 0$: constants decide.`,
     originText: String.raw`Built from the algebra of limits (Prop 5.1: a quotient's limit is the quotient of limits, when the bottom one is not 0) and $1/x \to 0$. Feeds: horizontal asymptotes when sketching.` },
   { id: 'counting-integers', name: 'Counting integers from a to b', cat: 'seq', week: 1,
     source: '115lecturenotes(2026).pdf §2.1–2.2 pp. 7–8 (ℕ = {1, 2, 3, …}, 0 ∉ ℕ; cardinality #X); Tuesday 29th September 2026.pdf p. 6 (Σ notation, Σ 1 = n)',
