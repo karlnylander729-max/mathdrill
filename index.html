@@ -5957,10 +5957,11 @@ function conceptAskText(c, context = {}, ask = true) {
 function copyContext() {
   if (/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) return null;   // copying inside an answer box stays normal
   if ($('concept').classList.contains('on') && CV) return conceptAskText(CV.c, askContext(), false);
-  const n = window.getSelection()?.anchorNode, row = (n?.nodeType === 1 ? n : n?.parentElement)?.closest('.miss[data-i]');
-  const ctx = row ? WHY[+row.dataset.i] : $('play').classList.contains('on') && WHY_PREV && !WHY_PREV.q.ok ? WHY_PREV : null;
-  const c = ctx && conceptById(CONCEPT_OF[ctx.q.type]);
-  return c ? conceptAskText(c, ctx, false) : null;
+  // Every review row the selection touches, even when the drag starts on the "Review" heading
+  const sel = window.getSelection(), rows = sel && !sel.isCollapsed ? [...document.querySelectorAll('.miss[data-i]')].filter(r => sel.containsNode(r, true)) : [];
+  const ctxs = rows.length ? rows.map(r => WHY[+r.dataset.i]) : $('play').classList.contains('on') && WHY_PREV && !WHY_PREV.q.ok ? [WHY_PREV] : [];
+  const texts = ctxs.map(ctx => { const c = conceptById(CONCEPT_OF[ctx.q.type]); return c && conceptAskText(c, ctx, false); }).filter(Boolean);
+  return texts.length ? texts.join('\n\n---\n\n') : null;
 }
 document.addEventListener('copy', e => {
   const text = copyContext();
@@ -6166,7 +6167,11 @@ function copyTests() {
     endRound();
     const row = document.querySelector('.miss[data-i="0"]');
     if (!row) f.push('review has no miss row with data-i');
-    else { window.getSelection().selectAllChildren(row); const r = copied(); if (!r || !r.includes('I had typed: "zzz"')) f.push(`review row copy: ${r}`); }
+    else {
+      window.getSelection().selectAllChildren(row); const r = copied(); if (!r || !r.includes('I had typed: "zzz"')) f.push(`review row copy: ${r}`);
+      const h = row.parentElement.querySelector('h2');   // drag that starts on the Review heading (the 2026-11-23 garbled copy)
+      if (h) { window.getSelection().setBaseAndExtent(h, 0, row, row.childNodes.length); const r2 = copied(); if (!r2 || !r2.includes('I had typed: "zzz"')) f.push(`copy from the Review heading: ${r2}`); }
+    }
     window.getSelection().removeAllRanges();
     showHome();
     if (copied() !== null) f.push('copy on home was replaced');
