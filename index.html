@@ -5752,7 +5752,7 @@ function reviewList(log) {
     const status = e.unanswered ? 'unfinished' : e.skipped ? 'skipped' : 'wrong', cid = CONCEPT_OF[e.type];
     const you = e.attempt ? `<code class="down">${esc(e.attempt)}</code>` : '<span class="muted">nothing typed</span>';
     const why = cid ? ` <button class="why" onclick="openConcept('${cid}', WHY[${i}])">Why? →</button>` : '';
-    return `<div class="miss">${renderMath(e.q)}<div class="muted">${status} · you: ${you} · answer: ${renderMath(`$${e.ans}$`)}${why}</div></div>`;
+    return `<div class="miss" data-i="${i}">${renderMath(e.q)}<div class="muted">${status} · you: ${you} · answer: ${renderMath(`$${e.ans}$`)}${why}</div></div>`;
   }).join('');
 }
 
@@ -5944,14 +5944,30 @@ const SEEN_KEY = 'drill-concepts-seen-v1';
 const seenConcepts = () => new Set(loadJSON(SEEN_KEY, []));
 function markSeen(id) { localStorage.setItem(SEEN_KEY, JSON.stringify([...seenConcepts().add(id)])); }
 // "Ask Claude about this": the concept's four lenses (and the missed question, if any) as plain text
-function conceptAskText(c, context = {}) {
+function conceptAskText(c, context = {}, ask = true) {
   const q = context.q, attempt = (context.attempt || '').trim();
   const missed = q ? [`Q: ${plain(q.q)}`, `Correct: ${q.ans ?? answerTeX(q)}`, attempt ? `I had typed: "${attempt}"` : 'I had typed: (nothing)',
     ...(context.work ? ['My working:', context.work] : [])] : [];
   return [`I am studying "${c.name}" in my maths course and I am stuck.`, '',
     `Picture: ${c.picture.alt}`, `Algebra: ${plain(c.algebra)}`, `Origin: ${plain(c.originText)}`, '',
-    ...missed, ...(q ? [''] : []), "Explain the step I'm stuck on, then let me ask follow-ups."].join('\n');
+    ...missed, ...(q ? [''] : []), ...(ask ? ["Explain the step I'm stuck on, then let me ask follow-ups."] : [])].join('\n').trimEnd();
 }
+// ⌘C (or a long-press Copy) on a miss gives the full ask text instead of garbled KaTeX. voice-claude presses ⌘C on the
+// selection, so: select the missed question, hold the talk key, say what you want. The spoken words replace the request line.
+function copyContext() {
+  if (/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) return null;   // copying inside an answer box stays normal
+  if ($('concept').classList.contains('on') && CV) return conceptAskText(CV.c, askContext(), false);
+  const n = window.getSelection()?.anchorNode, row = (n?.nodeType === 1 ? n : n?.parentElement)?.closest('.miss[data-i]');
+  const ctx = row ? WHY[+row.dataset.i] : $('play').classList.contains('on') && WHY_PREV && !WHY_PREV.q.ok ? WHY_PREV : null;
+  const c = ctx && conceptById(CONCEPT_OF[ctx.q.type]);
+  return c ? conceptAskText(c, ctx, false) : null;
+}
+document.addEventListener('copy', e => {
+  const text = copyContext();
+  if (!text) return;
+  e.preventDefault();
+  e.clipboardData.setData('text/plain', text);
+});
 // From the Try tab the context is the Try question and what is typed so far
 function askContext() {
   const input = $('tryAnswer');
@@ -6126,13 +6142,38 @@ function init() {
 ===================================================================== -->
 <script>
 function runSelfTest() {
-  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests(), askClaude: askClaudeTextTest(), scratch: scratchTests(), focus: homeFocusTest(), ladder: ladderTests(), learn: learnTests() };
-  out.ok = out.learn.length === 0 && out.ladder.length === 0 && out.focus.length === 0 && out.scratch.length === 0 && out.concepts.length === 0 && out.entry.length === 0 && out.askClaude.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
+  const out = { checker: checkerTests(), syntax: syntaxTests(), incentives: incentiveTests(), mastery: masteryTests(), generators: generatorTests(), concepts: conceptTests(), pictures: pictureTests(), conceptScreen: conceptScreenTests(), entry: entryTests(), askClaude: askClaudeTextTest(), scratch: scratchTests(), focus: homeFocusTest(), ladder: ladderTests(), learn: learnTests(), copy: copyTests() };
+  out.ok = out.copy.length === 0 && out.learn.length === 0 && out.ladder.length === 0 && out.focus.length === 0 && out.scratch.length === 0 && out.concepts.length === 0 && out.entry.length === 0 && out.askClaude.length === 0 && out.conceptScreen.length === 0 && out.pictures.length === 0 && out.checker.failed.length === 0 && out.syntax.failed.length === 0 && out.incentives.failed.length === 0 && out.mastery.failed.length === 0 && out.generators.every(g => g.errors.length === 0);
   const pre = $('selftest');
   pre.style.display = 'block';
   pre.textContent = JSON.stringify(out, null, 1);
 }
 
+// ---- copy a miss: ⌘C gives the ask text (no request line) on a miss; answer boxes and other screens copy normally ----
+function copyTests() {
+  const f = [], copied = () => { const e = new ClipboardEvent('copy', { clipboardData: new DataTransfer(), bubbles: true, cancelable: true });
+    document.body.dispatchEvent(e); return e.defaultPrevented ? e.clipboardData.getData('text/plain') : null; };
+  const type = CONCEPTS[0].types[0];
+  try {
+    startRound(); queueTypes([type]); nextQuestion(); record(false, false, 'zzz');
+    $('answer').blur();
+    const t = copied();
+    if (!t || !t.includes('I had typed: "zzz"') || !t.includes(CONCEPTS[0].name)) f.push(`in-round miss copy: ${t}`);
+    if (t && t.includes("Explain the step")) f.push('copy text keeps the request line (the spoken words should replace it)');
+    $('answer').focus();
+    if (copied() !== null) f.push('copy inside the answer box was replaced');
+    $('answer').blur();
+    endRound();
+    const row = document.querySelector('.miss[data-i="0"]');
+    if (!row) f.push('review has no miss row with data-i');
+    else { window.getSelection().selectAllChildren(row); const r = copied(); if (!r || !r.includes('I had typed: "zzz"')) f.push(`review row copy: ${r}`); }
+    window.getSelection().removeAllRanges();
+    showHome();
+    if (copied() !== null) f.push('copy on home was replaced');
+  } catch (e) { f.push('copy test threw: ' + e.message); }
+  showHome();
+  return f;
+}
 // ---- Learn first: data points at real drills and concepts, every formula renders, the walk ends on Start drill ----
 function learnTests() {
   const f = [], tex = s => s.split('$').filter((_, i) => i % 2);

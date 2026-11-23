@@ -18,6 +18,7 @@ for f in d.get('scratch', ['scratch missing']): print('  SCRATCH', f)
 for f in d.get('focus', ['focus missing']): print('  FOCUS', f)
 for f in d.get('ladder', ['ladder missing']): print('  LADDER', f)
 for f in d.get('learn', ['learn missing']): print('  LEARN', f)
+for f in d.get('copy', ['copy missing']): print('  COPY', f)
 for g in d['generators']:
   flag = '!!' if g['errors'] else '  '
   print(flag, g['id'], 'wk', g['week'], 'distinct', g['distinct'], 'true%', g.get('trueRatio',''), *g['errors'][:3])
