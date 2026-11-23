@@ -54,7 +54,8 @@ const CONFIG = {
       'calc-piecewise', 'calc-contcheck',                                         // continuity constant
       'calc-quotsym', 'calc-chain2', 'calc-dchain', 'calc-dprod'] },              // Q4: derivative as a formula
     // S&S CT2: 4 MCQ, +5/−1, the same four slots in 2023-24, 2024-25, 2025-26. Time assumed 10:00 like CT1.
-    { id: 'ct2-seq', name: 'S&S Class Test 2', ends: '2026-11-25T11:00', when: 'Wed 25 Nov, 10:00 (time assumed)', types: [
+    // focus: Karl moved the emphasis to S&S on 2026-11-23, so it leads the home screen although calculus is sooner
+    { id: 'ct2-seq', name: 'S&S Class Test 2', ends: '2026-11-25T11:00', when: 'Wed 25 Nov, 10:00 (time assumed)', focus: true, types: [
       'seq-epscons',                                                    // Q1: what aₙ → ℓ guarantees
       'seq-implic', 'seq-bddseq', 'seq-convdiv',                        // Q2: convergent / bounded / divergent implications
       'seq-domexp', 'seq-ratlim', 'seq-growth', 'seq-boundlim', 'seq-rootlim',   // Q3: dominant-term limit
@@ -3549,6 +3550,11 @@ const SS_IMPLIC = [
   () => [T`If $a_n \to +\infty$ and $b_n$ is bounded, then $a_n + b_n \to +\infty$.`, true],
   () => [T`If $a_n \to 0$ and $b_n$ is bounded, then $a_n b_n \to 0$.`, true],
   () => [T`If $a_n \le b_n$ for all $n$ and both converge, then $\lim a_n \le \lim b_n$.`, true],
+  // Friday 20th November 2026.pdf Q2 (CT2 warm-up)
+  () => [T`If $a_n$ is bounded above, then $-a_n$ is bounded below.`, true],
+  () => [T`If $|a_n| \le 2 + \frac{3}{n}$ for all $n$, then $a_n$ is bounded.`, true],
+  () => [T`If $\frac{a_n}{n} \to 0$, then there is $C$ with $|a_n| \le Cn$ for all $n$.`, true],
+  () => [T`If $a_n > 0$ for all $n$ and $a_n$ is bounded above, then $a_n$ converges.`, false],
   () => [T`If $a_n$ does not converge, then it is unbounded.`, false],
   () => [T`If $a_n$ does not converge, then it diverges to $+\infty$ or $-\infty$.`, false],
   () => [T`If $a_n$ is unbounded, then it diverges to $+\infty$ or $-\infty$.`, false],
@@ -5796,7 +5802,8 @@ const isExamDrill = d => !!d.ends;
 const examActive = d => isExamDrill(d) && Date.now() < Date.parse(d.ends);
 // The one thing on the home screen: the class-test drill whose test is soonest and not yet over; null means the main round
 function focusPick() {
-  return CONFIG.drills.filter(examActive).sort((a, b) => Date.parse(a.ends) - Date.parse(b.ends))[0] || null;
+  // A drill with focus: true (Karl's chosen emphasis) comes first; otherwise the soonest test
+  return CONFIG.drills.filter(examActive).sort((a, b) => !!b.focus - !!a.focus || Date.parse(a.ends) - Date.parse(b.ends))[0] || null;
 }
 function focusBlock() {
   const d = focusPick();
@@ -6516,12 +6523,12 @@ function homeFocusTest() {
   const f = [], realNow = Date.now, at = t => { Date.now = () => Date.parse(t); };
   try {
     if (typeof focusPick !== 'function') return ['focusPick is not defined'];
-    at('2026-11-24T22:00'); if (focusPick()?.id !== 'ct2-calc') f.push(`22:00 the night before: focus ${focusPick()?.id}, want ct2-calc`);
+    at('2026-11-24T22:00'); if (focusPick()?.id !== 'ct2-seq') f.push(`22:00 the night before: focus ${focusPick()?.id}, want ct2-seq (focus: true beats the sooner calculus test)`);
     at('2026-11-25T09:55'); if (focusPick()?.id !== 'ct2-seq') f.push(`after the calculus test: focus ${focusPick()?.id}, want ct2-seq`);
     at('2026-11-25T11:30'); if (focusPick() !== null) f.push(`after both tests: focus ${focusPick()?.id}, want the main round (null)`);
     at('2026-11-24T22:00'); showHome();
     const focus = $('homeFocus'), rest = $('everythingElse');
-    if (!focus || !focus.textContent.includes('Calculus Class Test 2') || !focus.querySelector('button')) f.push('home focus does not show Calculus Class Test 2 with a Start button');
+    if (!focus || !focus.textContent.includes('S&S Class Test 2') || !focus.querySelector('button')) f.push('home focus does not show S&S Class Test 2 with a Start button');
     if (!rest || rest.open || !rest.contains($('homeStats'))) f.push('everything else is not folded away under one closed section');
   } finally { Date.now = realNow; showHome(); }
   return f;
