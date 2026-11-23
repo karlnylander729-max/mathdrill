@@ -5946,8 +5946,9 @@ function markSeen(id) { localStorage.setItem(SEEN_KEY, JSON.stringify([...seenCo
 // "Ask Claude about this": the concept's four lenses (and the missed question, if any) as plain text
 function conceptAskText(c, context = {}, ask = true) {
   const q = context.q, attempt = (context.attempt || '').trim();
-  const missed = q ? [`Q: ${plain(q.q)}`, `Correct: ${q.ans ?? answerTeX(q)}`, attempt ? `I had typed: "${attempt}"` : 'I had typed: (nothing)',
-    ...(context.work ? ['My working:', context.work] : [])] : [];
+  const result = context.open ? ['Not answered yet (the question in front of me).'] :   // open: no answer in the text
+    [`Correct: ${q?.ans ?? (q && answerTeX(q))}`, attempt ? `I had typed: "${attempt}"` : 'I had typed: (nothing)'];
+  const missed = q ? [`Q: ${plain(q.q)}`, ...result, ...(context.work ? ['My working:', context.work] : [])] : [];
   return [`I am studying "${c.name}" in my maths course and I am stuck.`, '',
     `Picture: ${c.picture.alt}`, `Algebra: ${plain(c.algebra)}`, `Origin: ${plain(c.originText)}`, '',
     ...missed, ...(q ? [''] : []), ...(ask ? ["Explain the step I'm stuck on, then let me ask follow-ups."] : [])].join('\n').trimEnd();
@@ -5959,7 +5960,9 @@ function copyContext() {
   if ($('concept').classList.contains('on') && CV) return conceptAskText(CV.c, askContext(), false);
   // Every review row the selection touches, even when the drag starts on the "Review" heading
   const sel = window.getSelection(), rows = sel && !sel.isCollapsed ? [...document.querySelectorAll('.miss[data-i]')].filter(r => sel.containsNode(r, true)) : [];
-  const ctxs = rows.length ? rows.map(r => WHY[+r.dataset.i]) : $('play').classList.contains('on') && WHY_PREV && !WHY_PREV.q.ok ? [WHY_PREV] : [];
+  const onPlay = $('play').classList.contains('on'), current = onPlay && S?.cur && sel && !sel.isCollapsed && sel.containsNode($('prompt'), true);
+  const ctxs = rows.length ? rows.map(r => WHY[+r.dataset.i]) : current ? [{ q: S.cur, open: true }]
+    : onPlay && WHY_PREV && !WHY_PREV.q.ok ? [WHY_PREV] : [];
   const texts = ctxs.map(ctx => { const c = conceptById(CONCEPT_OF[ctx.q.type]); return c && conceptAskText(c, ctx, false); }).filter(Boolean);
   return texts.length ? texts.join('\n\n---\n\n') : null;
 }
@@ -6164,6 +6167,10 @@ function copyTests() {
     $('answer').focus();
     if (copied() !== null) f.push('copy inside the answer box was replaced');
     $('answer').blur();
+    window.getSelection().selectAllChildren($('prompt'));   // the question in front of me, not the last miss, and no answer
+    const cur = copied();
+    if (!cur || !cur.includes('Not answered yet') || cur.includes('Correct:') || cur.includes('zzz')) f.push(`current-question copy: ${cur}`);
+    window.getSelection().removeAllRanges();
     endRound();
     const row = document.querySelector('.miss[data-i="0"]');
     if (!row) f.push('review has no miss row with data-i');
