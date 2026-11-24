@@ -54,8 +54,7 @@ const CONFIG = {
       'calc-piecewise', 'calc-contcheck',                                         // continuity constant
       'calc-quotsym', 'calc-chain2', 'calc-dchain', 'calc-dprod'] },              // Q4: derivative as a formula
     // S&S CT2: 4 MCQ, +5/−1, the same four slots in 2023-24, 2024-25, 2025-26. Time assumed 10:00 like CT1.
-    // focus: Karl moved the emphasis to S&S on 2026-11-23, so it leads the home screen although calculus is sooner
-    { id: 'ct2-seq', name: 'S&S Class Test 2', ends: '2026-11-25T11:00', when: 'Wed 25 Nov, 10:00 (time assumed)', focus: true, types: [
+    { id: 'ct2-seq', name: 'S&S Class Test 2', ends: '2026-11-25T11:00', when: 'Wed 25 Nov, 10:00 (time assumed)', types: [
       'seq-epscons',                                                    // Q1: what aₙ → ℓ guarantees
       'seq-implic', 'seq-bddseq', 'seq-convdiv',                        // Q2: convergent / bounded / divergent implications
       'seq-domexp', 'seq-ratlim', 'seq-growth', 'seq-boundlim', 'seq-rootlim',   // Q3: dominant-term limit
@@ -128,6 +127,11 @@ const CONFIG = {
     { name: 'Combo day', comboStep: 0.15 },
   ],
 };
+// Final push (Karl, 2026-11-24): both Class Test 2 drills in one round, home focus until the calculus test starts.
+// After 09:00 the home falls back to the soonest single test: calculus until 09:50, then S&S.
+{ const by = id => CONFIG.drills.find(d => d.id === id);
+  CONFIG.drills.unshift({ id: 'ct2-both', name: 'Final push: both tests', ends: '2026-11-25T09:00', when: 'Wed 25 Nov, calculus 09:00, S&S 10:00', focus: true,
+                          types: [...by('ct2-calc').types, ...by('ct2-seq').types] }); }
 
 const TYPES = [
   // ---------- Linear algebra ----------
@@ -3495,6 +3499,7 @@ const LEARN = {
       trap: 'A blank scores 0. Even a pure guess beats it.' },
   ],
 };
+LEARN['ct2-both'] = [...LEARN['ct2-calc'], ...LEARN['ct2-seq']];   // final push: calculus pages, then S&S
 
 // Mean value theorem: one try at f on [a, b] with exactly one c in (a, b); null to retry (calc-mvt)
 function CAL_mvt(L) {
@@ -6523,12 +6528,15 @@ function homeFocusTest() {
   const f = [], realNow = Date.now, at = t => { Date.now = () => Date.parse(t); };
   try {
     if (typeof focusPick !== 'function') return ['focusPick is not defined'];
-    at('2026-11-24T22:00'); if (focusPick()?.id !== 'ct2-seq') f.push(`22:00 the night before: focus ${focusPick()?.id}, want ct2-seq (focus: true beats the sooner calculus test)`);
+    at('2026-11-24T22:00'); if (focusPick()?.id !== 'ct2-both') f.push(`22:00 the night before: focus ${focusPick()?.id}, want ct2-both (focus: true beats the sooner test)`);
+    at('2026-11-25T09:20'); if (focusPick()?.id !== 'ct2-calc') f.push(`during the calculus test: focus ${focusPick()?.id}, want ct2-calc`);
     at('2026-11-25T09:55'); if (focusPick()?.id !== 'ct2-seq') f.push(`after the calculus test: focus ${focusPick()?.id}, want ct2-seq`);
     at('2026-11-25T11:30'); if (focusPick() !== null) f.push(`after both tests: focus ${focusPick()?.id}, want the main round (null)`);
     at('2026-11-24T22:00'); showHome();
     const focus = $('homeFocus'), rest = $('everythingElse');
-    if (!focus || !focus.textContent.includes('S&S Class Test 2') || !focus.querySelector('button')) f.push('home focus does not show S&S Class Test 2 with a Start button');
+    if (!focus || !focus.textContent.includes('Final push') || !focus.querySelector('button')) f.push('home focus does not show the Final push with a Start button');
+    const both = drillTypes(DRILL_BY_ID['ct2-both']).map(t => t.id);
+    if (!both.includes('calc-limexp') || !both.includes('seq-altset')) f.push('final push drill lacks calculus or S&S types');
     if (!rest || rest.open || !rest.contains($('homeStats'))) f.push('everything else is not folded away under one closed section');
   } finally { Date.now = realNow; showHome(); }
   return f;
