@@ -130,8 +130,10 @@ const CONFIG = {
 // Final push (Karl, 2026-11-24): both Class Test 2 drills in one round, home focus until the calculus test starts.
 // After 09:00 the home falls back to the soonest single test: calculus until 09:50, then S&S.
 { const by = id => CONFIG.drills.find(d => d.id === id);
+  // boost from the 2026-11-24 20:41 round: S&S slots 1–2 missed (0/2, half the S&S marks), 1 − cos limit missed, one-sided and g/xⁿ slow
   CONFIG.drills.unshift({ id: 'ct2-both', name: 'Final push: both tests', ends: '2026-11-25T09:00', when: 'Wed 25 Nov, calculus 09:00, S&S 10:00', focus: true,
-                          types: [...by('ct2-calc').types, ...by('ct2-seq').types] }); }
+                          types: [...by('ct2-calc').types, ...by('ct2-seq').types],
+                          boost: { 'seq-epscons': 4, 'seq-implic': 4, 'calc-lim-std': 3, 'calc-onesided': 2, 'calc-quotsym': 2 } }); }
 
 const TYPES = [
   // ---------- Linear algebra ----------
@@ -5405,7 +5407,7 @@ function weighted(items, w) {
 }
 // P(type) ∝ category weight × type weight share × draw factor, so mastered categories shrink
 function drawType(mod, drill) {
-  if (drill) return weighted(drillTypes(drill), t => 1 + CONFIG.weakness.pull * weakness(ratingOf(t.id)));   // a drill ignores maintenance
+  if (drill) return weighted(drillTypes(drill), t => (drill.boost?.[t.id] ?? 1) * (1 + CONFIG.weakness.pull * weakness(ratingOf(t.id))));   // a drill ignores maintenance; boost: hand-set extra share
   const types = activeTypes(), share = {};
   types.forEach(t => { share[t.cat] = (share[t.cat] || 0) + t.weight; });
   const cr = catRatings(), weakest = mod.weakestBoost && Object.keys(cr).sort((a, b) => cr[a] - cr[b])[0];
@@ -6176,9 +6178,10 @@ function copyTests() {
     const t = copied();
     if (!t || !t.includes('I had typed: "zzz"') || !t.includes(CONCEPTS[0].name)) f.push(`in-round miss copy: ${t}`);
     if (t && t.includes("Explain the step")) f.push('copy text keeps the request line (the spoken words should replace it)');
-    $('answer').focus();
+    const box = document.createElement('input');   // a visible input: $('answer') hides when the next question is yes/no
+    $('play').appendChild(box); box.focus();
     if (copied() !== null) f.push('copy inside the answer box was replaced');
-    $('answer').blur();
+    box.remove();
     window.getSelection().selectAllChildren($('prompt'));   // the question in front of me, not the last miss, and no answer
     const cur = copied();
     if (!cur || !cur.includes('Not answered yet') || cur.includes('Correct:') || cur.includes('zzz')) f.push(`current-question copy: ${cur}`);
@@ -6537,6 +6540,10 @@ function homeFocusTest() {
     if (!focus || !focus.textContent.includes('Final push') || !focus.querySelector('button')) f.push('home focus does not show the Final push with a Start button');
     const both = drillTypes(DRILL_BY_ID['ct2-both']).map(t => t.id);
     if (!both.includes('calc-limexp') || !both.includes('seq-altset')) f.push('final push drill lacks calculus or S&S types');
+    const d = DRILL_BY_ID['ct2-both'], n = {}, N = 6000;   // boost ×4 should draw clearly more often than an unboosted type
+    for (let i = 0; i < N; i++) { const id = drawType(null, d).id; n[id] = (n[id] || 0) + 1; }
+    const plain = both.filter(id => !d.boost[id]), avg = plain.reduce((s, id) => s + (n[id] || 0), 0) / plain.length;
+    if (!((n['seq-epscons'] || 0) > 2.5 * avg)) f.push(`boost ×4: seq-epscons drawn ${n['seq-epscons']} times vs ${avg.toFixed(0)} for a plain type`);
     if (!rest || rest.open || !rest.contains($('homeStats'))) f.push('everything else is not folded away under one closed section');
   } finally { Date.now = realNow; showHome(); }
   return f;
